@@ -44,7 +44,7 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
                     content=ErrorResponse(
                         detail="Missing or invalid Authorization header",
                         error_code="UNAUTHORIZED",
-                    ).model_dump(),
+                    ).model_dump(mode='json'),
                 )
 
             token = auth_header.split(" ")[1]
@@ -75,7 +75,7 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
                     content=ErrorResponse(
                         detail="Invalid or expired token",
                         error_code="INVALID_TOKEN",
-                    ).model_dump(),
+                    ).model_dump(mode='json'),
                 )
             except ValueError as e:
                 logger.warning(
@@ -88,7 +88,7 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
                     content=ErrorResponse(
                         detail="Invalid user ID format",
                         error_code="INVALID_USER_ID",
-                    ).model_dump(),
+                    ).model_dump(mode='json'),
                 )
 
             # Inject user context into request state
@@ -119,7 +119,7 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
                 content=ErrorResponse(
                     detail="Internal server error",
                     error_code="INTERNAL_ERROR",
-                ).model_dump(),
+                ).model_dump(mode='json'),
             )
 
 
