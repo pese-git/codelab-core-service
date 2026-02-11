@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
 from app.database import close_db, init_db
@@ -47,10 +48,41 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Personal Multi-Agent AI Platform - Core Service",
-    docs_url="/my/docs",
-    openapi_url="/my/openapi.json",
+    docs_url="/docs",
+    openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+
+def custom_openapi():
+    """Custom OpenAPI schema with Bearer Authentication."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT токен. Токен должен содержать claim 'sub' с UUID пользователя."
+        }
+    }
+    
+    openapi_schema["security"] = [{"BearerAuth": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+# Set custom OpenAPI schema
+app.openapi = custom_openapi
 
 # Add CORS middleware
 app.add_middleware(

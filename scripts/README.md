@@ -1,0 +1,142 @@
+# 🔐 Утилиты для тестирования API
+
+## Генерация JWT токенов
+
+### Быстрый старт
+
+```bash
+# Сгенерировать токен с случайным user_id (срок действия 30 минут)
+uv run python scripts/generate_test_jwt.py
+
+# Сгенерировать токен с расшифровкой payload
+uv run python scripts/generate_test_jwt.py --decode
+
+# Сгенерировать долгоживущий токен (24 часа)
+uv run python scripts/generate_test_jwt.py --expire 1440 --decode
+```
+
+### Параметры
+
+| Параметр | Описание | Пример |
+|----------|----------|--------|
+| `--user-id` | UUID пользователя | `--user-id 123e4567-e89b-12d3-a456-426614174000` |
+| `--expire` | Время жизни токена (минуты) | `--expire 60` |
+| `--decode` | Показать расшифрованный payload | `--decode` |
+
+### Примеры использования
+
+#### 1. Токен для конкретного пользователя
+
+```bash
+uv run python scripts/generate_test_jwt.py \
+  --user-id 123e4567-e89b-12d3-a456-426614174000 \
+  --expire 60 \
+  --decode
+```
+
+#### 2. Долгоживущий токен для разработки
+
+```bash
+# Токен на 7 дней
+uv run python scripts/generate_test_jwt.py --expire 10080
+```
+
+#### 3. Использование в Swagger UI
+
+1. Запустите скрипт:
+   ```bash
+   uv run python scripts/generate_test_jwt.py --decode
+   ```
+
+2. Скопируйте сгенерированный токен
+
+3. Откройте http://localhost:8000/docs
+
+4. Нажмите кнопку **"Authorize"** 🔓
+
+5. Вставьте токен (БЕЗ префикса "Bearer")
+
+6. Нажмите **"Authorize"**
+
+#### 4. Использование в curl
+
+```bash
+# Сохраните токен в переменную
+TOKEN=$(uv run python scripts/generate_test_jwt.py | grep "eyJ" | head -1)
+
+# Используйте в запросах
+curl -X GET "http://localhost:8000/my/agents/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+#### 5. Использование в Python
+
+```python
+import subprocess
+
+# Генерация токена
+result = subprocess.run(
+    ["uv", "run", "python", "scripts/generate_test_jwt.py"],
+    capture_output=True,
+    text=True
+)
+
+# Извлечение токена из вывода
+for line in result.stdout.split('\n'):
+    if line.startswith('eyJ'):
+        token = line.strip()
+        break
+
+# Использование в httpx
+import httpx
+
+headers = {"Authorization": f"Bearer {token}"}
+response = httpx.get("http://localhost:8000/my/agents/", headers=headers)
+```
+
+### Структура токена
+
+Сгенерированный JWT токен содержит следующие claims:
+
+```json
+{
+  "sub": "1cd8d196-4d6d-4a51-a0d5-87614dfa1c06",  // user_id (UUID)
+  "iat": 1770816880,                               // issued at (timestamp)
+  "exp": 1770903280                                // expiration (timestamp)
+}
+```
+
+- **sub** - Subject (user_id в формате UUID)
+- **iat** - Issued At (время создания токена)
+- **exp** - Expiration (время истечения токена)
+
+### Настройки JWT
+
+Параметры JWT берутся из [`app/config.py`](../app/config.py):
+
+- `jwt_secret_key` - секретный ключ для подписи (по умолчанию: "your-secret-key-change-in-production")
+- `jwt_algorithm` - алгоритм подписи (по умолчанию: "HS256")
+- `jwt_access_token_expire_minutes` - время жизни токена (по умолчанию: 30 минут)
+
+### Troubleshooting
+
+**Ошибка: ModuleNotFoundError**
+```bash
+# Убедитесь, что используете uv run
+uv run python scripts/generate_test_jwt.py
+```
+
+**Ошибка: Invalid UUID format**
+```bash
+# Проверьте формат UUID
+uv run python scripts/generate_test_jwt.py --user-id 123e4567-e89b-12d3-a456-426614174000
+```
+
+**Токен не работает в API**
+```bash
+# Проверьте, что токен не истек
+uv run python scripts/generate_test_jwt.py --decode --expire 1440
+
+# Убедитесь, что используете правильный секретный ключ в .env
+```
