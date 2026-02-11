@@ -32,9 +32,38 @@
 
 - Python 3.12+
 - Docker & Docker Compose
-- uv менеджер пакетов
+- uv менеджер пакетов (опционально, для локальной разработки)
+- make (опционально, для удобных команд)
 
-### Установка
+### Вариант 0: Автоматическая настройка (Самый быстрый)
+
+Если у вас установлен `make`:
+
+```bash
+# Клонируйте репозиторий
+git clone <repository-url>
+cd codelab-core-service
+
+# Автоматическая настройка всего проекта
+make setup
+
+# Отредактируйте .env и установите OPENAI_API_KEY
+nano .env
+
+# Перезапустите сервисы
+make restart
+```
+
+Готово! API доступен на http://localhost:8000
+
+Все доступные команды:
+```bash
+make help
+```
+
+### Вариант 1: Запуск с Docker Compose (Рекомендуется)
+
+Это самый простой способ запустить проект со всеми зависимостями.
 
 1. Клонируйте репозиторий:
 ```bash
@@ -42,55 +71,164 @@ git clone <repository-url>
 cd codelab-core-service
 ```
 
-2. Установите зависимости:
-```bash
-uv pip install -e .
-```
-
-3. Скопируйте файл окружения:
+2. Скопируйте файл окружения:
 ```bash
 cp .env.example .env
 ```
 
-4. Отредактируйте `.env` и установите конфигурацию:
-- `OPENAI_API_KEY` - Ваш OpenAI API ключ
-- `JWT_SECRET_KEY` - Секретный ключ для JWT токенов
-- URL баз данных (если не используете Docker Compose)
+3. Отредактируйте `.env` и установите обязательные параметры:
+```bash
+# Обязательно установите:
+OPENAI_API_KEY=sk-your-openai-api-key
+JWT_SECRET_KEY=your-secret-key-change-in-production
+```
 
-### Запуск с Docker Compose
+4. Запустите все сервисы:
 
-Запустите все сервисы (PostgreSQL, Redis, Qdrant, Prometheus, Grafana):
+**Для разработки (только основные сервисы):**
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+```
 
+**Для полного стека (с мониторингом):**
 ```bash
 docker-compose up -d
 ```
 
-Это запустит:
-- PostgreSQL на порту 5432
-- Redis на порту 6379
-- Qdrant на порту 6333
-- Prometheus на порту 9090
-- Grafana на порту 3000
-- Core Service на порту 8000
-
-### Локальный запуск
-
-1. Запустите инфраструктурные сервисы:
+5. Проверьте статус сервисов:
 ```bash
-docker-compose up -d postgres redis qdrant
+docker-compose ps
 ```
 
-2. Выполните миграции базы данных:
+6. Просмотрите логи:
+```bash
+docker-compose logs -f app
+```
+
+Сервисы будут доступны по адресам:
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/my/docs
+- **Health Check**: http://localhost:8000/health
+- **PostgreSQL**: localhost:5432
+- **Redis**: localhost:6379
+- **Qdrant**: http://localhost:6333
+- **Prometheus**: http://localhost:9090 (только в полном стеке)
+- **Grafana**: http://localhost:3000 (только в полном стеке, admin/admin)
+
+### Вариант 2: Локальная разработка
+
+Для разработки с hot-reload и отладкой.
+
+1. Установите uv (если еще не установлен):
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Клонируйте репозиторий и установите зависимости:
+```bash
+git clone <repository-url>
+cd codelab-core-service
+uv pip install -e .
+```
+
+3. Скопируйте и настройте `.env`:
+```bash
+cp .env.example .env
+# Отредактируйте .env и установите OPENAI_API_KEY и JWT_SECRET_KEY
+```
+
+4. Запустите только инфраструктурные сервисы:
+```bash
+docker-compose -f docker-compose.dev.yml up -d postgres redis qdrant
+```
+
+5. Выполните миграции базы данных:
 ```bash
 alembic upgrade head
 ```
 
-3. Запустите приложение:
+6. Инициализируйте seed data (опционально):
 ```bash
-uvicorn app.main:app --reload
+python scripts/init_db.py seed
 ```
 
-API будет доступен по адресу `http://localhost:8000`
+7. Запустите приложение локально:
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+API будет доступен по адресу http://localhost:8000
+
+### Первый запуск и тестирование
+
+1. Проверьте health endpoint:
+```bash
+curl http://localhost:8000/health
+```
+
+2. Сгенерируйте тестовый JWT токен:
+```bash
+# Используйте ID тестового пользователя из seed data
+python scripts/generate_test_jwt.py <user_id>
+```
+
+3. Создайте своего первого агента:
+```bash
+curl -X POST http://localhost:8000/my/agents/ \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "assistant",
+    "system_prompt": "You are a helpful AI assistant.",
+    "model": "gpt-4-turbo-preview",
+    "tools": [],
+    "concurrency_limit": 3
+  }'
+```
+
+### Управление базой данных
+
+**Применить миграции:**
+```bash
+alembic upgrade head
+```
+
+**Создать новую миграцию:**
+```bash
+alembic revision --autogenerate -m "описание изменений"
+```
+
+**Откатить последнюю миграцию:**
+```bash
+alembic downgrade -1
+```
+
+**Инициализировать базу данных с seed data:**
+```bash
+python scripts/init_db.py init
+```
+
+**Только добавить seed data:**
+```bash
+python scripts/init_db.py seed
+```
+
+**Сбросить базу данных (ОСТОРОЖНО!):**
+```bash
+python scripts/init_db.py reset
+```
+
+### Остановка сервисов
+
+**Остановить все сервисы:**
+```bash
+docker-compose down
+```
+
+**Остановить и удалить volumes (удалит все данные):**
+```bash
+docker-compose down -v
+```
 
 ## Документация API
 

@@ -49,38 +49,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # Prometheus Monitoring
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: codelab-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-
-  # Grafana Dashboards
-  grafana:
-    image: grafana/grafana:latest
-    container_name: codelab-grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_USERS_ALLOW_SIGN_UP: false
-    depends_on:
-      - prometheus
-
   # Core Service (Development)
   app:
     build:
@@ -117,6 +85,8 @@ services:
         sleep 5 &&
         echo 'Running database migrations...' &&
         alembic upgrade head &&
+        echo 'Initializing seed data...' &&
+        python scripts/init_db.py seed || true &&
         echo 'Starting application...' &&
         uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
       "
@@ -126,5 +96,3 @@ volumes:
   postgres_data:
   redis_data:
   qdrant_data:
-  prometheus_data:
-  grafana_data:
