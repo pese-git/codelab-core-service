@@ -29,9 +29,11 @@
   - SSE latency: P99 < 100ms
 - **Scalability**: 1000+ SSE connections per user, 1M+ vectors per agent
 - **Rate limiting**: 100 req/min per user
-- **Python 3.11+**, async/await everywhere
+- **Python 3.12+**, async/await everywhere
 
 ### Development Tools
+
+**Язык разработки:** Python 3.12+
 
 Проект использует следующие инструменты разработки Python:
 
@@ -45,7 +47,7 @@
   - Автоматическое форматирование кода
   - Проверка стиля и потенциальных ошибок
   
-- **ty** - статический анализатор типов
+- **ty** - статический анализатор типов (type checker)
   - Проверка type hints
   - Выявление несоответствий типов на этапе разработки
   - Улучшение качества кода и документации
