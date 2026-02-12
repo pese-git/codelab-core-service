@@ -28,7 +28,12 @@ class ContextualAgent:
         self.agent_id = agent_id
         self.user_id = user_id
         self.config = config
-        self.openai_client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        
+        # Initialize OpenAI client (supports LiteLLM via base_url)
+        client_kwargs = {"api_key": settings.openai_api_key}
+        if settings.openai_base_url:
+            client_kwargs["base_url"] = settings.openai_base_url
+        self.openai_client = openai.AsyncOpenAI(**client_kwargs)
         
         # Initialize context store
         self.context_store = AgentContextStore(

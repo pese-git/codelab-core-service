@@ -57,8 +57,9 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = Field(default=30)
     jwt_refresh_token_expire_days: int = Field(default=7)
 
-    # OpenAI
+    # OpenAI / LiteLLM
     openai_api_key: str = Field(default="")
+    openai_base_url: str | None = Field(default=None)  # For LiteLLM or custom endpoints
     openai_model: str = Field(default="gpt-4-turbo-preview")
     openai_embedding_model: str = Field(default="text-embedding-3-small")
     openai_max_retries: int = Field(default=3)
