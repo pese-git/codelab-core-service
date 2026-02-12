@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contextual_agent import ContextualAgent
@@ -56,18 +56,28 @@ async def list_sessions(
     """List all user chat sessions."""
     user_id = get_current_user_id(request)
     
-    result = await db.execute(
-        select(ChatSession).where(ChatSession.user_id == user_id)
+    # Get sessions with message count using subquery
+    stmt = (
+        select(
+            ChatSession.id,
+            ChatSession.created_at,
+            func.count(Message.id).label('message_count')
+        )
+        .outerjoin(Message, Message.session_id == ChatSession.id)
+        .where(ChatSession.user_id == user_id)
+        .group_by(ChatSession.id, ChatSession.created_at)
     )
-    sessions = result.scalars().all()
+    
+    result = await db.execute(stmt)
+    rows = result.all()
     
     session_responses = [
         ChatSessionResponse(
-            id=session.id,
-            created_at=session.created_at,
-            message_count=len(session.messages),
+            id=row.id,
+            created_at=row.created_at,
+            message_count=row.message_count,
         )
-        for session in sessions
+        for row in rows
     ]
     
     return ChatSessionListResponse(sessions=session_responses, total=len(session_responses))
@@ -98,6 +108,13 @@ async def get_messages(
             detail="Session not found",
         )
     
+    # Get total count of messages
+    count_result = await db.execute(
+        select(func.count(Message.id))
+        .where(Message.session_id == session_id)
+    )
+    total_count = count_result.scalar() or 0
+    
     # Get messages
     result = await db.execute(
         select(Message)
@@ -121,7 +138,7 @@ async def get_messages(
     
     return MessageListResponse(
         messages=message_responses,
-        total=len(session.messages),
+        total=total_count,
         session_id=session_id,
     )
 
