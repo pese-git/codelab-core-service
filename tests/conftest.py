@@ -2,6 +2,7 @@
 
 import asyncio
 from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,6 +20,8 @@ from app.main import app
 from app.models.user import User
 from app.models.user_agent import UserAgent
 from app.models.chat_session import ChatSession
+from app.redis_client import get_redis
+from app.qdrant_client import get_qdrant
 
 
 # Test database URL (in-memory SQLite)
@@ -152,3 +155,54 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 def sync_client() -> TestClient:
     """Create synchronous test client."""
     return TestClient(app)
+
+
+@pytest.fixture
+def mock_redis() -> AsyncMock:
+    """Create mock Redis client."""
+    redis_mock = AsyncMock()
+    redis_mock.setex = AsyncMock(return_value=True)
+    redis_mock.get = AsyncMock(return_value=None)
+    redis_mock.delete = AsyncMock(return_value=1)
+    return redis_mock
+
+
+@pytest.fixture
+def mock_qdrant() -> AsyncMock:
+    """Create mock Qdrant client."""
+    qdrant_mock = AsyncMock()
+    qdrant_mock.create_collection = AsyncMock(return_value=True)
+    qdrant_mock.delete_collection = AsyncMock(return_value=True)
+    qdrant_mock.collection_exists = AsyncMock(return_value=False)
+    return qdrant_mock
+
+
+@pytest_asyncio.fixture
+async def client_with_mocks(
+    db_session: AsyncSession,
+    mock_redis: AsyncMock,
+    mock_qdrant: AsyncMock,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Create test client with database and service mocks."""
+    from httpx import ASGITransport
+    
+    async def override_get_db():
+        yield db_session
+    
+    async def override_get_redis():
+        return mock_redis
+    
+    async def override_get_qdrant():
+        return mock_qdrant
+    
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_redis] = override_get_redis
+    app.dependency_overrides[get_qdrant] = override_get_qdrant
+    
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test"
+    ) as ac:
+        yield ac
+    
+    app.dependency_overrides.clear()
