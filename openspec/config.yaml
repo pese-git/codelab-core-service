@@ -1,20 +1,45 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context
+context: |
+  Tech stack: Python 3.12+, FastAPI, PostgreSQL, Redis, Qdrant
+  Domain: AI Agent orchestration platform (CodeLab Core Service)
+  
+  Coding standards:
+  - Вся документация в исходном коде (docstrings, комментарии) должна быть на русском языке
+  - Весь код должен быть покрыт тестами (pytest)
+  - Тесты разрабатываются одновременно с кодом (TDD approach)
+  - Используем type hints для всех функций и методов
+  - Следуем PEP 8 и используем ruff для линтинга
+  
+  Architecture:
+  - REST API с SSE для стриминга событий
+  - User isolation через middleware
+  - Agent Bus для межагентного взаимодействия
+  - Vector store для контекста агентов
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+# Per-artifact rules
+rules:
+  proposal:
+    - Описывать проблему и предлагаемое решение
+    - Включать секцию "Non-goals" для ограничения scope
+    - Оценивать влияние на существующий код
+  
+  design:
+    - Детально описывать архитектурные решения
+    - Включать диаграммы (mermaid) при необходимости
+    - Учитывать требования к тестированию
+    - Документировать API контракты
+  
+  tasks:
+    - Разбивать задачи на блоки максимум 2-4 часа
+    - Каждая задача должна включать написание тестов
+    - Указывать зависимости между задачами
+    - Приоритизировать задачи
+  
+  specs:
+    - Писать спецификации на русском языке
+    - Включать примеры использования API
+    - Описывать требования к тестовому покрытию
+    - Документировать edge cases и error handling
+    - Указывать требования к документации в коде
