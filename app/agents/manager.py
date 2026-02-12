@@ -35,10 +35,12 @@ class AgentManager:
     async def create_agent(self, config: AgentConfig) -> AgentResponse:
         """Create new agent."""
         # Create database record
+        # Exclude 'name' from config as it's stored separately in UserAgent.name
+        config_dict = config.model_dump(exclude={'name'})
         agent = UserAgent(
             user_id=self.user_id,
             name=config.name,
-            config=config.model_dump(),
+            config=config_dict,
             status=AgentStatus.READY.value,
         )
         self.db.add(agent)
@@ -90,7 +92,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig(**agent.config),
+            config=AgentConfig(name=agent.name, **agent.config),
         )
 
     async def list_agents(self) -> list[AgentResponse]:
@@ -106,7 +108,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=AgentConfig(**agent.config),
+                config=AgentConfig(name=agent.name, **agent.config),
             )
             for agent in agents
         ]
@@ -124,8 +126,9 @@ class AgentManager:
         if not agent:
             return None
 
-        # Update config
-        agent.config = config.model_dump()
+        # Update config (exclude 'name' as it's stored separately)
+        agent.name = config.name
+        agent.config = config.model_dump(exclude={'name'})
         await self.db.flush()
 
         # Update cache
@@ -204,5 +207,5 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig(**agent.config),
+            config=AgentConfig(name=agent.name, **agent.config),
         )
