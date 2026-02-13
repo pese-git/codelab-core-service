@@ -21,7 +21,7 @@ class AgentConfig(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100, description="Agent name")
     system_prompt: str = Field(..., min_length=1, description="System prompt for the agent")
-    model: str = Field(default="gpt-4-turbo-preview", description="LLM model to use")
+    model: str = Field(default="openrouter/openai/gpt-4.1", description="LLM model to use")
     tools: list[str] = Field(default_factory=list, description="List of available tools")
     concurrency_limit: int = Field(default=3, ge=1, le=10, description="Max concurrent tasks")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Model temperature")
@@ -32,7 +32,7 @@ class AgentConfig(BaseModel):
         "example": {
             "name": "coder",
             "system_prompt": "You are an expert Python developer...",
-            "model": "gpt-4-turbo-preview",
+            "model": "openrouter/openai/gpt-4.1",
             "tools": ["code_executor", "file_reader"],
             "concurrency_limit": 3,
             "temperature": 0.7,

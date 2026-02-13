@@ -1,5 +1,6 @@
 """Chat endpoints."""
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
+from app.core.sse_manager import get_sse_manager
 from app.database import get_db
 from app.middleware.user_isolation import get_current_user_id
 from app.models.chat_session import ChatSession
@@ -25,6 +27,9 @@ from app.schemas.chat import (
     MessageResponse,
     MessageRole,
 )
+from app.schemas.event import SSEEvent, SSEEventType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/my/chat", tags=["chat"])
 
@@ -169,6 +174,9 @@ async def send_message(
             detail="Session not found",
         )
     
+    # Get SSE manager
+    sse_manager = await get_sse_manager(redis)
+    
     # Save user message
     user_message = Message(
         session_id=session_id,
@@ -189,6 +197,20 @@ async def send_message(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Agent '{message_request.target_agent}' not found",
             )
+        
+        # Send SSE event: direct agent call started
+        await sse_manager.broadcast_event(
+            session_id=session_id,
+            event=SSEEvent(
+                event_type=SSEEventType.DIRECT_AGENT_CALL,
+                payload={
+                    "agent_id": str(agent_response.id),
+                    "agent_name": agent_response.name,
+                    "message": message_request.content,
+                },
+                session_id=session_id,
+            ),
+        )
         
         # Create contextual agent
         contextual_agent = ContextualAgent(
@@ -211,36 +233,118 @@ async def send_message(
             for msg in reversed(history_messages)
         ]
         
-        # Execute agent
-        result = await contextual_agent.execute(
-            user_message=message_request.content,
-            session_history=session_history,
-            task_id=str(session_id),
+        # Send SSE event: task started
+        await sse_manager.broadcast_event(
+            session_id=session_id,
+            event=SSEEvent(
+                event_type=SSEEventType.TASK_STARTED,
+                payload={
+                    "agent_id": str(agent_response.id),
+                    "agent_name": agent_response.name,
+                    "task_description": f"Processing message: {message_request.content[:100]}...",
+                },
+                session_id=session_id,
+            ),
         )
         
-        if not result["success"]:
+        # Execute agent
+        try:
+            result = await contextual_agent.execute(
+                user_message=message_request.content,
+                session_history=session_history,
+                task_id=str(session_id),
+            )
+            
+            if not result["success"]:
+                # Send error event
+                await sse_manager.broadcast_event(
+                    session_id=session_id,
+                    event=SSEEvent(
+                        event_type=SSEEventType.TASK_COMPLETED,
+                        payload={
+                            "agent_id": str(agent_response.id),
+                            "status": "error",
+                            "error": result.get("error"),
+                        },
+                        session_id=session_id,
+                    ),
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Agent execution failed: {result.get('error')}",
+                )
+            
+            # Send context retrieved event if context was used
+            if result.get("context"):
+                await sse_manager.broadcast_event(
+                    session_id=session_id,
+                    event=SSEEvent(
+                        event_type=SSEEventType.CONTEXT_RETRIEVED,
+                        payload={
+                            "agent_id": str(agent_response.id),
+                            "context_count": len(result["context"]),
+                            "context_preview": result["context"][:200] if result["context"] else "",
+                        },
+                        session_id=session_id,
+                    ),
+                )
+            
+            # Save assistant message
+            assistant_message = Message(
+                session_id=session_id,
+                role=MessageRole.ASSISTANT.value,
+                content=result["response"],
+                agent_id=agent_response.id,
+            )
+            db.add(assistant_message)
+            await db.flush()
+            
+            # Send SSE event: task completed
+            await sse_manager.broadcast_event(
+                session_id=session_id,
+                event=SSEEvent(
+                    event_type=SSEEventType.TASK_COMPLETED,
+                    payload={
+                        "agent_id": str(agent_response.id),
+                        "agent_name": agent_response.name,
+                        "status": "success",
+                        "response_preview": result["response"][:200],
+                    },
+                    session_id=session_id,
+                ),
+            )
+            
+            logger.info(f"Message processed successfully: session={session_id}, agent={agent_response.name}")
+            
+            return MessageResponse(
+                id=assistant_message.id,
+                role=MessageRole.ASSISTANT,
+                content=assistant_message.content,
+                agent_id=assistant_message.agent_id,
+                timestamp=assistant_message.created_at,
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            # Send error event
+            await sse_manager.broadcast_event(
+                session_id=session_id,
+                event=SSEEvent(
+                    event_type=SSEEventType.TASK_COMPLETED,
+                    payload={
+                        "agent_id": str(agent_response.id),
+                        "status": "error",
+                        "error": str(e),
+                    },
+                    session_id=session_id,
+                ),
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Agent execution failed: {result.get('error')}",
+                detail=f"Internal error: {str(e)}",
             )
-        
-        # Save assistant message
-        assistant_message = Message(
-            session_id=session_id,
-            role=MessageRole.ASSISTANT.value,
-            content=result["response"],
-            agent_id=agent_response.id,
-        )
-        db.add(assistant_message)
-        await db.flush()
-        
-        return MessageResponse(
-            id=assistant_message.id,
-            role=MessageRole.ASSISTANT,
-            content=assistant_message.content,
-            agent_id=assistant_message.agent_id,
-            timestamp=assistant_message.created_at,
-        )
     
     # Orchestrated mode: TODO - implement orchestrator
     # For MVP, return a placeholder response

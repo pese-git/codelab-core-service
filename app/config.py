@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     # OpenAI / LiteLLM
     openai_api_key: str = Field(default="")
     openai_base_url: str | None = Field(default=None)  # For LiteLLM or custom endpoints
-    openai_model: str = Field(default="gpt-4-turbo-preview")
+    openai_model: str = Field(default="openrouter/openai/gpt-4.1")
     openai_embedding_model: str = Field(default="text-embedding-3-small")
     openai_max_retries: int = Field(default=3)
     openai_timeout: int = Field(default=60)
