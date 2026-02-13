@@ -391,6 +391,7 @@ dev = [
 ]
 gradio = [
     { name = "gradio" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
@@ -402,6 +403,7 @@ requires-dist = [
     { name = "gradio", marker = "extra == 'gradio'", specifier = ">=4.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'gradio'", specifier = ">=0.28.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.0" },
     { name = "openai", specifier = ">=1.50.0" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
