@@ -109,7 +109,8 @@ codelab-core-service/
 │   ├── core/                     # Ядро системы
 │   │   ├── __init__.py
 │   │   ├── agent_bus.py          # Координация задач
-│   │   └── sse_manager.py        # SSE события
+│   │   ├── stream_manager.py     # Streaming события (NDJSON)
+│   │   └── sse_manager.py        # Устаревший (алиас для stream_manager)
 │   │
 │   ├── middleware/               # Middleware
 │   │   ├── __init__.py
@@ -165,7 +166,8 @@ codelab-core-service/
 ├── doc/                          # Документация
 │   ├── architecture/            # Архитектурная документация
 │   ├── rest-api.md
-│   ├── sse-event-streaming.md
+│   ├── streaming-fetch-api.md
+│   ├── MIGRATION_SSE_TO_STREAMING.md
 │   └── setup-guide.md
 │
 ├── .env.example                  # Пример конфигурации
@@ -694,13 +696,14 @@ async def test_list_features(client: AsyncClient, auth_headers: dict):
     assert len(data) >= 1
 ```
 
-### Добавление нового SSE события
+### Добавление нового Streaming события
 
 ```python
 # 1. Добавить тип события в схему
 # app/schemas/event.py
-class SSEEventType(str, Enum):
+class StreamEventType(str, Enum):
     # ... существующие типы
+    NEW_EVENT_TYPE = "new_event_type"
     NEW_EVENT_TYPE = "new_event_type"
 
 # 2. Отправить событие
@@ -709,9 +712,22 @@ from app.core.sse_manager import get_sse_manager
 sse_manager = await get_sse_manager(redis)
 await sse_manager.broadcast_event(
     session_id=session_id,
-    event=SSEEvent(
-        event_type=SSEEventType.NEW_EVENT_TYPE,
+    event=StreamEvent(
+        event_type=StreamEventType.NEW_EVENT_TYPE,
         payload={
+            "key": "value"
+        }
+    )
+)
+```
+
+**3. Отправить событие клиенту**:
+```python
+# В route handler
+from app.core.stream_manager import get_stream_manager
+
+stream_manager = await get_stream_manager(redis)
+await stream_manager.broadcast_event(
             "key": "value",
             "data": "some data"
         },

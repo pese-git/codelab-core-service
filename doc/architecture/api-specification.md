@@ -7,7 +7,7 @@
   - [Health](#health-endpoints)
   - [Agents](#agents-endpoints)
   - [Chat](#chat-endpoints)
-  - [SSE](#sse-endpoints)
+  - [Streaming](#streaming-endpoints)
 - [Схемы данных](#схемы-данных)
 - [Коды ошибок](#коды-ошибок)
 
@@ -22,7 +22,7 @@ Development: http://localhost:8000
 ```
 
 ### Content-Type
-Все запросы и ответы используют `application/json`, кроме SSE endpoints (`text/event-stream`).
+Все запросы и ответы используют `application/json`, кроме Streaming endpoints (`application/x-ndjson`).
 
 ### Версионирование
 API версионируется через URL path (в будущем):
@@ -407,55 +407,84 @@ python scripts/generate_test_jwt.py <user_id>
 
 ---
 
-### SSE Endpoints
+### Streaming Endpoints
 
-#### GET /my/sse/{session_id}
+#### GET /my/chat/{session_id}/events/
 
-Подключиться к потоку Server-Sent Events для получения real-time обновлений.
+Подключиться к потоку событий для получения real-time обновлений через Streaming Fetch API.
 
-**Аутентификация**: Требуется
+**Аутентификация**: Требуется (JWT в Authorization header)
 
 **Path Parameters**:
-- `session_id` (UUID) - ID сессии
+- `session_id` (UUID) - ID чат-сессии
+
+**Request Headers**:
+```
+Authorization: Bearer <jwt_token>
+```
 
 **Response Headers**:
 ```
-Content-Type: text/event-stream
+Content-Type: application/x-ndjson
 Cache-Control: no-cache
 Connection: keep-alive
+X-Accel-Buffering: no
 ```
 
-**Event Stream**:
-```
-event: direct_agent_call
-data: {"agent_id": "550e8400-...", "agent_name": "coder", "message": "..."}
-
-event: task_started
-data: {"agent_id": "550e8400-...", "task_description": "Processing..."}
-
-event: context_retrieved
-data: {"agent_id": "550e8400-...", "context_count": 5}
-
-event: task_completed
-data: {"agent_id": "550e8400-...", "status": "success", "response_preview": "..."}
-
-: heartbeat
-
-event: error
-data: {"error": "Agent execution failed", "details": "..."}
+**Event Stream (NDJSON format)**:
+```json
+{"event_type":"direct_agent_call","payload":{"agent_id":"550e8400-...","agent_name":"coder","message":"..."},"session_id":"...","timestamp":"2026-02-13T18:00:00Z"}
+{"event_type":"task_started","payload":{"agent_id":"550e8400-...","task_description":"Processing..."},"session_id":"...","timestamp":"2026-02-13T18:00:01Z"}
+{"event_type":"context_retrieved","payload":{"agent_id":"550e8400-...","context_count":5},"session_id":"...","timestamp":"2026-02-13T18:00:02Z"}
+{"event_type":"task_completed","payload":{"agent_id":"550e8400-...","status":"success","response_preview":"..."},"session_id":"...","timestamp":"2026-02-13T18:00:03Z"}
+{"event_type":"heartbeat","payload":{"timestamp":"2026-02-13T18:00:30Z"},"session_id":"...","timestamp":"2026-02-13T18:00:30Z"}
 ```
 
 **Event Types**:
 - `direct_agent_call` - Начало прямого вызова агента
+- `agent_status_changed` - Изменение статуса агента
+- `task_plan_created` - План задач создан оркестратором
 - `task_started` - Задача начата
+- `task_progress` - Прогресс выполнения задачи
 - `task_completed` - Задача завершена
 - `context_retrieved` - Контекст получен из RAG
 - `tool_request` - Запрос на использование инструмента
-- `plan_created` - Создан план выполнения
+- `plan_request` - Запрос на утверждение плана
+- `approval_required` - Требуется утверждение пользователя
+- `heartbeat` - Keep-alive heartbeat (каждые 30 секунд)
 - `error` - Ошибка выполнения
 
-**Heartbeat**:
-Каждые 30 секунд отправляется комментарий `: heartbeat` для поддержания соединения.
+**Client Example (JavaScript)**:
+```javascript
+const response = await fetch('/my/chat/{session_id}/events/', {
+  headers: {
+    'Authorization': 'Bearer ' + token
+  },
+  signal: abortController.signal
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const {done, value} = await reader.read();
+  if (done) break;
+  
+  const chunk = decoder.decode(value);
+  const lines = chunk.split('\n').filter(line => line.trim());
+  
+  for (const line of lines) {
+    const event = JSON.parse(line);
+    console.log('Event:', event);
+  }
+}
+```
+
+**Connection Management**:
+- Heartbeat отправляется каждые 30 секунд как JSON событие
+- Timeout соединения: 5 минут неактивности
+- Буферизация последних 100 событий в Redis (TTL 5 минут)
+- Поддержка множественных соединений на одну сессию
 
 ---
 
@@ -516,16 +545,18 @@ interface ChatSessionResponse {
 }
 ```
 
-### SSEEvent
+### StreamEvent
 
 ```typescript
-interface SSEEvent {
+interface StreamEvent {
   event_type: string;              // Event type
   payload: Record<string, any>;    // Event data
   session_id: string;              // UUID
   timestamp: string;               // ISO 8601
 }
 ```
+
+**Примечание**: Для обратной совместимости `SSEEvent` является алиасом для `StreamEvent`.
 
 ---
 
@@ -653,20 +684,31 @@ const response = await fetch('http://localhost:8000/my/chat/sessions/', {
 });
 const session = await response.json();
 
-// SSE подключение
-const eventSource = new EventSource(
-  `http://localhost:8000/my/sse/${session.id}`,
-  {
-    headers: {
-      'Authorization': `Bearer ${token}`
+// Streaming подключение
+const response = await fetch(`http://localhost:8000/my/chat/${session.id}/events/`, {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  },
+  signal: abortController.signal
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const {done, value} = await reader.read();
+  if (done) break;
+  
+  const chunk = decoder.decode(value);
+  const lines = chunk.split('\n').filter(line => line.trim());
+  
+  for (const line of lines) {
+    const event = JSON.parse(line);
+    if (event.event_type === 'task_completed') {
+      console.log('Task completed:', event);
     }
   }
-);
-
-eventSource.addEventListener('task_completed', (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Task completed:', data);
-});
+}
 ```
 
 ### cURL

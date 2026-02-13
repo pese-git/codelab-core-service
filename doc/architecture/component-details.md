@@ -515,16 +515,20 @@ async def execute(self, user_message: str, ...) -> dict:
 
 ---
 
-## SSE Manager
+## Stream Manager
 
 ### Назначение
-Управляет Server-Sent Events соединениями для real-time обновлений клиентов.
+Управляет streaming соединениями для real-time обновлений клиентов через Fetch API и NDJSON формат.
+
+**Файл**: [`app/core/stream_manager.py`](../../app/core/stream_manager.py)
+
+**Примечание**: Ранее назывался SSE Manager. Для обратной совместимости доступен алиас `SSEManager`.
 
 ### Архитектура
 
 ```mermaid
 graph TB
-    subgraph "SSE Manager"
+    subgraph "Stream Manager"
         Connections[Connection Registry]
         Broadcast[Event Broadcaster]
         Buffer[Event Buffer]
@@ -533,7 +537,7 @@ graph TB
     
     subgraph "Per Session"
         Queue[asyncio.Queue]
-        Stream[SSE Stream]
+        Stream[NDJSON Stream]
     end
     
     subgraph "Storage"
@@ -550,15 +554,22 @@ graph TB
 ### Структура данных
 
 ```python
-class SSEManager:
+class StreamManager:
     # Соединения по сессиям
-    connections: dict[UUID, list[SSEConnection]]
+    connections: dict[UUID, list[StreamConnection]]
     
     # Сессии по пользователям
     user_sessions: dict[UUID, set[UUID]]
     
     # Heartbeat task
     _heartbeat_task: asyncio.Task | None
+    
+    # Константы
+    MAX_BUFFER_SIZE = 100        # Максимум событий в буфере
+    BUFFER_TTL = 300             # TTL буфера в Redis (5 минут)
+    HEARTBEAT_INTERVAL = 30      # Интервал heartbeat (30 секунд)
+    CONNECTION_TIMEOUT = 300     # Timeout соединения (5 минут)
+    MAX_EVENT_SIZE = 10240       # Максимальный размер события (10KB)
 ```
 
 ### Регистрация соединения
@@ -566,16 +577,16 @@ class SSEManager:
 ```mermaid
 sequenceDiagram
     participant Client
-    participant SSEMgr
+    participant StreamMgr
     participant Redis
     
-    Client->>SSEMgr: register_connection(session_id, user_id)
-    SSEMgr->>SSEMgr: Create asyncio.Queue
-    SSEMgr->>SSEMgr: Add to connections dict
-    SSEMgr->>Redis: Get buffered events
-    Redis-->>SSEMgr: Buffered events
-    SSEMgr->>Client: Send buffered events
-    SSEMgr-->>Client: Return queue
+    Client->>StreamMgr: register_connection(session_id, user_id)
+    StreamMgr->>StreamMgr: Create asyncio.Queue
+    StreamMgr->>StreamMgr: Add to connections dict
+    StreamMgr->>Redis: Get buffered events
+    Redis-->>StreamMgr: Buffered events
+    StreamMgr->>Client: Send buffered events
+    StreamMgr-->>Client: Return queue
 ```
 
 ### Broadcast событий
@@ -584,12 +595,18 @@ sequenceDiagram
 async def broadcast_event(
     self,
     session_id: UUID,
-    event: SSEEvent,
+    event: StreamEvent,
     buffer: bool = True
 ) -> int:
     # 1. Валидация размера
-    if len(event.model_dump_json()) > MAX_EVENT_SIZE:
-        event.payload = {"error": "Payload too large"}
+    event_json = event.model_dump_json()
+    if len(event_json) > self.MAX_EVENT_SIZE:
+        # Усечение payload при превышении размера
+        event.payload = {
+            "error": "Payload too large",
+            "truncated": True,
+            "original_size": len(event_json)
+        }
     
     # 2. Буферизация в Redis
     if buffer:
@@ -597,7 +614,8 @@ async def broadcast_event(
     
     # 3. Отправка всем соединениям сессии
     sent_count = 0
-    for conn in self.connections.get(session_id, []):
+    connections = self.connections.get(session_id, [])
+    for conn in connections:
         if await conn.send_event(event):
             sent_count += 1
     
@@ -607,53 +625,72 @@ async def broadcast_event(
 ### Буферизация событий
 
 ```python
-async def _buffer_event(self, session_id: UUID, event: SSEEvent):
-    buffer_key = f"sse:buffer:{session_id}"
+async def _buffer_event(self, session_id: UUID, event: StreamEvent):
+    buffer_key = f"stream:buffer:{session_id}"
     
     # 1. Добавить в список (FIFO)
     await self.redis.lpush(buffer_key, event.model_dump_json())
     
     # 2. Обрезать до максимального размера
-    await self.redis.ltrim(buffer_key, 0, MAX_BUFFER_SIZE - 1)
+    await self.redis.ltrim(buffer_key, 0, self.MAX_BUFFER_SIZE - 1)
     
     # 3. Установить TTL
-    await self.redis.expire(buffer_key, BUFFER_TTL)
+    await self.redis.expire(buffer_key, self.BUFFER_TTL)
 ```
 
 ### Heartbeat Loop
 
 ```python
 async def _heartbeat_loop(self):
+    """Отправляет heartbeat всем активным соединениям каждые 30 секунд."""
     while True:
-        await asyncio.sleep(HEARTBEAT_INTERVAL)  # 30 сек
+        await asyncio.sleep(self.HEARTBEAT_INTERVAL)
         
-        # Получить все соединения
-        all_connections = [
-            conn
-            for conns in self.connections.values()
-            for conn in conns
-        ]
+        async with self._lock:
+            # Получить все соединения
+            all_connections = [
+                conn
+                for conns in self.connections.values()
+                for conn in conns
+            ]
         
         # Отправить heartbeat
         for conn in all_connections:
             try:
                 await conn.send_heartbeat()
             except Exception as e:
-                logger.error("heartbeat_failed", error=str(e))
+                logger.error(f"Heartbeat failed: {e}")
 ```
 
 ### Типы событий
 
 ```python
-class SSEEventType(str, Enum):
+class StreamEventType(str, Enum):
+    """Типы streaming событий."""
     DIRECT_AGENT_CALL = "direct_agent_call"
+    AGENT_STATUS_CHANGED = "agent_status_changed"
+    TASK_PLAN_CREATED = "task_plan_created"
     TASK_STARTED = "task_started"
+    TASK_PROGRESS = "task_progress"
     TASK_COMPLETED = "task_completed"
     CONTEXT_RETRIEVED = "context_retrieved"
     TOOL_REQUEST = "tool_request"
-    PLAN_CREATED = "plan_created"
+    PLAN_REQUEST = "plan_request"
+    APPROVAL_REQUIRED = "approval_required"
+    HEARTBEAT = "heartbeat"
     ERROR = "error"
 ```
+
+**Примечание**: Для обратной совместимости `SSEEventType` является алиасом для `StreamEventType`.
+
+### Формат событий
+
+События отправляются в формате JSON Lines (NDJSON):
+```json
+{"event_type":"task_started","payload":{"task_id":"...","description":"..."},"session_id":"...","timestamp":"2026-02-13T18:00:00Z"}
+```
+
+Каждое событие - это JSON объект на отдельной строке, завершающийся символом новой строки (`\n`).
 
 ---
 

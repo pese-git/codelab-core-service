@@ -637,9 +637,10 @@ agent_tasks_running
 agent_tasks_completed_total
 agent_tasks_failed_total
 
-# SSE Connections
-sse_connections_active
-sse_connections_total
+# Streaming Connections
+streaming_connections_active
+streaming_connections_total
+streaming_sessions_active
 ```
 
 ### Grafana

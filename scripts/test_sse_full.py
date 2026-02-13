@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Full SSE test: creates session, agent, and tests SSE events.
+Full Streaming test: creates session, agent, and tests Streaming events.
 """
 
 import asyncio
@@ -11,7 +11,7 @@ import httpx
 
 
 BASE_URL = "http://localhost:8000"
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjljMmJkZS1lMTYxLTQ5MjktODNkZC0wNmU2ZTVhZmVlMjAiLCJpYXQiOjE3NzA5NjU3MDUsImV4cCI6MTc3MDk2NzUwNX0.ADbGq3doJhc1EpCCuYCZHx16KAEv2mC6gJUoTXUxdNw"
+TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYTVlNmY4Ny1mOGMxLTRjODQtYTU4Ni05Mjk3OTc4ZDY0MmEiLCJpYXQiOjE3NzEwMDY5MjksImV4cCI6MTc3MTAwODcyOX0.XksUrF837woAw411YQa0R2-Uc1MgMnKIenRYrLE_42c"
 
 
 async def ensure_user_exists(client: httpx.AsyncClient) -> bool:
@@ -81,8 +81,8 @@ async def get_or_create_agent(client: httpx.AsyncClient) -> str:
         f"{BASE_URL}/my/agents/",
         headers={"Authorization": f"Bearer {TOKEN}"},
         json={
-            "name": "test-sse-agent",
-            "description": "Test agent for SSE",
+            "name": "test-stream-agent",
+            "description": "Test agent for Streaming",
             "system_prompt": "You are a helpful assistant. Keep responses brief.",
             "config": {
                 "model": "openrouter/openai/gpt-4.1",
@@ -101,15 +101,15 @@ async def get_or_create_agent(client: httpx.AsyncClient) -> str:
     return agent_name
 
 
-async def listen_to_sse(session_id: str, stop_event: asyncio.Event):
-    """Listen to SSE events."""
+async def listen_to_stream(session_id: str, stop_event: asyncio.Event):
+    """Listen to Streaming events."""
     url = f"{BASE_URL}/my/chat/{session_id}/events/"
     headers = {
         "Authorization": f"Bearer {TOKEN}",
-        "Accept": "text/event-stream",
+        "Accept": "application/x-ndjson",
     }
     
-    print(f"\n🔌 Connecting to SSE endpoint...")
+    print(f"\n🔌 Connecting to Streaming endpoint...")
     print(f"   URL: {url}")
     print("-" * 80)
     
@@ -117,67 +117,63 @@ async def listen_to_sse(session_id: str, stop_event: asyncio.Event):
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("GET", url, headers=headers) as response:
                 if response.status_code != 200:
-                    print(f"❌ SSE connection failed: HTTP {response.status_code}")
+                    print(f"❌ Streaming connection failed: HTTP {response.status_code}")
                     print(await response.aread())
                     return
                 
-                print(f"✅ SSE Connected! Listening for events...\n")
+                print(f"✅ Streaming Connected! Listening for events (NDJSON format)...\n")
                 
-                event_type = None
-                event_data = None
                 event_count = 0
                 
                 async for line in response.aiter_lines():
                     if stop_event.is_set():
-                        print("\n👋 Stopping SSE listener...")
+                        print("\n👋 Stopping Streaming listener...")
                         break
                     
                     line = line.strip()
                     
-                    # Empty line signals end of event
+                    # Skip empty lines
                     if not line:
-                        if event_type and event_data:
-                            try:
-                                data = json.loads(event_data)
-                                event_count += 1
-                                
-                                print(f"📨 Event #{event_count}: {event_type}")
-                                print(f"   Timestamp: {data.get('timestamp', 'N/A')}")
-                                
-                                payload = data.get('payload', {})
-                                if 'agent_name' in payload:
-                                    print(f"   Agent: {payload['agent_name']}")
-                                if 'status' in payload:
-                                    print(f"   Status: {payload['status']}")
-                                if 'message' in payload:
-                                    print(f"   Message: {payload['message'][:100]}...")
-                                if 'response_preview' in payload:
-                                    print(f"   Response: {payload['response_preview'][:100]}...")
-                                if 'error' in payload:
-                                    print(f"   ❌ Error: {payload['error']}")
-                                
-                                print()
-                                
-                            except json.JSONDecodeError as e:
-                                print(f"⚠️  Failed to parse event: {e}")
-                        
-                        event_type = None
-                        event_data = None
                         continue
                     
-                    # Parse SSE format
-                    if line.startswith("event:"):
-                        event_type = line[6:].strip()
-                    elif line.startswith("data:"):
-                        event_data = line[5:].strip()
-                    elif line.startswith(":"):
-                        # Heartbeat
-                        print("💓 Heartbeat")
+                    # Parse NDJSON format (each line is a complete JSON object)
+                    try:
+                        event = json.loads(line)
+                        event_type = event.get('event_type', 'unknown')
+                        
+                        # Handle heartbeat
+                        if event_type == 'heartbeat':
+                            print("💓 Heartbeat")
+                            continue
+                        
+                        event_count += 1
+                        
+                        print(f"📨 Event #{event_count}: {event_type}")
+                        print(f"   Timestamp: {event.get('timestamp', 'N/A')}")
+                        print(f"   Session ID: {event.get('session_id', 'N/A')}")
+                        
+                        payload = event.get('payload', {})
+                        if 'agent_name' in payload:
+                            print(f"   Agent: {payload['agent_name']}")
+                        if 'status' in payload:
+                            print(f"   Status: {payload['status']}")
+                        if 'message' in payload:
+                            print(f"   Message: {payload['message'][:100]}...")
+                        if 'response_preview' in payload:
+                            print(f"   Response: {payload['response_preview'][:100]}...")
+                        if 'error' in payload:
+                            print(f"   ❌ Error: {payload['error']}")
+                        
+                        print()
+                        
+                    except json.JSONDecodeError as e:
+                        print(f"⚠️  Failed to parse JSON: {e}")
+                        print(f"   Raw line: {line}")
                 
                 print(f"\n📊 Total events received: {event_count}")
                         
     except Exception as e:
-        print(f"❌ SSE error: {e}")
+        print(f"❌ Streaming error: {e}")
         import traceback
         traceback.print_exc()
 
@@ -209,7 +205,7 @@ async def send_message(client: httpx.AsyncClient, session_id: str, agent_name: s
 async def main():
     """Main test flow."""
     print("=" * 80)
-    print("🧪 SSE FULL TEST")
+    print("🧪 Streaming FULL TEST")
     print("=" * 80)
     
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -225,24 +221,24 @@ async def main():
         # Step 2: Get or create agent
         agent_name = await get_or_create_agent(client)
         
-        # Step 3: Start SSE listener in background
+        # Step 3: Start Streaming listener in background
         stop_event = asyncio.Event()
-        sse_task = asyncio.create_task(listen_to_sse(session_id, stop_event))
+        stream_task = asyncio.create_task(listen_to_stream(session_id, stop_event))
         
-        # Wait for SSE to connect
+        # Wait for Streaming to connect
         await asyncio.sleep(2)
         
-        # Step 4: Send test message (should trigger SSE events)
+        # Step 4: Send test message (should trigger Streaming events)
         success = await send_message(client, session_id, agent_name)
         
         if success:
             # Wait for events to be received
-            print("\n⏳ Waiting for SSE events (10 seconds)...")
+            print("\n⏳ Waiting for Streaming events (10 seconds)...")
             await asyncio.sleep(10)
         
-        # Step 5: Stop SSE listener
+        # Step 5: Stop Streaming listener
         stop_event.set()
-        await sse_task
+        await stream_task
     
     print("\n" + "=" * 80)
     print("✅ Test completed!")

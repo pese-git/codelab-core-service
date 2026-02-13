@@ -31,7 +31,7 @@
 - Agent Manager
 - Agent Bus
 - Contextual Agent
-- SSE Manager
+- Stream Manager (ранее SSE Manager)
 - Agent Context Store
 
 Включает диаграммы, примеры кода и объяснение работы.
@@ -106,7 +106,7 @@
 1. Прочитайте раздел "Аутентификация" в [API Specification](./api-specification.md)
 2. Изучите endpoints и схемы данных
 3. Посмотрите примеры использования API
-4. Изучите SSE endpoints для real-time обновлений
+4. Изучите Streaming endpoints для real-time обновлений
 
 ### Для архитекторов
 
@@ -142,7 +142,8 @@
 
 - [`setup-guide.md`](../setup-guide.md) - Детальное руководство по установке
 - [`rest-api.md`](../rest-api.md) - REST API документация
-- [`sse-event-streaming.md`](../sse-event-streaming.md) - SSE события
+- [`streaming-fetch-api.md`](../streaming-fetch-api.md) - Streaming события (Fetch API)
+- [`MIGRATION_SSE_TO_STREAMING.md`](../MIGRATION_SSE_TO_STREAMING.md) - Миграция с SSE на Streaming
 - [`litellm-integration.md`](../litellm-integration.md) - Интеграция с LiteLLM
 - [`agent-context.md`](../agent-context.md) - Контекстное хранилище агентов
 
@@ -218,7 +219,7 @@
 2. **ADR-002**: JWT для аутентификации вместо session-based
 3. **ADR-003**: Qdrant для векторного хранилища
 4. **ADR-004**: Middleware-based изоляция пользователей
-5. **ADR-005**: SSE для real-time обновлений вместо WebSocket
+5. **ADR-005**: Streaming Fetch API для real-time обновлений (вместо SSE/WebSocket)
 
 ---
 
@@ -232,7 +233,8 @@
 | **Direct Mode** | Режим прямого вызова агента (⚡ быстрый) |
 | **Orchestrated Mode** | Режим с автоматическим планированием (🧠 умный) |
 | **RAG** | Retrieval-Augmented Generation - поиск контекста для LLM |
-| **SSE** | Server-Sent Events - односторонний real-time поток |
+| **NDJSON** | Newline Delimited JSON - формат для streaming данных |
+| **Streaming API** | Fetch API с NDJSON для real-time обновлений |
 | **User Isolation** | Полная изоляция данных между пользователями |
 | **Worker Space** | Изолированное пространство выполнения для пользователя |
 

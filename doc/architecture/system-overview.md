@@ -33,8 +33,8 @@ CodeLab Core Service - это персональная мультиагентн�
 - Автоматическое управление памятью
 
 ### 4. Real-time взаимодействие
-- SSE (Server-Sent Events) для мгновенных обновлений
-- Буферизация событий в Redis
+- Streaming Fetch API для мгновенных обновлений (NDJSON формат)
+- Буферизация событий в Redis (последние 100 событий, TTL 5 минут)
 - Поддержка переподключений
 - Heartbeat для поддержания соединения
 
@@ -51,14 +51,14 @@ graph TB
     subgraph "API GATEWAY LAYER"
         FastAPI[FastAPI Application]
         Middleware[User Isolation Middleware]
-        Routes[Routes: Agents, Chat, SSE, Health]
+        Routes[Routes: Agents, Chat, Streaming, Health]
     end
     
     subgraph "BUSINESS LOGIC LAYER"
         subgraph "User Worker Space"
             AgentMgr[Agent Manager]
             AgentBus[Agent Bus]
-            SSEMgr[SSE Manager]
+            StreamMgr[Stream Manager]
             CtxAgent[Contextual Agent]
             Orch[Orchestrator]
             Approval[Approval Manager]
@@ -67,7 +67,7 @@ graph TB
     
     subgraph "DATA LAYER"
         Postgres[(PostgreSQL<br/>Users, Agents,<br/>Sessions, Messages)]
-        Redis[(Redis<br/>Queues, Cache,<br/>SSE Buffer)]
+        Redis[(Redis<br/>Queues, Cache,<br/>Stream Buffer)]
         Qdrant[(Qdrant<br/>Vectors,<br/>Context, RAG)]
     end
     
@@ -80,7 +80,7 @@ graph TB
     
     Routes --> AgentMgr
     Routes --> AgentBus
-    Routes --> SSEMgr
+    Routes --> StreamMgr
     
     AgentMgr --> CtxAgent
     AgentBus --> CtxAgent
@@ -92,7 +92,7 @@ graph TB
     AgentMgr --> Qdrant
     
     CtxAgent --> Qdrant
-    SSEMgr --> Redis
+    StreamMgr --> Redis
     AgentBus --> Redis
     
     Routes --> Postgres
@@ -161,11 +161,13 @@ graph TB
   4. Вызов LLM
   5. Сохранение взаимодействия в контекст
 
-#### SSE Manager
-- **Назначение**: Управление real-time событиями
+#### Stream Manager
+- **Назначение**: Управление real-time событиями через Streaming Fetch API
 - **Функции**:
-  - Регистрация SSE соединений
+  - Регистрация streaming соединений (NDJSON формат)
   - Broadcast событий по сессиям
+  - Буферизация событий в Redis
+  - Heartbeat для поддержания соединений
   - Буферизация в Redis
   - Heartbeat (30 сек)
   - Восстановление при переподключении
@@ -195,7 +197,7 @@ graph TB
 - **Назначение**: Кэш и очереди
 - **Использование**:
   - Кэш конфигураций агентов (TTL 5 мин)
-  - Буфер SSE событий (TTL 5 мин)
+  - Буфер streaming событий (последние 100, TTL 5 мин)
   - Agent Bus очереди
   - Rate limiting
   - Distributed locks
@@ -232,7 +234,7 @@ sequenceDiagram
     participant ChatRoute
     participant AgentMgr
     participant CtxAgent
-    participant SSEMgr
+    participant StreamMgr
     participant Qdrant
     participant LLM
     participant Postgres
@@ -246,13 +248,13 @@ sequenceDiagram
     ChatRoute->>AgentMgr: Get agent by name
     AgentMgr-->>ChatRoute: Agent config
     
-    ChatRoute->>SSEMgr: Broadcast DIRECT_AGENT_CALL event
+    ChatRoute->>StreamMgr: Broadcast DIRECT_AGENT_CALL event
     ChatRoute->>CtxAgent: Create contextual agent
     
     CtxAgent->>Qdrant: Search relevant context (RAG)
     Qdrant-->>CtxAgent: Top-K context vectors
     
-    ChatRoute->>SSEMgr: Broadcast CONTEXT_RETRIEVED event
+    ChatRoute->>StreamMgr: Broadcast CONTEXT_RETRIEVED event
     
     CtxAgent->>LLM: Call with context + history
     LLM-->>CtxAgent: Response
@@ -260,7 +262,7 @@ sequenceDiagram
     CtxAgent->>Qdrant: Save interaction
     ChatRoute->>Postgres: Save assistant message
     
-    ChatRoute->>SSEMgr: Broadcast TASK_COMPLETED event
+    ChatRoute->>StreamMgr: Broadcast TASK_COMPLETED event
     ChatRoute-->>User: Return assistant message
 ```
 
@@ -290,38 +292,38 @@ sequenceDiagram
     AgentsRoute-->>User: Return agent details
 ```
 
-### Поток 3: SSE подключение
+### Поток 3: Streaming подключение
 
 ```mermaid
 sequenceDiagram
     participant User
     participant FastAPI
     participant Middleware
-    participant SSERoute
-    participant SSEMgr
+    participant StreamRoute
+    participant StreamMgr
     participant Redis
     
     User->>FastAPI: GET /my/sse/{session_id}
     FastAPI->>Middleware: Authenticate
-    Middleware->>SSERoute: Forward with user_id
-    
-    SSERoute->>SSEMgr: Register connection
-    SSEMgr->>SSEMgr: Create asyncio.Queue
-    SSEMgr->>Redis: Get buffered events
-    Redis-->>SSEMgr: Buffered events
-    
-    SSEMgr->>User: Send buffered events
-    
+    Middleware->>StreamRoute: Forward with user_id
+
+    StreamRoute->>StreamMgr: Register connection
+    StreamMgr->>StreamMgr: Create asyncio.Queue
+    StreamMgr->>Redis: Get buffered events
+    Redis-->>StreamMgr: Buffered events
+
+    StreamMgr->>User: Send buffered events (NDJSON)
+
     loop Heartbeat every 30s
-        SSEMgr->>User: Send heartbeat
+        StreamMgr->>User: Send heartbeat (JSON event)
     end
-    
+
     loop On events
-        SSEMgr->>User: Stream SSE events
+        StreamMgr->>User: Stream events (NDJSON)
     end
-    
+
     User->>FastAPI: Disconnect
-    SSERoute->>SSEMgr: Unregister connection
+    StreamRoute->>StreamMgr: Unregister connection
 ```
 
 ## Схема базы данных
@@ -453,7 +455,7 @@ graph LR
 ### Метрики производительности
 - **Direct call latency**: P95 < 2 сек
 - **Qdrant search**: < 50ms
-- **SSE connections**: 1000+ per user
+- **Streaming connections**: 1000+ per user
 - **Agent concurrency**: 3 задачи параллельно
 - **Database queries**: < 100ms P95
 
@@ -519,7 +521,7 @@ graph TB
 - Database connections и query time
 - Redis operations
 - Agent tasks (queued, running, completed, failed)
-- SSE connections (active, total)
+- Streaming connections (active, total)
 - Qdrant operations (search time, vector count)
 
 ### Алерты
