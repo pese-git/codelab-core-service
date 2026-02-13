@@ -45,7 +45,7 @@ async def create_seed_data() -> None:
                 {
                     "name": "CodeAssistant",
                     "config": {
-                        "model": "gpt-4-turbo-preview",
+                        "model": "openrouter/openai/gpt-4.1",
                         "temperature": 0.7,
                         "system_prompt": "You are a helpful coding assistant specialized in Python and web development.",
                         "tools": ["code_search", "file_operations", "terminal"],
@@ -54,7 +54,7 @@ async def create_seed_data() -> None:
                 {
                     "name": "DataAnalyst",
                     "config": {
-                        "model": "gpt-4-turbo-preview",
+                        "model": "openrouter/openai/gpt-4.1",
                         "temperature": 0.3,
                         "system_prompt": "You are a data analyst expert. Help users analyze data and create visualizations.",
                         "tools": ["data_analysis", "visualization", "statistics"],
@@ -63,7 +63,7 @@ async def create_seed_data() -> None:
                 {
                     "name": "DocumentWriter",
                     "config": {
-                        "model": "gpt-4-turbo-preview",
+                        "model": "openrouter/openai/gpt-4.1",
                         "temperature": 0.8,
                         "system_prompt": "You are a technical writer. Help users create clear and comprehensive documentation.",
                         "tools": ["markdown", "diagrams", "templates"],
