@@ -31,6 +31,16 @@ class AgentContextStore:
             client_kwargs["base_url"] = settings.openai_base_url
         self.openai_client = openai.AsyncOpenAI(**client_kwargs)
 
+    async def _ensure_collection_exists(self) -> bool:
+        """Check if collection exists and initialize if needed."""
+        try:
+            await self.client.get_collection(collection_name=self.collection_name)
+            return True
+        except Exception:
+            # Collection doesn't exist, initialize it
+            await self.initialize()
+            return False
+
     async def initialize(self) -> None:
         """Initialize collection if not exists."""
         await ensure_collection(
@@ -96,6 +106,9 @@ class AgentContextStore:
             payload=payload,
         )
 
+        # Ensure collection exists before upserting
+        await self._ensure_collection_exists()
+        
         # Upsert to collection
         await self.client.upsert(
             collection_name=self.collection_name,
@@ -119,6 +132,11 @@ class AgentContextStore:
         filter_type: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search for relevant context."""
+        # Ensure collection exists
+        collection_existed = await self._ensure_collection_exists()
+        if not collection_existed:
+            return []  # Return empty results for newly created collection
+        
         # Generate query embedding
         try:
             response = await self.openai_client.embeddings.create(
@@ -186,12 +204,21 @@ class AgentContextStore:
 
     async def clear(self) -> None:
         """Clear all context for this agent."""
-        await self.client.delete_collection(collection_name=self.collection_name)
+        try:
+            await self.client.delete_collection(collection_name=self.collection_name)
+        except Exception as e:
+            logger.warning(
+                "collection_delete_failed",
+                collection=self.collection_name,
+                error=str(e),
+            )
         await self.initialize()
         logger.info("context_cleared", collection=self.collection_name)
 
     async def get_stats(self) -> dict[str, Any]:
         """Get context statistics."""
+        # Ensure collection exists
+        await self._ensure_collection_exists()
         collection_info = await self.client.get_collection(collection_name=self.collection_name)
         
         return {
