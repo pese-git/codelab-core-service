@@ -18,12 +18,19 @@ logger = get_logger(__name__)
 class AgentContextStore:
     """Store and retrieve agent context using Qdrant vector database."""
 
-    def __init__(self, client: AsyncQdrantClient, user_id: UUID, agent_name: str):
-        """Initialize agent context store."""
+    def __init__(self, client: AsyncQdrantClient | None, user_id: UUID, agent_name: str):
+        """Initialize agent context store.
+        
+        Args:
+            client: Qdrant client instance, or None if Qdrant is disabled
+            user_id: User ID
+            agent_name: Agent name
+        """
         self.client = client
         self.user_id = user_id
         self.agent_name = agent_name
         self.collection_name = f"user{user_id}_{agent_name}_context"
+        self.enabled = client is not None
         
         # Initialize OpenAI client (supports LiteLLM via base_url)
         client_kwargs = {"api_key": settings.openai_api_key}
@@ -32,7 +39,13 @@ class AgentContextStore:
         self.openai_client = openai.AsyncOpenAI(**client_kwargs)
 
     async def _ensure_collection_exists(self) -> bool:
-        """Check if collection exists and initialize if needed."""
+        """Check if collection exists and initialize if needed.
+        
+        Returns False if Qdrant is disabled.
+        """
+        if not self.enabled:
+            return False
+        
         try:
             await self.client.get_collection(collection_name=self.collection_name)
             return True
@@ -42,7 +55,18 @@ class AgentContextStore:
             return False
 
     async def initialize(self) -> None:
-        """Initialize collection if not exists."""
+        """Initialize collection if not exists.
+        
+        Does nothing if Qdrant is disabled.
+        """
+        if not self.enabled:
+            logger.info(
+                "agent_context_disabled",
+                user_id=str(self.user_id),
+                agent_name=self.agent_name,
+            )
+            return
+        
         await ensure_collection(
             self.client,
             self.collection_name,
@@ -64,7 +88,13 @@ class AgentContextStore:
         success: bool = True,
         metadata: dict[str, Any] | None = None,
     ) -> str:
-        """Add interaction to agent context."""
+        """Add interaction to agent context.
+        
+        Returns empty string if Qdrant is disabled.
+        """
+        if not self.enabled:
+            return ""
+        
         # Generate embedding
         try:
             response = await self.openai_client.embeddings.create(
@@ -131,7 +161,13 @@ class AgentContextStore:
         filter_success: bool | None = None,
         filter_type: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Search for relevant context."""
+        """Search for relevant context.
+        
+        Returns empty list if Qdrant is disabled.
+        """
+        if not self.enabled:
+            return []
+        
         # Ensure collection exists
         collection_existed = await self._ensure_collection_exists()
         if not collection_existed:
@@ -203,7 +239,13 @@ class AgentContextStore:
         return formatted_results
 
     async def clear(self) -> None:
-        """Clear all context for this agent."""
+        """Clear all context for this agent.
+        
+        Does nothing if Qdrant is disabled.
+        """
+        if not self.enabled:
+            return
+        
         try:
             await self.client.delete_collection(collection_name=self.collection_name)
         except Exception as e:
@@ -216,7 +258,19 @@ class AgentContextStore:
         logger.info("context_cleared", collection=self.collection_name)
 
     async def get_stats(self) -> dict[str, Any]:
-        """Get context statistics."""
+        """Get context statistics.
+        
+        Returns minimal stats if Qdrant is disabled.
+        """
+        if not self.enabled:
+            return {
+                "collection_name": self.collection_name,
+                "total_vectors": 0,
+                "vector_size": 0,
+                "distance": "disabled",
+                "enabled": False,
+            }
+        
         # Ensure collection exists
         await self._ensure_collection_exists()
         collection_info = await self.client.get_collection(collection_name=self.collection_name)
@@ -226,10 +280,17 @@ class AgentContextStore:
             "total_vectors": collection_info.points_count,
             "vector_size": collection_info.config.params.vectors.size,
             "distance": collection_info.config.params.vectors.distance.name,
+            "enabled": True,
         }
 
     async def prune(self, max_vectors: int | None = None) -> int:
-        """Prune old vectors if exceeding limit."""
+        """Prune old vectors if exceeding limit.
+        
+        Returns 0 if Qdrant is disabled.
+        """
+        if not self.enabled:
+            return 0
+        
         if max_vectors is None:
             max_vectors = settings.context_max_vectors_per_agent
 

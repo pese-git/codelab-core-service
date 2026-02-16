@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     redis_socket_connect_timeout: int = Field(default=5)
 
     # Qdrant
+    qdrant_enabled: bool = Field(default=True)
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_api_key: str | None = Field(default=None)
     qdrant_timeout: int = Field(default=30)

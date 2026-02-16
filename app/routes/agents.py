@@ -21,7 +21,7 @@ async def get_agent_manager(
     request: Request,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant),
+    qdrant: AsyncQdrantClient | None = Depends(get_qdrant),
 ) -> AgentManager:
     """Get agent manager dependency."""
     user_id = get_current_user_id(request)

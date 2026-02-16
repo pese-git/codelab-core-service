@@ -23,10 +23,17 @@ class AgentManager:
         self,
         db: AsyncSession,
         redis: Redis,
-        qdrant: AsyncQdrantClient,
+        qdrant: AsyncQdrantClient | None,
         user_id: UUID,
     ):
-        """Initialize agent manager."""
+        """Initialize agent manager.
+        
+        Args:
+            db: Database session
+            redis: Redis client instance
+            qdrant: Qdrant client instance, or None if Qdrant is disabled
+            user_id: User ID
+        """
         self.db = db
         self.redis = redis
         self.qdrant = qdrant

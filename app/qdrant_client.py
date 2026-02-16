@@ -9,8 +9,14 @@ from app.config import settings
 _qdrant_client: AsyncQdrantClient | None = None
 
 
-async def get_qdrant() -> AsyncQdrantClient:
-    """Get Qdrant client instance."""
+async def get_qdrant() -> AsyncQdrantClient | None:
+    """Get Qdrant client instance.
+    
+    Returns None if Qdrant is disabled via QDRANT_ENABLED=false.
+    """
+    if not settings.qdrant_enabled:
+        return None
+    
     global _qdrant_client
     if _qdrant_client is None:
         _qdrant_client = AsyncQdrantClient(
@@ -31,12 +37,18 @@ async def close_qdrant() -> None:
 
 
 async def ensure_collection(
-    client: AsyncQdrantClient,
+    client: AsyncQdrantClient | None,
     collection_name: str,
     vector_size: int = 1536,  # OpenAI text-embedding-3-small
     distance: Distance = Distance.COSINE,
 ) -> None:
-    """Ensure collection exists, create if not."""
+    """Ensure collection exists, create if not.
+    
+    Does nothing if client is None (Qdrant disabled).
+    """
+    if client is None:
+        return
+    
     collections = await client.get_collections()
     collection_names = [c.name for c in collections.collections]
     
