@@ -187,6 +187,21 @@ async def send_message(
     db.add(user_message)
     await db.flush()
     
+    # Send SSE event: user message created
+    await stream_manager.broadcast_event(
+        session_id=session_id,
+        event=StreamEvent(
+            event_type=StreamEventType.MESSAGE_CREATED,
+            payload={
+                "message_id": str(user_message.id),
+                "role": MessageRole.USER.value,
+                "content": user_message.content,
+                "timestamp": user_message.created_at.isoformat(),
+            },
+            session_id=session_id,
+        ),
+    )
+    
     # Direct mode: target_agent specified
     if message_request.target_agent:
         # Get agent manager
@@ -326,6 +341,23 @@ async def send_message(
             db.add(assistant_message)
             await db.flush()
             
+            # Send SSE event: message created
+            await stream_manager.broadcast_event(
+                session_id=session_id,
+                event=StreamEvent(
+                    event_type=StreamEventType.MESSAGE_CREATED,
+                    payload={
+                        "message_id": str(assistant_message.id),
+                        "role": MessageRole.ASSISTANT.value,
+                        "content": assistant_message.content,
+                        "agent_id": str(agent_response.id),
+                        "agent_name": agent_response.name,
+                        "timestamp": assistant_message.created_at.isoformat(),
+                    },
+                    session_id=session_id,
+                ),
+            )
+            
             # Send SSE event: task completed
             await stream_manager.broadcast_event(
                 session_id=session_id,
@@ -383,6 +415,21 @@ async def send_message(
     )
     db.add(assistant_message)
     await db.flush()
+    
+    # Send SSE event: message created
+    await stream_manager.broadcast_event(
+        session_id=session_id,
+        event=StreamEvent(
+            event_type=StreamEventType.MESSAGE_CREATED,
+            payload={
+                "message_id": str(assistant_message.id),
+                "role": MessageRole.ASSISTANT.value,
+                "content": assistant_message.content,
+                "timestamp": assistant_message.created_at.isoformat(),
+            },
+            session_id=session_id,
+        ),
+    )
     
     return MessageResponse(
         id=assistant_message.id,

@@ -94,6 +94,7 @@ async def event_stream_generator(
     - Format: `{"event_type": "...", "payload": {...}, "timestamp": "...", "session_id": "..."}\n`
     
     **Event Types:**
+    - `message_created` - New message created (user or assistant)
     - `direct_agent_call` - Direct agent invocation
     - `agent_status_changed` - Agent status update
     - `task_plan_created` - Task plan created by orchestrator

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 class StreamEventType(str, Enum):
     """Stream event type enum."""
 
+    MESSAGE_CREATED = "message_created"
     DIRECT_AGENT_CALL = "direct_agent_call"
     AGENT_STATUS_CHANGED = "agent_status_changed"
     TASK_PLAN_CREATED = "task_plan_created"
