@@ -11,14 +11,14 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.sse_manager import SSEManager, SSEConnection
+from app.core.stream_manager import StreamManager, StreamConnection
 from app.models.chat_session import ChatSession
 from app.models.user import User
-from app.schemas.event import SSEEvent, SSEEventType
+from app.schemas.event import StreamEvent, StreamEventType
 
 
-class TestSSEConnection:
-    """Tests for SSEConnection class."""
+class TestStreamConnection:
+    """Tests for StreamConnection class."""
 
     @pytest.mark.asyncio
     async def test_connection_creation(self):
@@ -27,7 +27,7 @@ class TestSSEConnection:
         user_id = uuid4()
         queue = asyncio.Queue()
 
-        conn = SSEConnection(session_id, user_id, queue)
+        conn = StreamConnection(session_id, user_id, queue)
 
         assert conn.session_id == session_id
         assert conn.user_id == user_id
@@ -42,10 +42,10 @@ class TestSSEConnection:
         user_id = uuid4()
         queue = asyncio.Queue()
 
-        conn = SSEConnection(session_id, user_id, queue)
+        conn = StreamConnection(session_id, user_id, queue)
 
-        event = SSEEvent(
-            event_type=SSEEventType.TASK_STARTED,
+        event = StreamEvent(
+            event_type=StreamEventType.TASK_STARTED,
             payload={"task_id": "test_task"},
             session_id=session_id,
         )
@@ -64,28 +64,29 @@ class TestSSEConnection:
         user_id = uuid4()
         queue = asyncio.Queue()
 
-        conn = SSEConnection(session_id, user_id, queue)
+        conn = StreamConnection(session_id, user_id, queue)
         old_heartbeat = conn.last_heartbeat
 
         await asyncio.sleep(0.01)  # Small delay
         result = await conn.send_heartbeat()
         assert result is True
 
-        # Check heartbeat is in queue
+        # Check heartbeat is in queue (now it's a StreamEvent)
         heartbeat = await queue.get()
-        assert heartbeat == ": heartbeat\n\n"
+        assert isinstance(heartbeat, StreamEvent)
+        assert heartbeat.event_type == StreamEventType.HEARTBEAT
 
         # Check timestamp updated
         assert conn.last_heartbeat > old_heartbeat
 
 
-class TestSSEManager:
-    """Tests for SSEManager class."""
+class TestStreamManager:
+    """Tests for StreamManager class."""
 
     @pytest_asyncio.fixture
-    async def sse_manager(self, mock_redis):
+    async def stream_manager(self, mock_redis):
         """Create SSE manager instance."""
-        manager = SSEManager(mock_redis)
+        manager = StreamManager(mock_redis)
         await manager.start()
         yield manager
         await manager.stop()
@@ -93,7 +94,7 @@ class TestSSEManager:
     @pytest.mark.asyncio
     async def test_manager_start_stop(self, mock_redis):
         """Test SSE manager start and stop."""
-        manager = SSEManager(mock_redis)
+        manager = StreamManager(mock_redis)
 
         # Start manager
         await manager.start()
@@ -104,61 +105,61 @@ class TestSSEManager:
         assert manager._heartbeat_task is None
 
     @pytest.mark.asyncio
-    async def test_register_connection(self, sse_manager):
+    async def test_register_connection(self, stream_manager):
         """Test registering SSE connection."""
         session_id = uuid4()
         user_id = uuid4()
 
-        queue = await sse_manager.register_connection(session_id, user_id)
+        queue = await stream_manager.register_connection(session_id, user_id)
 
         assert queue is not None
-        assert session_id in sse_manager.connections
-        assert len(sse_manager.connections[session_id]) == 1
-        assert user_id in sse_manager.user_sessions
-        assert session_id in sse_manager.user_sessions[user_id]
+        assert session_id in stream_manager.connections
+        assert len(stream_manager.connections[session_id]) == 1
+        assert user_id in stream_manager.user_sessions
+        assert session_id in stream_manager.user_sessions[user_id]
 
     @pytest.mark.asyncio
-    async def test_unregister_connection(self, sse_manager):
+    async def test_unregister_connection(self, stream_manager):
         """Test unregistering SSE connection."""
         session_id = uuid4()
         user_id = uuid4()
 
-        queue = await sse_manager.register_connection(session_id, user_id)
-        await sse_manager.unregister_connection(session_id, user_id, queue)
+        queue = await stream_manager.register_connection(session_id, user_id)
+        await stream_manager.unregister_connection(session_id, user_id, queue)
 
-        assert session_id not in sse_manager.connections
-        assert user_id not in sse_manager.user_sessions
+        assert session_id not in stream_manager.connections
+        assert user_id not in stream_manager.user_sessions
 
     @pytest.mark.asyncio
-    async def test_multiple_connections_same_session(self, sse_manager):
+    async def test_multiple_connections_same_session(self, stream_manager):
         """Test multiple connections for same session."""
         session_id = uuid4()
         user_id = uuid4()
 
-        queue1 = await sse_manager.register_connection(session_id, user_id)
-        queue2 = await sse_manager.register_connection(session_id, user_id)
+        queue1 = await stream_manager.register_connection(session_id, user_id)
+        queue2 = await stream_manager.register_connection(session_id, user_id)
 
-        assert len(sse_manager.connections[session_id]) == 2
+        assert len(stream_manager.connections[session_id]) == 2
         assert queue1 != queue2
 
     @pytest.mark.asyncio
-    async def test_broadcast_event(self, sse_manager):
+    async def test_broadcast_event(self, stream_manager):
         """Test broadcasting event to session."""
         session_id = uuid4()
         user_id = uuid4()
 
         # Register two connections
-        queue1 = await sse_manager.register_connection(session_id, user_id)
-        queue2 = await sse_manager.register_connection(session_id, user_id)
+        queue1 = await stream_manager.register_connection(session_id, user_id)
+        queue2 = await stream_manager.register_connection(session_id, user_id)
 
         # Broadcast event
-        event = SSEEvent(
-            event_type=SSEEventType.TASK_STARTED,
+        event = StreamEvent(
+            event_type=StreamEventType.TASK_STARTED,
             payload={"task_id": "test_task"},
             session_id=session_id,
         )
 
-        sent_count = await sse_manager.broadcast_event(session_id, event, buffer=False)
+        sent_count = await stream_manager.broadcast_event(session_id, event, buffer=False)
         assert sent_count == 2
 
         # Check both queues received event
@@ -168,23 +169,23 @@ class TestSSEManager:
         assert event2 == event
 
     @pytest.mark.asyncio
-    async def test_broadcast_to_user(self, sse_manager):
+    async def test_broadcast_to_user(self, stream_manager):
         """Test broadcasting event to all user sessions."""
         user_id = uuid4()
         session1_id = uuid4()
         session2_id = uuid4()
 
         # Register connections for two sessions
-        queue1 = await sse_manager.register_connection(session1_id, user_id)
-        queue2 = await sse_manager.register_connection(session2_id, user_id)
+        queue1 = await stream_manager.register_connection(session1_id, user_id)
+        queue2 = await stream_manager.register_connection(session2_id, user_id)
 
         # Broadcast to user
-        event = SSEEvent(
-            event_type=SSEEventType.AGENT_STATUS_CHANGED,
+        event = StreamEvent(
+            event_type=StreamEventType.AGENT_STATUS_CHANGED,
             payload={"agent_id": "test_agent", "status": "busy"},
         )
 
-        sent_count = await sse_manager.broadcast_to_user(user_id, event, buffer=False)
+        sent_count = await stream_manager.broadcast_to_user(user_id, event, buffer=False)
         assert sent_count == 2
 
         # Check both queues received event
@@ -194,7 +195,7 @@ class TestSSEManager:
         assert event2 == event
 
     @pytest.mark.asyncio
-    async def test_event_buffering(self, sse_manager, mock_redis):
+    async def test_event_buffering(self, stream_manager, mock_redis):
         """Test event buffering in Redis."""
         session_id = uuid4()
         user_id = uuid4()
@@ -206,13 +207,13 @@ class TestSSEManager:
         mock_redis.lrange = AsyncMock(return_value=[])
 
         # Broadcast event (will be buffered)
-        event = SSEEvent(
-            event_type=SSEEventType.TASK_COMPLETED,
+        event = StreamEvent(
+            event_type=StreamEventType.TASK_COMPLETED,
             payload={"task_id": "test_task", "result": "success"},
             session_id=session_id,
         )
 
-        await sse_manager.broadcast_event(session_id, event, buffer=True)
+        await stream_manager.broadcast_event(session_id, event, buffer=True)
 
         # Verify Redis methods were called
         mock_redis.lpush.assert_called_once()
@@ -220,7 +221,7 @@ class TestSSEManager:
         mock_redis.expire.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_buffered_events_on_reconnect(self, sse_manager, mock_redis):
+    async def test_buffered_events_on_reconnect(self, stream_manager, mock_redis):
         """Test sending buffered events on reconnect."""
         session_id = uuid4()
         user_id = uuid4()
@@ -238,7 +239,7 @@ class TestSSEManager:
         mock_redis.lrange = AsyncMock(return_value=buffered_events)
 
         # Register connection (should receive buffered events)
-        queue = await sse_manager.register_connection(session_id, user_id)
+        queue = await stream_manager.register_connection(session_id, user_id)
 
         # Wait a bit for buffered events to be sent
         await asyncio.sleep(0.1)
@@ -251,7 +252,7 @@ class TestSSEManager:
         assert len(events) == 3
 
     @pytest.mark.asyncio
-    async def test_buffer_size_limit(self, sse_manager, mock_redis):
+    async def test_buffer_size_limit(self, stream_manager, mock_redis):
         """Test buffer size limit enforcement."""
         session_id = uuid4()
 
@@ -261,44 +262,44 @@ class TestSSEManager:
         mock_redis.expire = AsyncMock(return_value=True)
 
         # Buffer more than max size
-        for i in range(SSEManager.MAX_BUFFER_SIZE + 10):
-            event = SSEEvent(
-                event_type=SSEEventType.TASK_PROGRESS,
+        for i in range(StreamManager.MAX_BUFFER_SIZE + 10):
+            event = StreamEvent(
+                event_type=StreamEventType.TASK_PROGRESS,
                 payload={"task_id": "test_task", "progress": i},
                 session_id=session_id,
             )
-            await sse_manager._buffer_event(session_id, event)
+            await stream_manager._buffer_event(session_id, event)
 
         # Verify ltrim was called to limit size
-        assert mock_redis.ltrim.call_count == SSEManager.MAX_BUFFER_SIZE + 10
+        assert mock_redis.ltrim.call_count == StreamManager.MAX_BUFFER_SIZE + 10
 
     @pytest.mark.asyncio
-    async def test_close_session(self, sse_manager):
+    async def test_close_session(self, stream_manager):
         """Test closing all connections for a session."""
         session_id = uuid4()
         user_id = uuid4()
 
         # Register connections
-        queue1 = await sse_manager.register_connection(session_id, user_id)
-        queue2 = await sse_manager.register_connection(session_id, user_id)
+        queue1 = await stream_manager.register_connection(session_id, user_id)
+        queue2 = await stream_manager.register_connection(session_id, user_id)
 
         # Close session
-        await sse_manager.close_session(session_id)
+        await stream_manager.close_session(session_id)
 
         # Check connections removed
-        assert session_id not in sse_manager.connections
+        assert session_id not in stream_manager.connections
 
         # Check close signal sent to queues
         signal1 = await queue1.get()
         signal2 = await queue2.get()
         # First should be close event, second should be None (close signal)
-        assert signal1.event_type == SSEEventType.TASK_COMPLETED
+        assert signal1.event_type == StreamEventType.TASK_COMPLETED
         assert await queue1.get() is None
-        assert signal2.event_type == SSEEventType.TASK_COMPLETED
+        assert signal2.event_type == StreamEventType.TASK_COMPLETED
         assert await queue2.get() is None
 
     @pytest.mark.asyncio
-    async def test_get_stats(self, sse_manager):
+    async def test_get_stats(self, stream_manager):
         """Test getting SSE statistics."""
         user1_id = uuid4()
         user2_id = uuid4()
@@ -306,11 +307,11 @@ class TestSSEManager:
         session2_id = uuid4()
 
         # Register connections
-        await sse_manager.register_connection(session1_id, user1_id)
-        await sse_manager.register_connection(session1_id, user1_id)  # 2nd connection
-        await sse_manager.register_connection(session2_id, user2_id)
+        await stream_manager.register_connection(session1_id, user1_id)
+        await stream_manager.register_connection(session1_id, user1_id)  # 2nd connection
+        await stream_manager.register_connection(session2_id, user2_id)
 
-        stats = await sse_manager.get_stats()
+        stats = await stream_manager.get_stats()
 
         assert stats["total_connections"] == 3
         assert stats["total_sessions"] == 2
@@ -319,22 +320,22 @@ class TestSSEManager:
         assert stats["connections_per_session"][str(session1_id)] == 2
 
     @pytest.mark.asyncio
-    async def test_large_event_truncation(self, sse_manager):
+    async def test_large_event_truncation(self, stream_manager):
         """Test large event payload truncation."""
         session_id = uuid4()
         user_id = uuid4()
 
-        queue = await sse_manager.register_connection(session_id, user_id)
+        queue = await stream_manager.register_connection(session_id, user_id)
 
         # Create event with large payload
-        large_payload = {"data": "x" * (SSEManager.MAX_EVENT_SIZE + 1000)}
-        event = SSEEvent(
-            event_type=SSEEventType.TASK_COMPLETED,
+        large_payload = {"data": "x" * (StreamManager.MAX_EVENT_SIZE + 1000)}
+        event = StreamEvent(
+            event_type=StreamEventType.TASK_COMPLETED,
             payload=large_payload,
             session_id=session_id,
         )
 
-        await sse_manager.broadcast_event(session_id, event, buffer=False)
+        await stream_manager.broadcast_event(session_id, event, buffer=False)
 
         # Get event from queue
         received_event = await queue.get()
@@ -403,18 +404,18 @@ class TestSSEEndpoint:
         assert "total_users" in data["stats"]
 
 
-class TestSSEEventSchema:
+class TestStreamEventSchema:
     """Tests for SSE event schema."""
 
     def test_event_creation(self):
         """Test creating SSE event."""
-        event = SSEEvent(
-            event_type=SSEEventType.TASK_STARTED,
+        event = StreamEvent(
+            event_type=StreamEventType.TASK_STARTED,
             payload={"task_id": "test_task"},
             session_id=uuid4(),
         )
 
-        assert event.event_type == SSEEventType.TASK_STARTED
+        assert event.event_type == StreamEventType.TASK_STARTED
         assert event.payload == {"task_id": "test_task"}
         assert event.timestamp is not None
         assert event.session_id is not None
@@ -422,8 +423,8 @@ class TestSSEEventSchema:
     def test_event_to_sse_format(self):
         """Test converting event to SSE format."""
         session_id = uuid4()
-        event = SSEEvent(
-            event_type=SSEEventType.TASK_COMPLETED,
+        event = StreamEvent(
+            event_type=StreamEventType.TASK_COMPLETED,
             payload={"task_id": "test_task", "result": "success"},
             session_id=session_id,
         )
@@ -447,20 +448,20 @@ class TestSSEEventSchema:
     def test_all_event_types(self):
         """Test all event types are valid."""
         event_types = [
-            SSEEventType.DIRECT_AGENT_CALL,
-            SSEEventType.AGENT_STATUS_CHANGED,
-            SSEEventType.TASK_PLAN_CREATED,
-            SSEEventType.TASK_STARTED,
-            SSEEventType.TASK_PROGRESS,
-            SSEEventType.TASK_COMPLETED,
-            SSEEventType.TOOL_REQUEST,
-            SSEEventType.PLAN_REQUEST,
-            SSEEventType.CONTEXT_RETRIEVED,
-            SSEEventType.APPROVAL_REQUIRED,
+            StreamEventType.DIRECT_AGENT_CALL,
+            StreamEventType.AGENT_STATUS_CHANGED,
+            StreamEventType.TASK_PLAN_CREATED,
+            StreamEventType.TASK_STARTED,
+            StreamEventType.TASK_PROGRESS,
+            StreamEventType.TASK_COMPLETED,
+            StreamEventType.TOOL_REQUEST,
+            StreamEventType.PLAN_REQUEST,
+            StreamEventType.CONTEXT_RETRIEVED,
+            StreamEventType.APPROVAL_REQUIRED,
         ]
 
         for event_type in event_types:
-            event = SSEEvent(
+            event = StreamEvent(
                 event_type=event_type,
                 payload={"test": "data"},
             )

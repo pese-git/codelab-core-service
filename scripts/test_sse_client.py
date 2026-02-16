@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Test SSE (Server-Sent Events) client for debugging.
+Test Streaming client for debugging (NDJSON format).
 
-This script connects to the SSE endpoint and prints all received events.
+This script connects to the streaming endpoint and prints all received events.
 """
 
 import asyncio
@@ -13,9 +13,9 @@ from uuid import UUID
 import httpx
 
 
-async def listen_to_sse(base_url: str, session_id: str, token: str):
+async def listen_to_stream(base_url: str, session_id: str, token: str):
     """
-    Connect to SSE endpoint and listen for events.
+    Connect to streaming endpoint and listen for events (NDJSON format).
     
     Args:
         base_url: Base URL of the API (e.g., http://localhost:8000)
@@ -25,10 +25,10 @@ async def listen_to_sse(base_url: str, session_id: str, token: str):
     url = f"{base_url}/my/chat/{session_id}/events/"
     headers = {
         "Authorization": f"Bearer {token}",
-        "Accept": "text/event-stream",
+        "Accept": "application/x-ndjson",
     }
     
-    print(f"🔌 Connecting to SSE endpoint: {url}")
+    print(f"🔌 Connecting to streaming endpoint: {url}")
     print(f"📋 Session ID: {session_id}")
     print("-" * 80)
     
@@ -40,41 +40,36 @@ async def listen_to_sse(base_url: str, session_id: str, token: str):
                     print(await response.aread())
                     return
                 
-                print(f"✅ Connected! Listening for events...")
+                print(f"✅ Connected! Listening for events (NDJSON format)...")
                 print("-" * 80)
-                
-                event_type = None
-                event_data = None
                 
                 async for line in response.aiter_lines():
                     line = line.strip()
                     
-                    # Empty line signals end of event
+                    # Skip empty lines
                     if not line:
-                        if event_type and event_data:
-                            try:
-                                data = json.loads(event_data)
-                                print(f"\n📨 Event: {event_type}")
-                                print(f"   Timestamp: {data.get('timestamp', 'N/A')}")
-                                print(f"   Payload: {json.dumps(data.get('payload', {}), indent=2)}")
-                                print("-" * 80)
-                            except json.JSONDecodeError as e:
-                                print(f"⚠️  Failed to parse event data: {e}")
-                                print(f"   Raw data: {event_data}")
-                        
-                        # Reset for next event
-                        event_type = None
-                        event_data = None
                         continue
                     
-                    # Parse SSE format
-                    if line.startswith("event:"):
-                        event_type = line[6:].strip()
-                    elif line.startswith("data:"):
-                        event_data = line[5:].strip()
-                    elif line.startswith(":"):
-                        # Comment (heartbeat)
-                        print("💓 Heartbeat")
+                    # Parse NDJSON format (each line is a complete JSON object)
+                    try:
+                        event = json.loads(line)
+                        event_type = event.get('event_type', 'unknown')
+                        
+                        # Handle heartbeat
+                        if event_type == 'heartbeat':
+                            print("💓 Heartbeat")
+                            continue
+                        
+                        # Display event
+                        print(f"\n📨 Event: {event_type}")
+                        print(f"   Timestamp: {event.get('timestamp', 'N/A')}")
+                        print(f"   Session ID: {event.get('session_id', 'N/A')}")
+                        print(f"   Payload: {json.dumps(event.get('payload', {}), indent=2)}")
+                        print("-" * 80)
+                        
+                    except json.JSONDecodeError as e:
+                        print(f"⚠️  Failed to parse JSON: {e}")
+                        print(f"   Raw line: {line}")
                         
     except httpx.ConnectError as e:
         print(f"❌ Connection error: {e}")
@@ -89,7 +84,7 @@ async def listen_to_sse(base_url: str, session_id: str, token: str):
 
 async def send_test_message(base_url: str, session_id: str, token: str, agent_name: str, message: str):
     """
-    Send a test message to trigger SSE events.
+    Send a test message to trigger streaming events.
     
     Args:
         base_url: Base URL of the API
@@ -163,14 +158,14 @@ async def main():
                 session_id=session_id,
                 token=token,
                 agent_name="test-agent",  # Change to your agent name
-                message="Hello! This is a test message to trigger SSE events.",
+                message="Hello! This is a test message to trigger streaming events.",
             )
         )
-        # Wait a bit before starting SSE listener
+        # Wait a bit before starting streaming listener
         await asyncio.sleep(1)
     
-    # Listen to SSE events
-    await listen_to_sse(base_url, session_id, token)
+    # Listen to streaming events
+    await listen_to_stream(base_url, session_id, token)
 
 
 if __name__ == "__main__":

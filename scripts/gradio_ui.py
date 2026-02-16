@@ -38,7 +38,7 @@ class PersonalAIClient:
             "Content-Type": "application/json"
         }
         self.event_queue = Queue()
-        self.sse_task = None
+        self.stream_task = None
         self.current_session_id = None
         
     async def create_agent(self, name: str, system_prompt: str,
@@ -148,8 +148,8 @@ class PersonalAIClient:
                 return data["messages"]
             return data if isinstance(data, list) else []
     
-    async def listen_sse_events(self, session_id: str):
-        """Слушать SSE события для сессии."""
+    async def listen_stream_events(self, session_id: str):
+        """Слушать streaming события для сессии (NDJSON формат)."""
         try:
             async with httpx.AsyncClient() as client:
                 async with client.stream(
@@ -158,15 +158,22 @@ class PersonalAIClient:
                     headers=self.headers,
                     timeout=None,
                 ) as response:
+                    # Читаем NDJSON (Newline Delimited JSON)
                     async for line in response.aiter_lines():
-                        if line.startswith("data: "):
+                        line = line.strip()
+                        if line:  # Пропускаем пустые строки
                             try:
-                                data = json.loads(line[6:])
+                                data = json.loads(line)
                                 self.event_queue.put(data)
-                            except json.JSONDecodeError:
-                                pass
+                            except json.JSONDecodeError as e:
+                                print(f"JSON decode error: {e}, line: {line}")
         except Exception as e:
             self.event_queue.put({"error": str(e)})
+    
+    # Backward compatibility alias
+    async def listen_sse_events(self, session_id: str):
+        """Deprecated: используйте listen_stream_events."""
+        return await self.listen_stream_events(session_id)
 
 
 # Глобальный клиент
@@ -349,7 +356,7 @@ def get_chat_history_ui(session_id: str) -> str:
 
 
 def start_sse_listener_ui(session_id: str) -> str:
-    """UI функция для запуска SSE listener."""
+    """UI функция для запуска streaming listener."""
     if not client:
         return "❌ Сначала инициализируйте клиент с JWT токеном"
     
@@ -359,20 +366,20 @@ def start_sse_listener_ui(session_id: str) -> str:
     try:
         # session_id - это UUID строка, не int
         
-        # Запустить SSE listener в отдельном потоке
-        def run_sse():
-            asyncio.run(client.listen_sse_events(session_id))
-        
-        thread = threading.Thread(target=run_sse, daemon=True)
+        # Запустить streaming listener в отдельном потоке
+        def run_stream():
+            asyncio.run(client.listen_stream_events(session_id))
+
+        thread = threading.Thread(target=run_stream, daemon=True)
         thread.start()
         
-        return f"✅ SSE listener запущен для сессии {session_id}\n\n💡 События будут отображаться ниже"
+        return f"✅ Streaming listener запущен для сессии {session_id}\n\n💡 События будут отображаться ниже"
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
 
 def get_sse_events_ui() -> str:
-    """UI функция для получения SSE событий."""
+    """UI функция для получения streaming событий."""
     if not client:
         return "❌ Сначала инициализируйте клиент с JWT токеном"
     
@@ -383,7 +390,7 @@ def get_sse_events_ui() -> str:
     if not events:
         return "⏳ Ожидание событий..."
     
-    result = "📡 **SSE События:**\n\n"
+    result = "📡 **Streaming События:**\n\n"
     for event in events:
         if "error" in event:
             result += f"❌ Ошибка: {event['error']}\n\n"
@@ -407,7 +414,7 @@ def create_gradio_app():
         # 🤖 Personal Multi-Agent AI Platform
         ## Gradio клиент для взаимодействия с сервисом
         
-        **Документация:** [REST API](../doc/rest-api.md) | [SSE Events](../doc/sse-event-streaming.md)
+        **Документация:** [REST API](../doc/rest-api.md) | [Streaming API](../doc/streaming-fetch-api.md)
         """)
         
         # Секция инициализации
@@ -532,12 +539,12 @@ def create_gradio_app():
                 outputs=[chat_history_output]
             )
         
-        # Секция SSE событий
-        with gr.Tab("📡 SSE События"):
-            gr.Markdown("### Real-time события")
-            
+        # Секция Streaming событий
+        with gr.Tab("📡 Streaming События"):
+            gr.Markdown("### Real-time события (NDJSON)")
+
             sse_session_id = gr.Textbox(label="Session ID", placeholder="1")
-            start_sse_btn = gr.Button("▶️ Запустить SSE listener", variant="primary")
+            start_sse_btn = gr.Button("▶️ Запустить Streaming listener", variant="primary")
             start_sse_output = gr.Markdown()
             
             gr.Markdown("#### События")
@@ -570,7 +577,7 @@ def create_gradio_app():
             2. **Создать агента:** Перейдите на вкладку "Агенты" и создайте своего первого агента
             3. **Создать сессию:** На вкладке "Чат" создайте новую сессию
             4. **Отправить сообщение:** Введите Session ID и отправьте сообщение
-            5. **SSE События:** Запустите SSE listener для получения real-time событий
+            5. **Streaming События:** Запустите Streaming listener для получения real-time событий
             
             ### Генерация JWT токена
             
@@ -585,7 +592,7 @@ def create_gradio_app():
             export JWT_TOKEN="your_jwt_token_here"
             ```
             
-            ### Типы SSE событий
+            ### Типы Streaming событий
             
             - `direct_agent_call` - Прямой вызов агента
             - `agent_status_changed` - Изменение статуса агента

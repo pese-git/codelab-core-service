@@ -13,8 +13,8 @@ from app.logging_config import configure_logging, get_logger
 from app.middleware.user_isolation import UserIsolationMiddleware
 from app.qdrant_client import close_qdrant
 from app.redis_client import close_redis
-from app.routes import agents, chat, health, sse
-from app.core.sse_manager import close_sse_manager
+from app.routes import agents, chat, health, streaming
+from app.core.stream_manager import close_stream_manager
 
 # Configure logging
 configure_logging()
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # Shutdown
     logger.info("application_shutting_down")
-    await close_sse_manager()
+    await close_stream_manager()
     await close_db()
     await close_redis()
     await close_qdrant()
@@ -102,7 +102,7 @@ app.add_middleware(UserIsolationMiddleware)
 app.include_router(health.router)
 app.include_router(agents.router)
 app.include_router(chat.router)
-app.include_router(sse.router)
+app.include_router(streaming.router)
 
 
 @app.get("/")

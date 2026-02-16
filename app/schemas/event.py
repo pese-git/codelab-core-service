@@ -1,6 +1,6 @@
-"""SSE Event schemas."""
+"""Streaming Event schemas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -8,8 +8,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class SSEEventType(str, Enum):
-    """SSE event type enum."""
+class StreamEventType(str, Enum):
+    """Stream event type enum."""
 
     DIRECT_AGENT_CALL = "direct_agent_call"
     AGENT_STATUS_CHANGED = "agent_status_changed"
@@ -21,14 +21,19 @@ class SSEEventType(str, Enum):
     PLAN_REQUEST = "plan_request"
     CONTEXT_RETRIEVED = "context_retrieved"
     APPROVAL_REQUIRED = "approval_required"
+    HEARTBEAT = "heartbeat"
+    ERROR = "error"
 
 
-class SSEEvent(BaseModel):
-    """SSE event schema."""
+class StreamEvent(BaseModel):
+    """Stream event schema for JSON Lines (NDJSON) format."""
 
-    event_type: SSEEventType = Field(..., description="Event type")
+    event_type: StreamEventType = Field(..., description="Event type")
     payload: dict[str, Any] = Field(..., description="Event payload")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Event timestamp"
+    )
     session_id: UUID | None = Field(default=None, description="Session UUID (if applicable)")
 
     model_config = {"json_schema_extra": {
@@ -44,6 +49,16 @@ class SSEEvent(BaseModel):
         }
     }}
 
-    def to_sse_format(self) -> str:
-        """Convert to SSE format."""
-        return f"event: {self.event_type.value}\ndata: {self.model_dump_json()}\n\n"
+    def to_ndjson(self) -> str:
+        """
+        Convert to NDJSON (Newline Delimited JSON) format.
+        
+        Returns:
+            JSON string with newline terminator
+        """
+        return self.model_dump_json() + "\n"
+
+
+# Backward compatibility aliases
+SSEEventType = StreamEventType
+SSEEvent = StreamEvent

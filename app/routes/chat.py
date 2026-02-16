@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
-from app.core.sse_manager import get_sse_manager
+from app.core.stream_manager import get_stream_manager
 from app.database import get_db
 from app.middleware.user_isolation import get_current_user_id
 from app.models.chat_session import ChatSession
@@ -27,7 +27,7 @@ from app.schemas.chat import (
     MessageResponse,
     MessageRole,
 )
-from app.schemas.event import SSEEvent, SSEEventType
+from app.schemas.event import StreamEvent, StreamEventType
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ async def send_message(
         )
     
     # Get SSE manager
-    sse_manager = await get_sse_manager(redis)
+    stream_manager = await get_stream_manager(redis)
     
     # Save user message
     user_message = Message(
@@ -199,10 +199,10 @@ async def send_message(
             )
         
         # Send SSE event: direct agent call started
-        await sse_manager.broadcast_event(
+        await stream_manager.broadcast_event(
             session_id=session_id,
-            event=SSEEvent(
-                event_type=SSEEventType.DIRECT_AGENT_CALL,
+            event=StreamEvent(
+                event_type=StreamEventType.DIRECT_AGENT_CALL,
                 payload={
                     "agent_id": str(agent_response.id),
                     "agent_name": agent_response.name,
@@ -234,10 +234,10 @@ async def send_message(
         ]
         
         # Send SSE event: task started
-        await sse_manager.broadcast_event(
+        await stream_manager.broadcast_event(
             session_id=session_id,
-            event=SSEEvent(
-                event_type=SSEEventType.TASK_STARTED,
+            event=StreamEvent(
+                event_type=StreamEventType.TASK_STARTED,
                 payload={
                     "agent_id": str(agent_response.id),
                     "agent_name": agent_response.name,
@@ -257,10 +257,10 @@ async def send_message(
             
             if not result["success"]:
                 # Send error event
-                await sse_manager.broadcast_event(
+                await stream_manager.broadcast_event(
                     session_id=session_id,
-                    event=SSEEvent(
-                        event_type=SSEEventType.TASK_COMPLETED,
+                    event=StreamEvent(
+                        event_type=StreamEventType.TASK_COMPLETED,
                         payload={
                             "agent_id": str(agent_response.id),
                             "status": "error",
@@ -276,10 +276,10 @@ async def send_message(
             
             # Send context retrieved event if context was used
             if result.get("context"):
-                await sse_manager.broadcast_event(
+                await stream_manager.broadcast_event(
                     session_id=session_id,
-                    event=SSEEvent(
-                        event_type=SSEEventType.CONTEXT_RETRIEVED,
+                    event=StreamEvent(
+                        event_type=StreamEventType.CONTEXT_RETRIEVED,
                         payload={
                             "agent_id": str(agent_response.id),
                             "context_count": len(result["context"]),
@@ -300,10 +300,10 @@ async def send_message(
             await db.flush()
             
             # Send SSE event: task completed
-            await sse_manager.broadcast_event(
+            await stream_manager.broadcast_event(
                 session_id=session_id,
-                event=SSEEvent(
-                    event_type=SSEEventType.TASK_COMPLETED,
+                event=StreamEvent(
+                    event_type=StreamEventType.TASK_COMPLETED,
                     payload={
                         "agent_id": str(agent_response.id),
                         "agent_name": agent_response.name,
@@ -329,10 +329,10 @@ async def send_message(
         except Exception as e:
             logger.error(f"Error processing message: {e}")
             # Send error event
-            await sse_manager.broadcast_event(
+            await stream_manager.broadcast_event(
                 session_id=session_id,
-                event=SSEEvent(
-                    event_type=SSEEventType.TASK_COMPLETED,
+                event=StreamEvent(
+                    event_type=StreamEventType.TASK_COMPLETED,
                     payload={
                         "agent_id": str(agent_response.id),
                         "status": "error",
