@@ -27,6 +27,7 @@ from app.schemas.chat import (
     MessageResponse,
     MessageRole,
 )
+from app.schemas.error import LLMProviderError
 from app.schemas.event import StreamEvent, StreamEventType
 
 logger = logging.getLogger(__name__)
@@ -155,7 +156,7 @@ async def send_message(
     request: Request,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant),
+    qdrant: AsyncQdrantClient | None = Depends(get_qdrant),
 ) -> MessageResponse:
     """Send message to chat session (direct or orchestrated mode)."""
     user_id = get_current_user_id(request)
@@ -256,23 +257,49 @@ async def send_message(
             )
             
             if not result["success"]:
-                # Send error event
+                error_type = result.get("error_type", "unknown")
+                error_msg = result.get("error")
+                provider = result.get("provider", "unknown")
+                model = result.get("model", agent_response.config.model)
+                
+                # Send detailed error event
                 await stream_manager.broadcast_event(
                     session_id=session_id,
                     event=StreamEvent(
-                        event_type=StreamEventType.TASK_COMPLETED,
+                        event_type=StreamEventType.ERROR,
                         payload={
                             "agent_id": str(agent_response.id),
-                            "status": "error",
-                            "error": result.get("error"),
+                            "agent_name": agent_response.name,
+                            "error_type": error_type,
+                            "error": error_msg,
+                            "provider": provider,
+                            "model": model,
                         },
                         session_id=session_id,
                     ),
                 )
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Agent execution failed: {result.get('error')}",
-                )
+                
+                # Return detailed error response
+                if error_type in ["timeout", "connection", "rate_limit", "authentication", "bad_request"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=LLMProviderError(
+                            detail=error_msg,
+                            error_code="LLM_PROVIDER_ERROR",
+                            metadata={
+                                "provider": provider,
+                                "model": model,
+                                "error_type": error_type,
+                                "agent_id": str(agent_response.id),
+                                "agent_name": agent_response.name,
+                            }
+                        ).model_dump(),
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Agent execution failed: {error_msg}",
+                    )
             
             # Send context retrieved event if context was used
             if result.get("context"):
@@ -327,15 +354,16 @@ async def send_message(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error processing message: {e}")
+            logger.error(f"Error processing message: {e}", exc_info=True)
             # Send error event
             await stream_manager.broadcast_event(
                 session_id=session_id,
                 event=StreamEvent(
-                    event_type=StreamEventType.TASK_COMPLETED,
+                    event_type=StreamEventType.ERROR,
                     payload={
                         "agent_id": str(agent_response.id),
-                        "status": "error",
+                        "agent_name": agent_response.name,
+                        "error_type": "internal",
                         "error": str(e),
                     },
                     session_id=session_id,

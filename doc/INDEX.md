@@ -49,6 +49,7 @@ doc/
 ├── rest-api.md                       # REST API документация
 ├── sse-event-streaming.md            # SSE события
 ├── litellm-integration.md            # Интеграция с LiteLLM
+├── llm-error-handling.md             # Обработка ошибок LLM
 ├── agent-context.md                  # Контекстное хранилище
 ├── samples.md                        # Примеры использования
 ├── techincal-requrements.md          # Технические требования
@@ -170,6 +171,14 @@ doc/
 - Конфигурация
 - Использование разных провайдеров
 - Примеры
+
+#### [LLM Error Handling](./llm-error-handling.md)
+**Обработка ошибок LLM провайдеров**
+- Типы ошибок (timeout, connection, rate_limit, authentication, bad_request)
+- Детальные сообщения об ошибках
+- SSE события для ошибок
+- Примеры обработки на клиенте
+- Рекомендации по мониторингу
 
 #### [Agent Context](./agent-context.md)
 **Контекстное хранилище агентов**
@@ -349,7 +358,8 @@ graph LR
 | **Развертывание** | [Deployment Guide](./architecture/deployment-guide.md), [Infrastructure Setup](./infrastructure-setup.md) |
 | **Разработка** | [Developer Guide](./architecture/developer-guide.md), [Testing Guide](../tests/README.md) |
 | **Real-time** | [SSE Events](./sse-event-streaming.md) |
-| **LLM** | [LiteLLM Integration](./litellm-integration.md), [Agent Context](./agent-context.md) |
+| **LLM** | [LiteLLM Integration](./litellm-integration.md), [LLM Error Handling](./llm-error-handling.md), [Agent Context](./agent-context.md) |
+| **Обработка ошибок** | [LLM Error Handling](./llm-error-handling.md) |
 
 ### По роли
 

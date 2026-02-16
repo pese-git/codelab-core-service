@@ -22,9 +22,16 @@ class ContextualAgent:
         agent_id: UUID,
         user_id: UUID,
         config: AgentConfig,
-        qdrant_client: AsyncQdrantClient,
+        qdrant_client: AsyncQdrantClient | None,
     ):
-        """Initialize contextual agent."""
+        """Initialize contextual agent.
+        
+        Args:
+            agent_id: Agent ID
+            user_id: User ID
+            config: Agent configuration
+            qdrant_client: Qdrant client instance, or None if Qdrant is disabled
+        """
         self.agent_id = agent_id
         self.user_id = user_id
         self.config = config
@@ -122,17 +129,21 @@ class ContextualAgent:
                 "tokens_used": response.usage.total_tokens if response.usage else 0,
             }
 
-        except Exception as e:
+        except openai.APITimeoutError as e:
+            error_msg = f"LLM request timeout: model '{self.config.model}' did not respond in time"
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
                 agent_name=self.config.name,
-                error=str(e),
+                error=error_msg,
+                error_type="timeout",
+                model=self.config.model,
+                provider=settings.openai_base_url or "openai",
             )
 
             # Store failed interaction
             await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {str(e)}",
+                content=f"User: {user_message}\nError: {error_msg}",
                 interaction_type="chat",
                 task_id=task_id,
                 success=False,
@@ -140,7 +151,148 @@ class ContextualAgent:
 
             return {
                 "success": False,
-                "error": str(e),
+                "error": error_msg,
+                "error_type": "timeout",
+                "provider": settings.openai_base_url or "openai",
+                "model": self.config.model,
+            }
+
+        except openai.APIConnectionError as e:
+            error_msg = f"Failed to connect to LLM provider: {str(e)}"
+            logger.error(
+                "agent_execution_failed",
+                agent_id=str(self.agent_id),
+                agent_name=self.config.name,
+                error=error_msg,
+                error_type="connection",
+                model=self.config.model,
+                provider=settings.openai_base_url or "openai",
+            )
+
+            # Store failed interaction
+            await self.context_store.add_interaction(
+                content=f"User: {user_message}\nError: {error_msg}",
+                interaction_type="chat",
+                task_id=task_id,
+                success=False,
+            )
+
+            return {
+                "success": False,
+                "error": error_msg,
+                "error_type": "connection",
+                "provider": settings.openai_base_url or "openai",
+                "model": self.config.model,
+            }
+
+        except openai.RateLimitError as e:
+            error_msg = f"LLM provider rate limit exceeded for model '{self.config.model}'"
+            logger.error(
+                "agent_execution_failed",
+                agent_id=str(self.agent_id),
+                agent_name=self.config.name,
+                error=error_msg,
+                error_type="rate_limit",
+                model=self.config.model,
+                provider=settings.openai_base_url or "openai",
+            )
+
+            # Store failed interaction
+            await self.context_store.add_interaction(
+                content=f"User: {user_message}\nError: {error_msg}",
+                interaction_type="chat",
+                task_id=task_id,
+                success=False,
+            )
+
+            return {
+                "success": False,
+                "error": error_msg,
+                "error_type": "rate_limit",
+                "provider": settings.openai_base_url or "openai",
+                "model": self.config.model,
+            }
+
+        except openai.AuthenticationError as e:
+            error_msg = f"LLM provider authentication failed: invalid API key"
+            logger.error(
+                "agent_execution_failed",
+                agent_id=str(self.agent_id),
+                agent_name=self.config.name,
+                error=error_msg,
+                error_type="authentication",
+                model=self.config.model,
+                provider=settings.openai_base_url or "openai",
+            )
+
+            # Store failed interaction
+            await self.context_store.add_interaction(
+                content=f"User: {user_message}\nError: {error_msg}",
+                interaction_type="chat",
+                task_id=task_id,
+                success=False,
+            )
+
+            return {
+                "success": False,
+                "error": error_msg,
+                "error_type": "authentication",
+                "provider": settings.openai_base_url or "openai",
+                "model": self.config.model,
+            }
+
+        except openai.BadRequestError as e:
+            error_msg = f"Invalid request to LLM provider: {str(e)}"
+            logger.error(
+                "agent_execution_failed",
+                agent_id=str(self.agent_id),
+                agent_name=self.config.name,
+                error=error_msg,
+                error_type="bad_request",
+                model=self.config.model,
+                provider=settings.openai_base_url or "openai",
+            )
+
+            # Store failed interaction
+            await self.context_store.add_interaction(
+                content=f"User: {user_message}\nError: {error_msg}",
+                interaction_type="chat",
+                task_id=task_id,
+                success=False,
+            )
+
+            return {
+                "success": False,
+                "error": error_msg,
+                "error_type": "bad_request",
+                "provider": settings.openai_base_url or "openai",
+                "model": self.config.model,
+            }
+
+        except Exception as e:
+            error_msg = f"Unexpected error during LLM execution: {str(e)}"
+            logger.error(
+                "agent_execution_failed",
+                agent_id=str(self.agent_id),
+                agent_name=self.config.name,
+                error=error_msg,
+                error_type="unknown",
+                model=self.config.model,
+            )
+
+            # Store failed interaction
+            await self.context_store.add_interaction(
+                content=f"User: {user_message}\nError: {error_msg}",
+                interaction_type="chat",
+                task_id=task_id,
+                success=False,
+            )
+
+            return {
+                "success": False,
+                "error": error_msg,
+                "error_type": "unknown",
+                "model": self.config.model,
             }
 
     async def get_context_stats(self) -> dict[str, Any]:
