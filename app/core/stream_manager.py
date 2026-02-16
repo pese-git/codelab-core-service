@@ -99,7 +99,7 @@ class StreamManager:
         logger.info("Stream Manager stopped")
 
     async def register_connection(
-        self, session_id: UUID, user_id: UUID
+        self, session_id: UUID, user_id: UUID, since: datetime | None = None
     ) -> asyncio.Queue:
         """Register new streaming connection."""
         queue = asyncio.Queue(maxsize=1000)
@@ -114,8 +114,8 @@ class StreamManager:
             f"total_connections={len(self.connections[session_id])}"
         )
 
-        # Send buffered events if any
-        await self._send_buffered_events(session_id, connection)
+        # Send buffered events if any (filtered by timestamp if provided)
+        await self._send_buffered_events(session_id, connection, since)
 
         return queue
 
@@ -269,7 +269,7 @@ class StreamManager:
             logger.error(f"Failed to buffer event: {e}")
 
     async def _send_buffered_events(
-        self, session_id: UUID, connection: StreamConnection
+        self, session_id: UUID, connection: StreamConnection, since: datetime | None = None
     ) -> None:
         """Send buffered events to a newly connected client."""
         try:
@@ -279,18 +279,36 @@ class StreamManager:
             buffered = await self.redis.lrange(buffer_key, 0, -1)
 
             if buffered:
-                logger.info(
-                    f"Sending {len(buffered)} buffered events to new connection"
-                )
-
-                # Send in reverse order (oldest first)
+                events_to_send = []
+                
+                # Filter events by timestamp if 'since' is provided
                 for event_json in reversed(buffered):
                     try:
                         event_data = json.loads(event_json)
                         event = StreamEvent(**event_data)
-                        await connection.send_event(event)
+                        
+                        # Only send events after 'since' timestamp
+                        if since is None or event.timestamp > since:
+                            events_to_send.append(event)
                     except Exception as e:
-                        logger.error(f"Failed to send buffered event: {e}")
+                        logger.error(f"Failed to parse buffered event: {e}")
+                
+                if events_to_send:
+                    logger.info(
+                        f"Sending {len(events_to_send)} buffered events to new connection "
+                        f"(filtered from {len(buffered)} total, since={since})"
+                    )
+                    
+                    # Send filtered events
+                    for event in events_to_send:
+                        try:
+                            await connection.send_event(event)
+                        except Exception as e:
+                            logger.error(f"Failed to send buffered event: {e}")
+                else:
+                    logger.info(
+                        f"No buffered events to send (all filtered out by since={since})"
+                    )
 
         except Exception as e:
             logger.error(f"Failed to retrieve buffered events: {e}")

@@ -2,9 +2,10 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -112,7 +113,13 @@ async def event_stream_generator(
     - Heartbeat sent every 30 seconds as JSON event
     - Connection timeout: 5 minutes of inactivity
     - Buffered events (last 100) sent on reconnect
-    - Use `?since=<timestamp>` to retrieve missed events
+    - Use `?since=<timestamp>` to retrieve only events after a specific time (prevents duplicates on reconnect)
+    
+    **Preventing Duplicate Events:**
+    - On reconnect, pass the timestamp of the last received event as `since` parameter
+    - Example: `?since=2026-02-16T20:00:00.000Z`
+    - Only events with timestamp > since will be sent from buffer
+    - This prevents receiving duplicate events on reconnection
     
     **Multiple Connections:**
     - Multiple connections per session supported (e.g., multiple browser tabs)
@@ -120,26 +127,35 @@ async def event_stream_generator(
     
     **Client Example (JavaScript):**
     ```javascript
-    const response = await fetch('/my/chat/{session_id}/events/', {
-      headers: {
-        'Authorization': 'Bearer ' + token
-      },
-      signal: abortController.signal
-    });
+    let lastEventTimestamp = null;
     
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
+    async function connectToStream() {
+      const url = lastEventTimestamp
+        ? `/my/chat/{session_id}/events/?since=${lastEventTimestamp}`
+        : `/my/chat/{session_id}/events/`;
+        
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': 'Bearer ' + token
+        },
+        signal: abortController.signal
+      });
       
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\\n').filter(line => line.trim());
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
       
-      for (const line of lines) {
-        const event = JSON.parse(line);
-        console.log('Event:', event);
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          const event = JSON.parse(line);
+          lastEventTimestamp = event.timestamp; // Save for reconnect
+          console.log('Event:', event);
+        }
       }
     }
     ```
@@ -153,6 +169,10 @@ async def subscribe_to_events(
     session_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    since: datetime | None = Query(
+        default=None,
+        description="ISO 8601 timestamp - only return buffered events after this time (prevents duplicates on reconnect)"
+    ),
 ) -> StreamingResponse:
     """
     Subscribe to streaming events for a chat session.
@@ -161,6 +181,7 @@ async def subscribe_to_events(
         session_id: Chat session UUID
         request: FastAPI request object (contains user context)
         db: Database session
+        since: Optional timestamp to filter buffered events (only events after this time)
         
     Returns:
         StreamingResponse with NDJSON events
@@ -190,11 +211,11 @@ async def subscribe_to_events(
     redis = await get_redis()
     stream_manager = await get_stream_manager(redis)
 
-    # Register connection and get queue
-    queue = await stream_manager.register_connection(session_id, user_id)
+    # Register connection and get queue (with optional 'since' filter)
+    queue = await stream_manager.register_connection(session_id, user_id, since)
 
     logger.info(
-        f"Streaming connection established: user={user_id}, session={session_id}"
+        f"Streaming connection established: user={user_id}, session={session_id}, since={since}"
     )
 
     # Create streaming response
