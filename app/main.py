@@ -13,7 +13,7 @@ from app.logging_config import configure_logging, get_logger
 from app.middleware.user_isolation import UserIsolationMiddleware
 from app.qdrant_client import close_qdrant
 from app.redis_client import close_redis
-from app.routes import agents, chat, health, streaming, projects
+from app.routes import agents, chat, health, streaming, projects, project_agents
 from app.core.stream_manager import close_stream_manager
 
 # Configure logging
@@ -101,6 +101,7 @@ app.add_middleware(UserIsolationMiddleware)
 # Include routers
 app.include_router(health.router)
 app.include_router(projects.router)
+app.include_router(project_agents.router)
 app.include_router(agents.router)
 app.include_router(chat.router)
 app.include_router(streaming.router)
