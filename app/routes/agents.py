@@ -28,30 +28,39 @@ async def get_agent_manager(
     return AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=AgentResponse)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=AgentResponse, deprecated=True)
 async def create_agent(
     config: AgentConfig,
     manager: AgentManager = Depends(get_agent_manager),
 ) -> AgentResponse:
-    """Create new agent."""
+    """Create new agent.
+    
+    ⚠️ **DEPRECATED** - Use POST `/my/projects/{project_id}/agents/` instead.
+    """
     return await manager.create_agent(config)
 
 
-@router.get("/", response_model=AgentListResponse)
+@router.get("/", response_model=AgentListResponse, deprecated=True)
 async def list_agents(
     manager: AgentManager = Depends(get_agent_manager),
 ) -> AgentListResponse:
-    """List all user agents."""
+    """List all user agents.
+    
+    ⚠️ **DEPRECATED** - Use GET `/my/projects/{project_id}/agents/` instead.
+    """
     agents = await manager.list_agents()
     return AgentListResponse(agents=agents, total=len(agents))
 
 
-@router.get("/{agent_id}", response_model=AgentResponse)
+@router.get("/{agent_id}", response_model=AgentResponse, deprecated=True)
 async def get_agent(
     agent_id: UUID,
     manager: AgentManager = Depends(get_agent_manager),
 ) -> AgentResponse:
-    """Get agent by ID."""
+    """Get agent by ID.
+    
+    ⚠️ **DEPRECATED** - Use GET `/my/projects/{project_id}/agents/{agent_id}` instead.
+    """
     agent = await manager.get_agent(agent_id)
     if not agent:
         raise HTTPException(
@@ -61,13 +70,16 @@ async def get_agent(
     return agent
 
 
-@router.put("/{agent_id}", response_model=AgentResponse)
+@router.put("/{agent_id}", response_model=AgentResponse, deprecated=True)
 async def update_agent(
     agent_id: UUID,
     update: AgentUpdate,
     manager: AgentManager = Depends(get_agent_manager),
 ) -> AgentResponse:
-    """Update agent configuration."""
+    """Update agent configuration.
+    
+    ⚠️ **DEPRECATED** - Use PUT `/my/projects/{project_id}/agents/{agent_id}` instead.
+    """
     agent = await manager.update_agent(agent_id, update.config)
     if not agent:
         raise HTTPException(
@@ -77,12 +89,15 @@ async def update_agent(
     return agent
 
 
-@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT, deprecated=True)
 async def delete_agent(
     agent_id: UUID,
     manager: AgentManager = Depends(get_agent_manager),
 ) -> None:
-    """Delete agent."""
+    """Delete agent.
+    
+    ⚠️ **DEPRECATED** - Use DELETE `/my/projects/{project_id}/agents/{agent_id}` instead.
+    """
     success = await manager.delete_agent(agent_id)
     if not success:
         raise HTTPException(
