@@ -45,10 +45,13 @@ class PersonalAIClient:
     async def create_agent(self, name: str, system_prompt: str,
                           provider: str = "openai", model: str = "gpt-4o-mini",
                           temperature: float = 0.7) -> dict:
-        """Создать нового агента."""
+        """Создать нового агента в проекте."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с agent endpoints")
+        
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/my/agents/",
+                f"{self.base_url}/my/projects/{self.project_id}/agents/",
                 headers=self.headers,
                 json={
                     "name": name,
@@ -65,10 +68,13 @@ class PersonalAIClient:
             return response.json()
     
     async def list_agents(self) -> List[dict]:
-        """Получить список агентов."""
+        """Получить список агентов в проекте."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с agent endpoints")
+        
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/my/agents/",
+                f"{self.base_url}/my/projects/{self.project_id}/agents/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -80,10 +86,13 @@ class PersonalAIClient:
             return data if isinstance(data, list) else []
     
     async def delete_agent(self, agent_id: str) -> dict:
-        """Удалить агента."""
+        """Удалить агента из проекта."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с agent endpoints")
+        
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                f"{self.base_url}/my/agents/{agent_id}/",
+                f"{self.base_url}/my/projects/{self.project_id}/agents/{agent_id}/",
                 headers=self.headers,
                 timeout=30.0
             )
