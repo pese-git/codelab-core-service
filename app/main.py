@@ -106,6 +106,7 @@ app.include_router(project_chat.router)
 app.include_router(agents.router)
 app.include_router(chat.router)
 app.include_router(streaming.router)
+app.include_router(streaming.project_router)
 
 
 @app.get("/")

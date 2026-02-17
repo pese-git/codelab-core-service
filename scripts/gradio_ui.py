@@ -30,9 +30,10 @@ GRADIO_PORT = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
 class PersonalAIClient:
     """Клиент для взаимодействия с Personal AI Platform."""
     
-    def __init__(self, base_url: str, jwt_token: str):
+    def __init__(self, base_url: str, jwt_token: str, project_id: Optional[str] = None):
         self.base_url = base_url
         self.jwt_token = jwt_token
+        self.project_id = project_id  # Per-project ID if using new endpoints
         self.headers = {
             "Authorization": f"Bearer {jwt_token}",
             "Content-Type": "application/json"
@@ -90,10 +91,13 @@ class PersonalAIClient:
             return response.json()
     
     async def create_session(self) -> dict:
-        """Создать новую чат-сессию."""
+        """Создать новую чат-сессию в проекте."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с chat endpoints")
+        
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/my/chat/sessions/",
+                f"{self.base_url}/my/projects/{self.project_id}/chat/sessions/",
                 headers=self.headers,
                 json={},
                 timeout=30.0
@@ -102,10 +106,13 @@ class PersonalAIClient:
             return response.json()
     
     async def list_sessions(self) -> List[dict]:
-        """Получить список сессий."""
+        """Получить список сессий в проекте."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с chat endpoints")
+        
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/my/chat/sessions/",
+                f"{self.base_url}/my/projects/{self.project_id}/chat/sessions/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -118,14 +125,17 @@ class PersonalAIClient:
     
     async def send_message(self, session_id: str, content: str,
                           target_agent: Optional[str] = None) -> dict:
-        """Отправить сообщение в чат."""
+        """Отправить сообщение в чат в проекте."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с chat endpoints")
+        
         payload = {"content": content}
         if target_agent:
             payload["target_agent"] = target_agent
             
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/my/chat/{session_id}/message/",
+                f"{self.base_url}/my/projects/{self.project_id}/chat/{session_id}/message/",
                 headers=self.headers,
                 json=payload,
                 timeout=30.0
@@ -134,10 +144,13 @@ class PersonalAIClient:
             return response.json()
     
     async def get_chat_history(self, session_id: str) -> List[dict]:
-        """Получить историю чата."""
+        """Получить историю чата в проекте."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с chat endpoints")
+        
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/my/chat/sessions/{session_id}/messages/",
+                f"{self.base_url}/my/projects/{self.project_id}/chat/sessions/{session_id}/messages/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -149,12 +162,15 @@ class PersonalAIClient:
             return data if isinstance(data, list) else []
     
     async def listen_stream_events(self, session_id: str):
-        """Слушать streaming события для сессии (NDJSON формат)."""
+        """Слушать streaming события для сессии в проекте (NDJSON формат)."""
+        if not self.project_id:
+            raise ValueError("project_id обязателен для работы с chat endpoints")
+        
         try:
             async with httpx.AsyncClient() as client:
                 async with client.stream(
                     "GET",
-                    f"{self.base_url}/my/chat/{session_id}/events/",
+                    f"{self.base_url}/my/projects/{self.project_id}/chat/{session_id}/events/",
                     headers=self.headers,
                     timeout=None,
                 ) as response:
@@ -180,15 +196,18 @@ class PersonalAIClient:
 client: Optional[PersonalAIClient] = None
 
 
-def initialize_client(jwt_token: str) -> str:
-    """Инициализировать клиент с JWT токеном."""
+def initialize_client(jwt_token: str, project_id: str) -> str:
+    """Инициализировать клиент с JWT токеном и ID проекта."""
     global client
     if not jwt_token:
         return "❌ Ошибка: JWT токен не может быть пустым"
     
+    if not project_id:
+        return "❌ Ошибка: Project ID не может быть пустым"
+    
     try:
-        client = PersonalAIClient(API_BASE_URL, jwt_token)
-        return f"✅ Клиент инициализирован\n🔗 API: {API_BASE_URL}"
+        client = PersonalAIClient(API_BASE_URL, jwt_token, project_id)
+        return f"✅ Клиент инициализирован\n🔗 API: {API_BASE_URL}\n📁 Project ID: {project_id}"
     except Exception as e:
         return f"❌ Ошибка инициализации: {str(e)}"
 
@@ -419,7 +438,7 @@ def create_gradio_app():
         
         # Секция инициализации
         with gr.Tab("🔐 Инициализация"):
-            gr.Markdown("### Настройка подключения")
+            gr.Markdown("### Настройка подключения (Per-Project)")
             jwt_input = gr.Textbox(
                 label="JWT Token",
                 placeholder="Вставьте JWT токен...",
@@ -427,12 +446,17 @@ def create_gradio_app():
                 type="password",
                 lines=3
             )
+            project_id_input = gr.Textbox(
+                label="Project ID",
+                placeholder="Вставьте ID проекта (UUID)...",
+                lines=1
+            )
             init_btn = gr.Button("🚀 Инициализировать клиент", variant="primary")
             init_output = gr.Markdown()
             
             init_btn.click(
                 fn=initialize_client,
-                inputs=[jwt_input],
+                inputs=[jwt_input, project_id_input],
                 outputs=[init_output]
             )
         
@@ -565,6 +589,28 @@ def create_gradio_app():
         # Информация
         with gr.Tab("ℹ️ Информация"):
             gr.Markdown(f"""
+            ### 🎯 Per-Project Architecture (Новое)
+            
+            Все операции с чатом теперь работают в рамках проектов!
+            
+            ⚠️ **Требуется Project ID** для работы с chat endpoints:
+            - `GET /my/projects/{{project_id}}/chat/sessions/`
+            - `POST /my/projects/{{project_id}}/chat/sessions/`
+            - `GET /my/projects/{{project_id}}/chat/sessions/{{session_id}}/messages/`
+            - `POST /my/projects/{{project_id}}/chat/{{session_id}}/message/`
+            - `DELETE /my/projects/{{project_id}}/chat/sessions/{{session_id}}`
+            - `GET /my/projects/{{project_id}}/chat/{{session_id}}/events/`
+            
+            ### 📝 Старые endpoints (DEPRECATED)
+            
+            Следующие endpoints помечены как deprecated и будут удалены:
+            - `POST /my/chat/sessions/` ➜ Используйте per-project версию
+            - `GET /my/chat/sessions/` ➜ Используйте per-project версию
+            - `GET /my/chat/sessions/{{session_id}}/messages/` ➜ Используйте per-project версию
+            - `POST /my/chat/{{session_id}}/message/` ➜ Используйте per-project версию
+            - `DELETE /my/chat/sessions/{{session_id}}` ➜ Используйте per-project версию
+            - `GET /my/chat/{{session_id}}/events/` ➜ Используйте per-project версию
+            
             ### Конфигурация
             
             - **API Base URL:** `{API_BASE_URL}`
@@ -573,9 +619,9 @@ def create_gradio_app():
             
             ### Быстрый старт
             
-            1. **Инициализация:** Вставьте JWT токен и нажмите "Инициализировать клиент"
+            1. **Инициализация:** Вставьте JWT токен и Project ID на вкладке "Инициализация"
             2. **Создать агента:** Перейдите на вкладку "Агенты" и создайте своего первого агента
-            3. **Создать сессию:** На вкладке "Чат" создайте новую сессию
+            3. **Создать сессию:** На вкладке "Чат" создайте новую сессию в проекте
             4. **Отправить сообщение:** Введите Session ID и отправьте сообщение
             5. **Streaming События:** Запустите Streaming listener для получения real-time событий
             

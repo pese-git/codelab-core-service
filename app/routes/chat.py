@@ -35,12 +35,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/my/chat", tags=["chat"])
 
 
-@router.post("/sessions/", status_code=status.HTTP_201_CREATED, response_model=ChatSessionResponse)
+@router.post("/sessions/", status_code=status.HTTP_201_CREATED, response_model=ChatSessionResponse, deprecated=True)
 async def create_session(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ChatSessionResponse:
-    """Create new chat session."""
+    """Create new chat session.
+    
+    ⚠️ **DEPRECATED** - Use POST `/my/projects/{project_id}/chat/sessions/` instead.
+    """
     user_id = get_current_user_id(request)
     
     session = ChatSession(user_id=user_id)
@@ -54,12 +57,15 @@ async def create_session(
     )
 
 
-@router.get("/sessions/", response_model=ChatSessionListResponse)
+@router.get("/sessions/", response_model=ChatSessionListResponse, deprecated=True)
 async def list_sessions(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ChatSessionListResponse:
-    """List all user chat sessions."""
+    """List all user chat sessions.
+    
+    ⚠️ **DEPRECATED** - Use GET `/my/projects/{project_id}/chat/sessions/` instead.
+    """
     user_id = get_current_user_id(request)
     
     # Get sessions with message count using subquery
@@ -89,7 +95,7 @@ async def list_sessions(
     return ChatSessionListResponse(sessions=session_responses, total=len(session_responses))
 
 
-@router.get("/sessions/{session_id}/messages/", response_model=MessageListResponse)
+@router.get("/sessions/{session_id}/messages/", response_model=MessageListResponse, deprecated=True)
 async def get_messages(
     session_id: UUID,
     request: Request,
@@ -97,7 +103,10 @@ async def get_messages(
     limit: int = 50,
     offset: int = 0,
 ) -> MessageListResponse:
-    """Get messages for a session."""
+    """Get messages for a session.
+    
+    ⚠️ **DEPRECATED** - Use GET `/my/projects/{project_id}/chat/sessions/{session_id}/messages/` instead.
+    """
     user_id = get_current_user_id(request)
     
     # Verify session belongs to user
@@ -149,7 +158,7 @@ async def get_messages(
     )
 
 
-@router.post("/{session_id}/message/", response_model=MessageResponse)
+@router.post("/{session_id}/message/", response_model=MessageResponse, deprecated=True)
 async def send_message(
     session_id: UUID,
     message_request: MessageRequest,
@@ -158,7 +167,10 @@ async def send_message(
     redis: Redis = Depends(get_redis),
     qdrant: AsyncQdrantClient | None = Depends(get_qdrant),
 ) -> MessageResponse:
-    """Send message to chat session (direct or orchestrated mode)."""
+    """Send message to chat session (direct or orchestrated mode).
+    
+    ⚠️ **DEPRECATED** - Use POST `/my/projects/{project_id}/chat/{session_id}/message/` instead.
+    """
     user_id = get_current_user_id(request)
     
     # Verify session belongs to user
@@ -440,13 +452,16 @@ async def send_message(
     )
 
 
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, deprecated=True)
 async def delete_session(
     session_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete chat session."""
+    """Delete chat session.
+    
+    ⚠️ **DEPRECATED** - Use DELETE `/my/projects/{project_id}/chat/sessions/{session_id}` instead.
+    """
     user_id = get_current_user_id(request)
     
     result = await db.execute(

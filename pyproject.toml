@@ -26,6 +26,7 @@ dependencies = [
     "prometheus-client>=0.20.0",
     "structlog>=24.0.0",
     "tenacity>=9.0.0",
+    "gradio>=6.5.1",
 ]
 
 [tool.hatch.build.targets.wheel]
