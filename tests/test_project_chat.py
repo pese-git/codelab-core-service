@@ -1,0 +1,296 @@
+"""Per-project chat endpoints tests."""
+
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import User, UserProject, ChatSession, Message
+from app.schemas.chat import MessageRole
+
+
+@pytest.mark.asyncio
+async def test_create_project_session(db_session: AsyncSession) -> None:
+    """Test creating chat session in project."""
+    # Create test user
+    user_id = uuid4()
+    project_id = uuid4()
+    
+    test_user = User(id=user_id, email=f"test-{user_id}@example.com")
+    test_project = UserProject(
+        id=project_id,
+        user_id=user_id,
+        name="Test Project",
+        workspace_path="/test/workspace",
+    )
+    db_session.add(test_user)
+    db_session.add(test_project)
+    await db_session.flush()
+    
+    # Create chat session
+    session = ChatSession(
+        user_id=user_id,
+        project_id=project_id,
+    )
+    db_session.add(session)
+    await db_session.flush()
+    
+    # Verify session was created
+    result = await db_session.execute(
+        select(ChatSession).where(ChatSession.id == session.id)
+    )
+    created_session = result.scalar_one_or_none()
+    assert created_session is not None
+    assert created_session.user_id == user_id
+    assert created_session.project_id == project_id
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_by_project(db_session: AsyncSession) -> None:
+    """Test listing chat sessions for a specific project."""
+    # Create test user and two projects
+    user_id = uuid4()
+    project_id_1 = uuid4()
+    project_id_2 = uuid4()
+    
+    test_user = User(id=user_id, email=f"test-{user_id}@example.com")
+    project_1 = UserProject(
+        id=project_id_1,
+        user_id=user_id,
+        name="Project 1",
+        workspace_path="/test/workspace1",
+    )
+    project_2 = UserProject(
+        id=project_id_2,
+        user_id=user_id,
+        name="Project 2",
+        workspace_path="/test/workspace2",
+    )
+    db_session.add(test_user)
+    db_session.add(project_1)
+    db_session.add(project_2)
+    await db_session.flush()
+    
+    # Create sessions in both projects
+    session_1 = ChatSession(
+        user_id=user_id,
+        project_id=project_id_1,
+    )
+    session_2 = ChatSession(
+        user_id=user_id,
+        project_id=project_id_1,
+    )
+    session_3 = ChatSession(
+        user_id=user_id,
+        project_id=project_id_2,
+    )
+    db_session.add(session_1)
+    db_session.add(session_2)
+    db_session.add(session_3)
+    await db_session.flush()
+    
+    # Verify sessions are correctly assigned to projects
+    result = await db_session.execute(
+        select(ChatSession).where(ChatSession.project_id == project_id_1)
+    )
+    project_1_sessions = result.scalars().all()
+    assert len(project_1_sessions) == 2
+    
+    result = await db_session.execute(
+        select(ChatSession).where(ChatSession.project_id == project_id_2)
+    )
+    project_2_sessions = result.scalars().all()
+    assert len(project_2_sessions) == 1
+
+
+@pytest.mark.asyncio
+async def test_session_isolation_by_project(db_session: AsyncSession) -> None:
+    """Test that sessions in different projects are isolated."""
+    # Create test user and two projects
+    user_id = uuid4()
+    project_id_1 = uuid4()
+    project_id_2 = uuid4()
+    
+    test_user = User(id=user_id, email=f"test-{user_id}@example.com")
+    project_1 = UserProject(
+        id=project_id_1,
+        user_id=user_id,
+        name="Project 1",
+        workspace_path="/test/workspace1",
+    )
+    project_2 = UserProject(
+        id=project_id_2,
+        user_id=user_id,
+        name="Project 2",
+        workspace_path="/test/workspace2",
+    )
+    db_session.add(test_user)
+    db_session.add(project_1)
+    db_session.add(project_2)
+    await db_session.flush()
+    
+    # Create sessions in different projects
+    session_1 = ChatSession(
+        user_id=user_id,
+        project_id=project_id_1,
+    )
+    session_2 = ChatSession(
+        user_id=user_id,
+        project_id=project_id_2,
+    )
+    db_session.add(session_1)
+    db_session.add(session_2)
+    await db_session.flush()
+    
+    # Verify each project only sees its own sessions
+    result = await db_session.execute(
+        select(ChatSession).where(
+            ChatSession.user_id == user_id,
+            ChatSession.project_id == project_id_1,
+        )
+    )
+    sessions_in_project_1 = result.scalars().all()
+    assert len(sessions_in_project_1) == 1
+    assert sessions_in_project_1[0].id == session_1.id
+    
+    result = await db_session.execute(
+        select(ChatSession).where(
+            ChatSession.user_id == user_id,
+            ChatSession.project_id == project_id_2,
+        )
+    )
+    sessions_in_project_2 = result.scalars().all()
+    assert len(sessions_in_project_2) == 1
+    assert sessions_in_project_2[0].id == session_2.id
+
+
+@pytest.mark.asyncio
+async def test_user_isolation_chat_sessions(db_session: AsyncSession) -> None:
+    """Test that different users cannot access each other's sessions."""
+    # Create two users and a project for user1
+    user_id_1 = uuid4()
+    user_id_2 = uuid4()
+    project_id = uuid4()
+    
+    user_1 = User(id=user_id_1, email=f"test-{user_id_1}@example.com")
+    user_2 = User(id=user_id_2, email=f"test-{user_id_2}@example.com")
+    project = UserProject(
+        id=project_id,
+        user_id=user_id_1,
+        name="User1 Project",
+        workspace_path="/test/workspace",
+    )
+    db_session.add(user_1)
+    db_session.add(user_2)
+    db_session.add(project)
+    await db_session.flush()
+    
+    # Create session for user1
+    session = ChatSession(
+        user_id=user_id_1,
+        project_id=project_id,
+    )
+    db_session.add(session)
+    await db_session.flush()
+    
+    # Verify user2 cannot see user1's session
+    result = await db_session.execute(
+        select(ChatSession).where(
+            ChatSession.user_id == user_id_2,
+            ChatSession.project_id == project_id,
+        )
+    )
+    sessions = result.scalars().all()
+    assert len(sessions) == 0
+
+
+@pytest.mark.asyncio
+async def test_messages_in_session(db_session: AsyncSession) -> None:
+    """Test that messages are correctly associated with sessions."""
+    # Create test user
+    user_id = uuid4()
+    project_id = uuid4()
+    
+    test_user = User(id=user_id, email=f"test-{user_id}@example.com")
+    test_project = UserProject(
+        id=project_id,
+        user_id=user_id,
+        name="Test Project",
+        workspace_path="/test/workspace",
+    )
+    db_session.add(test_user)
+    db_session.add(test_project)
+    await db_session.flush()
+    
+    # Create chat session
+    session = ChatSession(
+        user_id=user_id,
+        project_id=project_id,
+    )
+    db_session.add(session)
+    await db_session.flush()
+    
+    # Create messages
+    msg_1 = Message(
+        session_id=session.id,
+        role=MessageRole.USER.value,
+        content="Hello",
+    )
+    msg_2 = Message(
+        session_id=session.id,
+        role=MessageRole.ASSISTANT.value,
+        content="Hi there",
+    )
+    db_session.add(msg_1)
+    db_session.add(msg_2)
+    await db_session.flush()
+    
+    # Verify messages are correctly assigned to session
+    result = await db_session.execute(
+        select(Message).where(Message.session_id == session.id)
+    )
+    messages = result.scalars().all()
+    assert len(messages) == 2
+    assert messages[0].content == "Hello"
+    assert messages[1].content == "Hi there"
+
+
+@pytest.mark.asyncio
+async def test_delete_session(db_session: AsyncSession) -> None:
+    """Test deleting a chat session."""
+    # Create test user
+    user_id = uuid4()
+    project_id = uuid4()
+    
+    test_user = User(id=user_id, email=f"test-{user_id}@example.com")
+    test_project = UserProject(
+        id=project_id,
+        user_id=user_id,
+        name="Test Project",
+        workspace_path="/test/workspace",
+    )
+    db_session.add(test_user)
+    db_session.add(test_project)
+    await db_session.flush()
+    
+    # Create chat session
+    session = ChatSession(
+        user_id=user_id,
+        project_id=project_id,
+    )
+    db_session.add(session)
+    await db_session.flush()
+    
+    session_id = session.id
+    
+    # Delete session
+    await db_session.delete(session)
+    await db_session.flush()
+    
+    # Verify session is deleted
+    result = await db_session.execute(
+        select(ChatSession).where(ChatSession.id == session_id)
+    )
+    deleted_session = result.scalar_one_or_none()
+    assert deleted_session is None
