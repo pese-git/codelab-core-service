@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal, engine
 from app.models import User, UserProject, UserAgent
+from app.core.starter_pack import initialize_starter_pack
 
 
 async def create_seed_data() -> None:
@@ -52,47 +53,10 @@ async def create_seed_data() -> None:
             
             print(f"✓ Created default project: {default_project.name} (ID: {default_project.id})")
             
-            # Create sample agents for default project
-            agents_config = [
-                {
-                    "name": "CodeAssistant",
-                    "config": {
-                        "model": "openrouter/openai/gpt-4.1",
-                        "temperature": 0.7,
-                        "system_prompt": "You are a helpful coding assistant specialized in Python and web development.",
-                        "tools": ["code_search", "file_operations", "terminal"],
-                    }
-                },
-                {
-                    "name": "DataAnalyst",
-                    "config": {
-                        "model": "openrouter/openai/gpt-4.1",
-                        "temperature": 0.3,
-                        "system_prompt": "You are a data analyst expert. Help users analyze data and create visualizations.",
-                        "tools": ["data_analysis", "visualization", "statistics"],
-                    }
-                },
-                {
-                    "name": "DocumentWriter",
-                    "config": {
-                        "model": "openrouter/openai/gpt-4.1",
-                        "temperature": 0.8,
-                        "system_prompt": "You are a technical writer. Help users create clear and comprehensive documentation.",
-                        "tools": ["markdown", "diagrams", "templates"],
-                    }
-                }
-            ]
+            # Initialize Default Starter Pack for the project
+            agents = await initialize_starter_pack(session, test_user.id, default_project.id)
             
-            for agent_data in agents_config:
-                agent = UserAgent(
-                    id=uuid4(),
-                    user_id=test_user.id,
-                    project_id=default_project.id,
-                    name=agent_data["name"],
-                    config=agent_data["config"],
-                    status="ready"
-                )
-                session.add(agent)
+            for agent in agents:
                 print(f"✓ Created agent: {agent.name} (ID: {agent.id}) in project '{default_project.name}'")
             
             await session.commit()
@@ -103,7 +67,7 @@ async def create_seed_data() -> None:
             print(f"\nDefault Project:")
             print(f"  Project ID: {default_project.id}")
             print(f"  Project Name: {default_project.name}")
-            print(f"  Agents Count: {len(agents_config)}")
+            print(f"  Agents Count: {len(agents)}")
             print(f"\nYou can generate a JWT token using:")
             print(f"  python scripts/generate_test_jwt.py {test_user.id}")
             

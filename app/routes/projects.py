@@ -11,6 +11,7 @@ from app.middleware.user_isolation import get_current_user_id
 from app.models.user_project import UserProject
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
 from app.core.worker_space_manager import WorkerSpaceManager
+from app.core.starter_pack import initialize_starter_pack
 
 router = APIRouter(prefix="/my/projects", tags=["projects"])
 
@@ -27,7 +28,12 @@ async def create_project(
     db: AsyncSession = Depends(get_db),
     manager: WorkerSpaceManager = Depends(get_worker_space_manager),
 ) -> ProjectResponse:
-    """Create new project for user.
+    """Create new project for user with Default Starter Pack.
+
+    Automatically initializes a new project with:
+    - Default project record in database
+    - Default Starter Pack agents (CodeAssistant, DataAnalyst, DocumentWriter)
+    - User Worker Space for the project
 
     Args:
         project_data: Project creation data (name, workspace_path)
@@ -47,27 +53,33 @@ async def create_project(
         workspace_path=project_data.workspace_path,
     )
     db.add(project)
-    await db.commit()
-    await db.refresh(project)
+    await db.flush()  # Flush to get project.id
 
-    # Initialize User Worker Space for the project
-    # This happens asynchronously and can be awaited if needed
+    # Initialize Default Starter Pack agents for the project
     try:
-        # Note: We're not awaiting this as it will be initialized
-        # on first use, but we could explicitly initialize here
-        # For now, lazy initialization is acceptable
-        pass
+        agents = await initialize_starter_pack(db, user_id, project.id)
+        from app.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.info(
+            "starter_pack_initialized",
+            user_id=str(user_id),
+            project_id=str(project.id),
+            agents_count=len(agents),
+        )
     except Exception as e:
         # Log error but don't fail project creation
-        # The worker space will be created on first request
         from app.logging_config import get_logger
         logger = get_logger(__name__)
         logger.warning(
-            "worker_space_init_error",
+            "starter_pack_init_error",
             user_id=str(user_id),
             project_id=str(project.id),
             error=str(e),
         )
+
+    # Commit all changes (project + agents)
+    await db.commit()
+    await db.refresh(project)
 
     return ProjectResponse.model_validate(project)
 
