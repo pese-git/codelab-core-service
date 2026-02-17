@@ -138,8 +138,11 @@ class PersonalAIClient:
         if not self.project_id:
             raise ValueError("project_id обязателен для работы с chat endpoints")
         
+        # target_agent может быть agent_id (UUID) или именем агента
+        # В per-project архитектуре используем agent_id
         payload = {"content": content}
         if target_agent:
+            # Предполагаем что это agent_id для per-project endpoints
             payload["target_agent"] = target_agent
             
         async with httpx.AsyncClient() as client:

@@ -232,16 +232,25 @@ async def send_project_message(
     if message_request.target_agent:
         # Get agent manager with project context
         agent_manager = AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
-        agent_response = await agent_manager.get_agent_by_project(
-            project_id=project_id,
-            agent_name=message_request.target_agent,
-        )
+        try:
+            target_agent_uuid = UUID(message_request.target_agent)
+            agent_response = await agent_manager.get_agent_by_project(
+                agent_id=target_agent_uuid,
+                project_id=project_id,
+            )
+        except ValueError:
+            # If not a valid UUID, treat as error
+            logger.warning(f"Invalid agent_id: {message_request.target_agent}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="target_agent must be a valid agent UUID",
+            )
         
         if not agent_response:
-            logger.warning(f"Agent not found: agent_name={message_request.target_agent}, project_id={project_id}")
+            logger.warning(f"Agent not found: agent_id={message_request.target_agent}, project_id={project_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Agent '{message_request.target_agent}' not found",
+                detail=f"Agent '{message_request.target_agent}' not found in this project",
             )
         
         # Send SSE event: direct agent call started
