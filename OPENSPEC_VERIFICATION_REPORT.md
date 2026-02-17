@@ -141,7 +141,7 @@
 - ✅ Context injection для агентов
 
 **Известные проблемы:**
-- ⚠️ SQLAlchemy lazy loading в async context (см. TEST_REPORT.md)
+- ✅ ~~SQLAlchemy lazy loading в async context~~ (ИСПРАВЛЕНО - используются подзапросы)
 - ⚠️ Orchestrated mode не реализован (требует Orchestrator)
 
 **Статус:** Direct mode полностью реализован, Orchestrated mode отсутствует
@@ -356,7 +356,7 @@ else:
 - ❌ Security audit тесты отсутствуют
 
 **Известные проблемы:**
-- SQLAlchemy lazy loading в async context
+- ✅ ~~SQLAlchemy lazy loading в async context~~ (ИСПРАВЛЕНО)
 - Отсутствие тестов для Orchestrator (не реализован)
 - Отсутствие тестов для Approval Manager (не реализован)
 
@@ -396,10 +396,10 @@ else:
    - Интегрировать с Chat System
    - **Оценка:** 4-5 дней
 
-3. **Исправить SQLAlchemy lazy loading**
-   - Использовать `selectinload` или подзапросы
-   - Исправить [`app/routes/chat.py:68`](app/routes/chat.py:68) и [`app/routes/chat.py:124`](app/routes/chat.py:124)
-   - **Оценка:** 1-2 часа
+3. ✅ **~~Исправить SQLAlchemy lazy loading~~** - УЖЕ ИСПРАВЛЕНО
+   - ✅ Используются подзапросы с `func.count()` и `outerjoin`
+   - ✅ Код в [`app/routes/chat.py:66-75`](app/routes/chat.py:66) и [`app/routes/chat.py:118-122`](app/routes/chat.py:118) корректен
+   - ✅ Все тесты проходят (18/18)
 
 ### Высокий приоритет (SHOULD HAVE)
 
@@ -439,7 +439,7 @@ else:
 
 ### Неделя 1: Критические компоненты
 - [ ] День 1-2: Реализовать User Worker Space
-- [ ] День 3: Исправить SQLAlchemy lazy loading
+- [x] ~~День 3: Исправить SQLAlchemy lazy loading~~ - УЖЕ ИСПРАВЛЕНО
 - [ ] День 4-5: Начать реализацию Personal Orchestrator
 
 ### Неделя 2: Orchestrator и Approval Manager

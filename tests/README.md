@@ -63,8 +63,8 @@ tests/
 - 📝 **Детали:** См. [`TEST_REPORT.md`](TEST_REPORT.md)
 
 ### Основные проблемы
-1. SQLAlchemy lazy loading в async context
-2. Требуется исправление в [`app/routes/chat.py`](../app/routes/chat.py)
+1. ✅ ~~SQLAlchemy lazy loading в async context~~ - ИСПРАВЛЕНО (используются подзапросы)
+2. ✅ ~~Требуется исправление в [`app/routes/chat.py`](../app/routes/chat.py)~~ - УЖЕ ИСПРАВЛЕНО
 
 ## 🔧 Фикстуры
 
