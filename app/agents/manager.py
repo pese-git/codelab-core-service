@@ -136,7 +136,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=AgentConfig.model_validate(agent.config),
+                config=AgentConfig(name=agent.name, **agent.config),
             )
             for agent in agents
         ]
@@ -162,7 +162,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig(name=agent.name, **agent.config),
+            config=AgentConfig.model_validate({"name": agent.name, **agent.config}),
         )
 
     async def create_agent_with_project(
@@ -245,7 +245,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=config,
+            config=AgentConfig(name=agent.name, **agent.config),
         )
 
     async def delete_agent_with_project(
