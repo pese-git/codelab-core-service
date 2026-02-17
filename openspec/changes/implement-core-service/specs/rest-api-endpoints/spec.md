@@ -2,8 +2,35 @@
 
 ## ADDED Requirements
 
-### Requirement: Agent management endpoints
-Система ДОЛЖНА предоставлять REST API endpoints для управления агентами.
+### Requirement: Project management endpoints
+Система ДОЛЖНА предоставлять REST API endpoints для управления проектами.
+
+#### Scenario: POST /my/projects/ - создание проекта с Default Starter Pack
+- **WHEN** пользователь отправляет POST `/my/projects/` с name и workspace_path
+- **THEN** система создает проект и автоматически создает 4 default агентов
+- **AND** возвращает 201 Created с project_id и списком агентов
+- **AND** User Worker Space инициализирован и готов к использованию
+
+#### Scenario: GET /my/projects/ - список проектов
+- **WHEN** пользователь отправляет GET `/my/projects/`
+- **THEN** система возвращает 200 OK с массивом всех проектов пользователя
+
+#### Scenario: GET /my/projects/{project_id}/ - получение проекта
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/`
+- **THEN** система возвращает 200 OK с деталями проекта и списком агентов
+
+#### Scenario: PUT /my/projects/{project_id}/ - обновление проекта
+- **WHEN** пользователь отправляет PUT `/my/projects/{project_id}/` с обновленными данными
+- **THEN** система обновляет проект и возвращает 200 OK
+
+#### Scenario: DELETE /my/projects/{project_id}/ - удаление проекта
+- **WHEN** пользователь отправляет DELETE `/my/projects/{project_id}/`
+- **THEN** система удаляет проект и очищает backend ресурсы (User Worker Space)
+- **AND** файлы в User Workspace НЕ удаляются
+- **AND** возвращает 204 No Content
+
+### Requirement: Agent management endpoints (Updated for per-project)
+Система ДОЛЖНА предоставлять REST API endpoints для управления агентами в контексте проекта.
 
 #### Scenario: GET /my/agents/ - список агентов
 - **WHEN** пользователь отправляет GET `/my/agents/`
@@ -47,52 +74,57 @@
 ### Requirement: Chat endpoints
 Система ДОЛЖНА предоставлять endpoints для управления чатами и сообщениями.
 
-#### Scenario: POST /my/chat/sessions/ - создание сессии
-- **WHEN** пользователь отправляет POST `/my/chat/sessions/`
-- **THEN** система создает новую сессию и возвращает 201 Created с session_id
+#### Scenario: POST /my/projects/{project_id}/chat/sessions/ - создание сессии
+- **WHEN** пользователь отправляет POST `/my/projects/{project_id}/chat/sessions/`
+- **THEN** система создает новую сессию в контексте проекта
+- **AND** возвращает 201 Created с session_id
 
-#### Scenario: GET /my/chat/sessions/ - список сессий
-- **WHEN** пользователь отправляет GET `/my/chat/sessions/`
-- **THEN** система возвращает 200 OK с массивом всех сессий пользователя
+#### Scenario: GET /my/projects/{project_id}/chat/sessions/ - список сессий
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/sessions/`
+- **THEN** система возвращает 200 OK с массивом сессий проекта
 
-#### Scenario: GET /my/chat/sessions/{session_id} - получение сессии
-- **WHEN** пользователь отправляет GET `/my/chat/sessions/{session_id}`
+#### Scenario: GET /my/projects/{project_id}/chat/sessions/{session_id} - получение сессии
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/sessions/{session_id}`
 - **THEN** система возвращает 200 OK с деталями сессии
 
-#### Scenario: DELETE /my/chat/sessions/{session_id} - удаление сессии
-- **WHEN** пользователь отправляет DELETE `/my/chat/sessions/{session_id}`
+#### Scenario: DELETE /my/projects/{project_id}/chat/sessions/{session_id} - удаление сессии
+- **WHEN** пользователь отправляет DELETE `/my/projects/{project_id}/chat/sessions/{session_id}`
 - **THEN** система удаляет сессию и возвращает 204 No Content
 
-#### Scenario: POST /my/chat/{session_id}/message/ - отправка сообщения
-- **WHEN** пользователь отправляет POST `/my/chat/{session_id}/message/` с content
-- **THEN** система обрабатывает сообщение и возвращает 202 Accepted
+#### Scenario: POST /my/projects/{project_id}/chat/{session_id}/message/ - отправка сообщения
+- **WHEN** пользователь отправляет POST `/my/projects/{project_id}/chat/{session_id}/message/` с content
+- **THEN** система обрабатывает сообщение в контексте Worker Space проекта
+- **AND** возвращает 202 Accepted
 
-#### Scenario: GET /my/chat/{session_id}/messages/ - история сообщений
-- **WHEN** пользователь отправляет GET `/my/chat/{session_id}/messages/`
-- **THEN** система возвращает 200 OK с массивом сообщений
+#### Scenario: GET /my/projects/{project_id}/chat/{session_id}/messages/ - история сообщений
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/{session_id}/messages/`
+- **THEN** система возвращает 200 OK с сообщениями сессии проекта
 
-#### Scenario: GET /my/chat/{session_id}/events/ - SSE stream
-- **WHEN** пользователь отправляет GET `/my/chat/{session_id}/events/`
-- **THEN** система устанавливает SSE connection и начинает отправку событий
+#### Scenario: GET /my/projects/{project_id}/chat/{session_id}/events/ - SSE stream
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/{session_id}/events/`
+- **THEN** система устанавливает SSE connection для проекта
+- **AND** начинает отправку событий Worker Space
 
 ### Requirement: Approval endpoints
 Система ДОЛЖНА предоставлять endpoints для управления approvals.
 
-#### Scenario: GET /my/approvals/ - список approvals
-- **WHEN** пользователь отправляет GET `/my/approvals/`
-- **THEN** система возвращает 200 OK с массивом approval requests
+#### Scenario: GET /my/projects/{project_id}/approvals/ - список approvals
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/approvals/`
+- **THEN** система возвращает 200 OK с approval requests проекта
 
-#### Scenario: GET /my/approvals/{approval_id} - получение approval
-- **WHEN** пользователь отправляет GET `/my/approvals/{approval_id}`
+#### Scenario: GET /my/projects/{project_id}/approvals/{approval_id} - получение approval
+- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/approvals/{approval_id}`
 - **THEN** система возвращает 200 OK с деталями approval request
 
-#### Scenario: POST /my/approvals/{approval_id}/confirm - подтверждение
-- **WHEN** пользователь отправляет POST `/my/approvals/{approval_id}/confirm` с decision
-- **THEN** система обрабатывает решение и возвращает 200 OK
+#### Scenario: POST /my/projects/{project_id}/approvals/{approval_id}/confirm - подтверждение
+- **WHEN** пользователь отправляет POST `/my/projects/{project_id}/approvals/{approval_id}/confirm` с decision
+- **THEN** система обрабатывает решение в контексте проекта
+- **AND** возвращает 200 OK
 
-#### Scenario: POST /my/approvals/batch-confirm - batch подтверждение
-- **WHEN** пользователь отправляет POST `/my/approvals/batch-confirm` с массивом approval_ids
-- **THEN** система обрабатывает все approvals и возвращает 200 OK с результатами
+#### Scenario: POST /my/projects/{project_id}/approvals/batch-confirm - batch подтверждение
+- **WHEN** пользователь отправляет POST `/my/projects/{project_id}/approvals/batch-confirm` с массивом approval_ids
+- **THEN** система обрабатывает все approvals проекта
+- **AND** возвращает 200 OK с результатами
 
 ### Requirement: Context management endpoints
 Система ДОЛЖНА предоставлять endpoints для управления контекстом агентов.

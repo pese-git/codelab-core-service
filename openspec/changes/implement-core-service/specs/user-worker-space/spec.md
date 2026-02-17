@@ -2,8 +2,43 @@
 
 ## ADDED Requirements
 
+### Requirement: Per-Project Architecture
+User Worker Space ДОЛЖЕН быть создан для КАЖДОГО проекта пользователя (не per-user).
+
+#### Scenario: Каждый проект имеет отдельный Worker Space
+- **WHEN** пользователь создает несколько проектов
+- **THEN** каждый проект имеет свой изолированный User Worker Space
+- **AND** данные одного проекта недоступны другому
+
+#### Scenario: Параллельные Worker Spaces
+- **WHEN** пользователь работает с несколькими проектами одновременно
+- **THEN** все Worker Spaces работают независимо без конфликтов
+
+### Requirement: Default Starter Pack
+User Worker Space инициализируется с 4 default агентами при создании проекта.
+
+#### Scenario: Automatic creation of default agents
+- **WHEN** пользователь создает новый проект через POST /my/projects/
+- **THEN** backend автоматически создает 4 default агента:
+  - agent_coder (developer, gpt-4, temperature=0.3, max_tokens=4096)
+  - agent_analyzer (analyst, gpt-4, temperature=0.5, max_tokens=2048)
+  - agent_writer (writer, gpt-4, temperature=0.7, max_tokens=2048)
+  - agent_researcher (researcher, gpt-4, temperature=0.6, max_tokens=3096)
+
+#### Scenario: Zero-to-use initialization
+- **WHEN** пользователь создает проект
+- **THEN** User Worker Space полностью инициализирован и готов к использованию
+- **AND** все агенты зарегистрированы в Agent Bus
+- **AND** все Qdrant collections созданы
+- **AND** система готова принять сообщения
+
+#### Scenario: Custom agents addition
+- **WHEN** пользователь хочет добавить своего агента
+- **THEN** user может создать дополнительного агента через API
+- **AND** новый агент добавляется в существующий Worker Space
+
 ### Requirement: Инициализация рабочего пространства
-Система ДОЛЖНА создавать персональное рабочее пространство для каждого пользователя при первом запросе.
+Система ДОЛЖНА создавать User Worker Space для проекта при первом запросе.
 
 #### Scenario: Первый запрос пользователя
 - **WHEN** пользователь делает первый запрос после аутентификации
