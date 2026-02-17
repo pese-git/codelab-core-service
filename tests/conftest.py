@@ -18,6 +18,7 @@ from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models.user import User
+from app.models.user_project import UserProject
 from app.models.user_agent import UserAgent
 from app.models.chat_session import ChatSession
 from app.redis_client import get_redis
@@ -82,24 +83,76 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_agent(db_session: AsyncSession, test_user: User) -> UserAgent:
+async def test_project(db_session: AsyncSession, test_user: User) -> UserProject:
+    """Create test project."""
+    project = UserProject(
+        user_id=test_user.id,
+        name="test_project",
+        workspace_path="/tmp/test_workspace",
+    )
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+    return project
+
+
+@pytest_asyncio.fixture
+async def test_agent(db_session: AsyncSession, test_user: User, test_project: UserProject) -> UserAgent:
     """Create test agent."""
     agent = UserAgent(
         user_id=test_user.id,
+        project_id=test_project.id,
         name="test_agent",
         config={
             "system_prompt": "You are a helpful assistant",
-            "model": {
-                "provider": "openai",
-                "name": "gpt-4o-mini",
-                "temperature": 0.7
-            }
+            "model": "gpt-4o-mini",
+            "temperature": 0.7,
+            "max_tokens": 2048
         }
     )
     db_session.add(agent)
     await db_session.commit()
     await db_session.refresh(agent)
     return agent
+
+
+@pytest_asyncio.fixture
+async def test_agents_fixture(db_session: AsyncSession, test_user: User, test_project: UserProject) -> list[UserAgent]:
+    """Create test agents for worker space tests."""
+    agents = []
+    configs = [
+        {
+            "name": "test_coder",
+            "system_prompt": "You are a coder",
+            "model": "gpt-4",
+            "temperature": 0.3,
+            "max_tokens": 4096,
+        },
+        {
+            "name": "test_analyzer",
+            "system_prompt": "You are an analyzer",
+            "model": "gpt-4",
+            "temperature": 0.5,
+            "max_tokens": 2048,
+        },
+    ]
+
+    for config in configs:
+        agent = UserAgent(
+            user_id=test_user.id,
+            project_id=test_project.id,
+            name=config["name"],
+            config=config,
+            status="ready",
+        )
+        db_session.add(agent)
+        agents.append(agent)
+
+    await db_session.commit()
+    for agent in agents:
+        await db_session.refresh(agent)
+
+    return agents
 
 
 @pytest.fixture

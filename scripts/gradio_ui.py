@@ -239,7 +239,10 @@ def create_agent_ui(name: str, system_prompt: str, provider: str, model: str) ->
 def list_agents_ui() -> str:
     """UI функция для получения списка агентов."""
     if not client:
-        return "❌ Сначала инициализируйте клиент с JWT токеном"
+        return "❌ Сначала инициализируйте клиент с JWT токеном и Project ID"
+    
+    if not client.project_id:
+        return "❌ Project ID не установлен. Инициализируйте клиент с Project ID"
     
     try:
         agents = asyncio.run(client.list_agents())
@@ -248,19 +251,25 @@ def list_agents_ui() -> str:
         
         result = "📋 **Список агентов:**\n\n"
         for agent in agents:
-            # API возвращает 'id', а не 'agent_id'
+            # API возвращает объект AgentResponse
             agent_id = agent.get('id', 'N/A')
             name = agent.get('name', 'N/A')
-            status = agent.get('status', 'N/A')
-            # config.model - это строка, а не объект
-            model = agent.get('config', {}).get('model', 'N/A')
+            status = agent.get('status', 'active')
+            
+            # Обработка config - может быть объект или строка
+            config = agent.get('config', {})
+            if isinstance(config, dict):
+                model = config.get('model', 'N/A')
+            else:
+                model = 'N/A'
             
             result += f"- **{name}** (`{agent_id}`)\n"
-            result += f"  - Статус: {status}\n"
             result += f"  - Модель: {model}\n\n"
         return result
+    except ValueError as e:
+        return f"❌ Ошибка конфигурации: {str(e)}\n\n💡 **Убедитесь, что:**\n- Инициализирован клиент с Project ID\n- JWT токен корректен"
     except Exception as e:
-        return f"❌ Ошибка: {str(e)}"
+        return f"❌ Ошибка при получении агентов: {str(e)}\n\n**Полная ошибка:**\n```\n{type(e).__name__}: {str(e)}\n```"
 
 
 def delete_agent_ui(agent_id: str) -> str:

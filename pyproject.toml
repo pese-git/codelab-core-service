@@ -1,6 +1,6 @@
 [project]
 name = "codelab-core-service"
-version = "0.1.0"
+version = "0.2.0"
 description = "Personal Multi-Agent AI Platform - Core Service"
 authors = [
     {name = "OpenIdeaLab", email = "team@openidealab.com"}
