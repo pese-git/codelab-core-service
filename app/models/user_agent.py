@@ -19,6 +19,9 @@ class UserAgent(Base):
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    project_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     config: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -30,6 +33,7 @@ class UserAgent(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="agents")
+    project: Mapped["UserProject"] = relationship("UserProject", back_populates="agents")
     messages: Mapped[list["Message"]] = relationship(
         "Message", back_populates="agent", cascade="all, delete-orphan"
     )
@@ -39,8 +43,8 @@ class UserAgent(Base):
 
     # Indexes
     __table_args__ = (
-        Index("ix_user_agents_user_id_name", "user_id", "name"),
-        Index("ix_user_agents_user_id_status", "user_id", "status"),
+        Index("ix_user_agents_user_id_project_id_name", "user_id", "project_id", "name"),
+        Index("ix_user_agents_project_id_status", "project_id", "status"),
     )
 
     def __repr__(self) -> str:

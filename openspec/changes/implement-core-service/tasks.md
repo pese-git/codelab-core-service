@@ -2,55 +2,55 @@
 
 ## 1. Infrastructure Setup
 
-- [ ] 1.1 Настроить PostgreSQL database с connection pooling (asyncpg)
-- [ ] 1.2 Настроить Redis для кеширования и pub/sub
-- [ ] 1.3 Настроить Qdrant vector database
-- [ ] 1.4 Создать Alembic миграции для базовой схемы БД (users, user_agents, user_orchestrators, chat_sessions, messages, tasks, approval_requests)
-- [ ] 1.5 Настроить JWT authentication provider и секретные ключи
-- [ ] 1.6 Настроить Docker Compose для локальной разработки
+- [x] 1.1 Настроить PostgreSQL database с connection pooling (asyncpg)
+- [x] 1.2 Настроить Redis для кеширования и pub/sub
+- [x] 1.3 Настроить Qdrant vector database
+- [x] 1.4 Создать Alembic миграции для базовой схемы БД (users, user_agents, user_orchestrators, chat_sessions, messages, tasks, approval_requests)
+- [x] 1.5 Настроить JWT authentication provider и секретные ключи
+- [x] 1.6 Настроить Docker Compose для локальной разработки
 - [ ] 1.7 Настроить Prometheus + Grafana для мониторинга
 
 ## 2. User Isolation Middleware
 
-- [ ] 2.1 Реализовать UserIsolationMiddleware класс для FastAPI
-- [ ] 2.2 Реализовать извлечение user_id из JWT токена в Authorization header
-- [ ] 2.3 Реализовать инжекцию user context в request.state (user_id, user_prefix, db_filter)
-- [ ] 2.4 Реализовать автоматическую фильтрацию для всех `/my/*` endpoints
-- [ ] 2.5 Реализовать обработку ошибок аутентификации (401/403 responses)
-- [ ] 2.6 Добавить логирование успешных и неудачных попыток аутентификации
+- [x] 2.1 Реализовать UserIsolationMiddleware класс для FastAPI
+- [x] 2.2 Реализовать извлечение user_id из JWT токена в Authorization header
+- [x] 2.3 Реализовать инжекцию user context в request.state (user_id, user_prefix, db_filter)
+- [x] 2.4 Реализовать автоматическую фильтрацию для всех `/my/*` endpoints
+- [x] 2.5 Реализовать обработку ошибок аутентификации (401/403 responses)
+- [x] 2.6 Добавить логирование успешных и неудачных попыток аутентификации
 - [ ] 2.7 Написать unit тесты для middleware (валидация JWT, инжекция контекста, изоляция)
 - [ ] 2.8 Написать integration тесты для предотвращения cross-user доступа
 
 ## 3. Database Models (SQLAlchemy ORM)
 
-- [ ] 3.1 Создать User model с полями (id, email, created_at)
-- [ ] 3.2 Создать UserAgent model с полями (id, user_id, name, config, status, created_at)
-- [ ] 3.3 Создать UserOrchestrator model с полями (id, user_id, config, created_at)
-- [ ] 3.4 Создать ChatSession model с полями (id, user_id, created_at)
-- [ ] 3.5 Создать Message model с полями (id, session_id, role, content, agent_id, created_at)
-- [ ] 3.6 Создать Task model с полями (id, session_id, agent_id, status, result, created_at)
-- [ ] 3.7 Создать ApprovalRequest model с полями (id, user_id, type, payload, status, created_at, resolved_at, decision)
-- [ ] 3.8 Добавить индексы для оптимизации queries (user_id, session_id, status)
-- [ ] 3.9 Настроить foreign keys и cascade delete правила
+- [x] 3.1 Создать User model с полями (id, email, created_at)
+- [x] 3.2 Создать UserAgent model с полями (id, user_id, name, config, status, created_at)
+- [x] 3.3 Создать UserOrchestrator model с полями (id, user_id, config, created_at)
+- [x] 3.4 Создать ChatSession model с полями (id, user_id, created_at)
+- [x] 3.5 Создать Message model с полями (id, session_id, role, content, agent_id, created_at)
+- [x] 3.6 Создать Task model с полями (id, session_id, agent_id, status, result, created_at)
+- [x] 3.7 Создать ApprovalRequest model с полями (id, user_id, type, payload, status, created_at, resolved_at, decision)
+- [x] 3.8 Добавить индексы для оптимизации queries (user_id, session_id, status)
+- [x] 3.9 Настроить foreign keys и cascade delete правила
 
 ## 4. Pydantic Schemas
 
-- [ ] 4.1 Создать AgentConfig schema (name, system_prompt, model, tools, concurrency_limit)
-- [ ] 4.2 Создать AgentResponse schema (id, name, status, created_at, config)
-- [ ] 4.3 Создать ChatSessionResponse schema (id, created_at, message_count)
-- [ ] 4.4 Создать MessageRequest schema (content, target_agent optional)
-- [ ] 4.5 Создать MessageResponse schema (id, role, content, agent_id, timestamp)
-- [ ] 4.6 Создать TaskPlan schema (plan_id, tasks[], estimated_cost, estimated_duration)
-- [ ] 4.7 Создать ApprovalRequest schema (id, type, payload, status, timeout)
-- [ ] 4.8 Создать SSEEvent schema (event_type, payload, timestamp, session_id)
-- [ ] 4.9 Создать ErrorResponse schema (detail, error_code, timestamp)
+- [x] 4.1 Создать AgentConfig schema (name, system_prompt, model, tools, concurrency_limit)
+- [x] 4.2 Создать AgentResponse schema (id, name, status, created_at, config)
+- [x] 4.3 Создать ChatSessionResponse schema (id, created_at, message_count)
+- [x] 4.4 Создать MessageRequest schema (content, target_agent optional)
+- [x] 4.5 Создать MessageResponse schema (id, role, content, agent_id, timestamp)
+- [x] 4.6 Создать TaskPlan schema (plan_id, tasks[], estimated_cost, estimated_duration)
+- [x] 4.7 Создать ApprovalRequest schema (id, type, payload, status, timeout)
+- [x] 4.8 Создать SSEEvent schema (event_type, payload, timestamp, session_id)
+- [x] 4.9 Создать ErrorResponse schema (detail, error_code, timestamp)
 
 ## 5. Agent Context Store (Qdrant Integration)
 
-- [ ] 5.1 Реализовать AgentContextStore класс для управления Qdrant collections
-- [ ] 5.2 Реализовать создание per-agent Qdrant collection (user{id}_{agent_name}_context)
-- [ ] 5.3 Реализовать сохранение взаимодействий агента с embeddings (OpenAI text-embedding-3-small)
-- [ ] 5.4 Реализовать hybrid search (vector similarity + metadata filtering)
+- [x] 5.1 Реализовать AgentContextStore класс для управления Qdrant collections
+- [x] 5.2 Реализовать создание per-agent Qdrant collection (user{id}_{agent_name}_context)
+- [x] 5.3 Реализовать сохранение взаимодействий агента с embeddings (OpenAI text-embedding-3-small)
+- [x] 5.4 Реализовать hybrid search (vector similarity + metadata filtering)
 - [ ] 5.5 Реализовать фильтрацию по interaction_type, success, timestamp
 - [ ] 5.6 Реализовать операции управления памятью (clear, prune, export)
 - [ ] 5.7 Реализовать статистику контекста (total_vectors, collection_size, success_rate)
@@ -61,11 +61,11 @@
 
 ## 6. Agent Bus Messaging
 
-- [ ] 6.1 Реализовать AgentBus класс с asyncio.Queue per agent
-- [ ] 6.2 Реализовать регистрацию агентов с max_concurrency параметром
-- [ ] 6.3 Реализовать дерегистрацию агентов с graceful shutdown
-- [ ] 6.4 Реализовать worker tasks для обработки очередей агентов
-- [ ] 6.5 Реализовать контроль concurrency (max 3 задачи одновременно per agent)
+- [x] 6.1 Реализовать AgentBus класс с asyncio.Queue per agent
+- [x] 6.2 Реализовать регистрацию агентов с max_concurrency параметром
+- [x] 6.3 Реализовать дерегистрацию агентов с graceful shutdown
+- [x] 6.4 Реализовать worker tasks для обработки очередей агентов
+- [x] 6.5 Реализовать контроль concurrency (max 3 задачи одновременно per agent)
 - [ ] 6.6 Реализовать координацию при оркестрации (зависимости между задачами)
 - [ ] 6.7 Реализовать передачу результатов между зависимыми задачами
 - [ ] 6.8 Реализовать retry механизм для временных ошибок (exponential backoff)
@@ -76,11 +76,11 @@
 
 ## 7. Personal Agents Management
 
-- [ ] 7.1 Реализовать ContextualAgent класс с RAG интеграцией
-- [ ] 7.2 Реализовать CRUD операции для агентов (create, read, update, delete)
-- [ ] 7.3 Реализовать генерацию уникального agent_id (user{id}_{name}_{version})
-- [ ] 7.4 Реализовать валидацию конфигурации агента (Pydantic)
-- [ ] 7.5 Реализовать отслеживание статуса агента (ready, busy, error)
+- [x] 7.1 Реализовать ContextualAgent класс с RAG интеграцией
+- [x] 7.2 Реализовать CRUD операции для агентов (create, read, update, delete)
+- [x] 7.3 Реализовать генерацию уникального agent_id (user{id}_{name}_{version})
+- [x] 7.4 Реализовать валидацию конфигурации агента (Pydantic)
+- [x] 7.5 Реализовать отслеживание статуса агента (ready, busy, error)
 - [ ] 7.6 Реализовать health checks для агентов (каждые 60 секунд)
 - [ ] 7.7 Реализовать автоматическое восстановление агентов из статуса error
 - [ ] 7.8 Реализовать метрики агентов (total_tasks, success_rate, average_duration)

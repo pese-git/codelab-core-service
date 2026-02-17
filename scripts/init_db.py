@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import AsyncSessionLocal, engine
-from app.models import User, UserAgent
+from app.models import User, UserProject, UserAgent
 
 
 async def create_seed_data() -> None:
@@ -40,7 +40,19 @@ async def create_seed_data() -> None:
             
             print(f"✓ Created test user: {test_user.email} (ID: {test_user.id})")
             
-            # Create sample agents for test user
+            # Create Default Project for user
+            default_project = UserProject(
+                id=uuid4(),
+                user_id=test_user.id,
+                name="Default Project",
+                workspace_path="/Users/test/projects/default"
+            )
+            session.add(default_project)
+            await session.flush()
+            
+            print(f"✓ Created default project: {default_project.name} (ID: {default_project.id})")
+            
+            # Create sample agents for default project
             agents_config = [
                 {
                     "name": "CodeAssistant",
@@ -75,18 +87,23 @@ async def create_seed_data() -> None:
                 agent = UserAgent(
                     id=uuid4(),
                     user_id=test_user.id,
+                    project_id=default_project.id,
                     name=agent_data["name"],
                     config=agent_data["config"],
                     status="ready"
                 )
                 session.add(agent)
-                print(f"✓ Created agent: {agent.name} (ID: {agent.id})")
+                print(f"✓ Created agent: {agent.name} (ID: {agent.id}) in project '{default_project.name}'")
             
             await session.commit()
             print("\n✓ Seed data created successfully!")
             print(f"\nTest user credentials:")
             print(f"  Email: {test_user.email}")
             print(f"  User ID: {test_user.id}")
+            print(f"\nDefault Project:")
+            print(f"  Project ID: {default_project.id}")
+            print(f"  Project Name: {default_project.name}")
+            print(f"  Agents Count: {len(agents_config)}")
             print(f"\nYou can generate a JWT token using:")
             print(f"  python scripts/generate_test_jwt.py {test_user.id}")
             
@@ -110,6 +127,7 @@ async def init_database() -> None:
             Task,
             User,
             UserAgent,
+            UserProject,
             UserOrchestrator,
         )
         

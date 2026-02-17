@@ -19,12 +19,16 @@ class ChatSession(Base):
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    project_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="chat_sessions")
+    project: Mapped["UserProject"] = relationship("UserProject", back_populates="chat_sessions")
     messages: Mapped[list["Message"]] = relationship(
         "Message", back_populates="session", cascade="all, delete-orphan"
     )
@@ -33,7 +37,10 @@ class ChatSession(Base):
     )
 
     # Indexes
-    __table_args__ = (Index("ix_chat_sessions_user_id_created_at", "user_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_chat_sessions_user_id_project_id_created_at", "user_id", "project_id", "created_at"),
+        Index("ix_chat_sessions_project_id_created_at", "project_id", "created_at"),
+    )
 
     def __repr__(self) -> str:
         return f"<ChatSession(id={self.id}, user_id={self.user_id})>"

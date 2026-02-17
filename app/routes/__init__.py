@@ -1,5 +1,5 @@
 """API routes."""
 
-from app.routes import agents, chat, health
+from app.routes import agents, chat, health, projects
 
-__all__ = ["agents", "chat", "health"]
+__all__ = ["agents", "chat", "health", "projects"]

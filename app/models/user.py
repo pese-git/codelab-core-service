@@ -21,6 +21,9 @@ class User(Base):
     )
 
     # Relationships
+    projects: Mapped[list["UserProject"]] = relationship(
+        "UserProject", back_populates="user", cascade="all, delete-orphan"
+    )
     agents: Mapped[list["UserAgent"]] = relationship(
         "UserAgent", back_populates="user", cascade="all, delete-orphan"
     )
