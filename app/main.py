@@ -13,8 +13,9 @@ from app.logging_config import configure_logging, get_logger
 from app.middleware.user_isolation import UserIsolationMiddleware
 from app.qdrant_client import close_qdrant
 from app.redis_client import close_redis
-from app.routes import health, streaming, projects, project_agents, project_chat
+from app.routes import health, streaming, projects, project_agents, project_chat, monitoring
 from app.core.stream_manager import close_stream_manager
+from app.core.worker_space_manager import get_worker_space_manager
 
 # Configure logging
 configure_logging()
@@ -32,12 +33,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.debug:
         await init_db()
     
+    # Initialize WorkerSpaceManager singleton
+    manager = get_worker_space_manager()
+    logger.info("worker_space_manager_initialized")
+    
     logger.info("application_started")
     
     yield
     
     # Shutdown
     logger.info("application_shutting_down")
+    
+    # Graceful shutdown of all worker spaces
+    await manager.cleanup_all()
+    logger.info("worker_spaces_cleanup_completed")
+    
     await close_stream_manager()
     await close_db()
     await close_redis()
@@ -104,6 +114,7 @@ app.include_router(projects.router)
 app.include_router(project_agents.router)
 app.include_router(project_chat.router)
 app.include_router(streaming.project_router)
+app.include_router(monitoring.router)
 
 
 @app.get("/")

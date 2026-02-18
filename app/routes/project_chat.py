@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
 from app.core.stream_manager import get_stream_manager
+from app.core.user_worker_space import UserWorkerSpace
 from app.database import get_db
+from app.dependencies import get_worker_space
 from app.middleware.project_validation import get_project_with_validation
 from app.middleware.user_isolation import get_current_user_id
 from app.models.chat_session import ChatSession
@@ -43,6 +45,7 @@ async def create_project_session(
     request: Request,
     db: AsyncSession = Depends(get_db),
     project: UserProject = Depends(get_project_with_validation),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> ChatSessionResponse:
     """Create new chat session in project."""
     user_id = get_current_user_id(request)
@@ -67,6 +70,7 @@ async def list_project_sessions(
     request: Request,
     db: AsyncSession = Depends(get_db),
     project: UserProject = Depends(get_project_with_validation),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> ChatSessionListResponse:
     """List all chat sessions in project."""
     user_id = get_current_user_id(request)
@@ -112,6 +116,7 @@ async def get_project_messages(
     request: Request,
     db: AsyncSession = Depends(get_db),
     project: UserProject = Depends(get_project_with_validation),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
     limit: int = 50,
     offset: int = 0,
 ) -> MessageListResponse:
@@ -180,6 +185,7 @@ async def send_project_message(
     redis: Redis = Depends(get_redis),
     qdrant: AsyncQdrantClient | None = Depends(get_qdrant),
     project: UserProject = Depends(get_project_with_validation),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> MessageResponse:
     """Send message to chat session in project (direct or orchestrated mode)."""
     user_id = get_current_user_id(request)
@@ -230,14 +236,9 @@ async def send_project_message(
     
     # Direct mode: target_agent specified
     if message_request.target_agent:
-        # Get agent manager with project context
-        agent_manager = AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
+        # Get agent from workspace (per-project cache and bus)
         try:
             target_agent_uuid = UUID(message_request.target_agent)
-            agent_response = await agent_manager.get_agent_by_project(
-                agent_id=target_agent_uuid,
-                project_id=project_id,
-            )
         except ValueError:
             # If not a valid UUID, treat as error
             logger.warning(f"Invalid agent_id: {message_request.target_agent}")
@@ -246,8 +247,24 @@ async def send_project_message(
                 detail="target_agent must be a valid agent UUID",
             )
         
+        # Get agent from workspace cache
+        agent = await workspace.get_agent(target_agent_uuid)
+        if not agent:
+            logger.warning(f"Agent not found in workspace: agent_id={target_agent_uuid}, project_id={project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent '{message_request.target_agent}' not found in this project",
+            )
+        
+        # Get agent config from database for response
+        agent_manager = AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
+        agent_response = await agent_manager.get_agent_by_project(
+            agent_id=target_agent_uuid,
+            project_id=project_id,
+        )
+        
         if not agent_response:
-            logger.warning(f"Agent not found: agent_id={message_request.target_agent}, project_id={project_id}")
+            logger.warning(f"Agent config not found: agent_id={target_agent_uuid}, project_id={project_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Agent '{message_request.target_agent}' not found in this project",
@@ -486,6 +503,7 @@ async def delete_project_session(
     request: Request,
     db: AsyncSession = Depends(get_db),
     project: UserProject = Depends(get_project_with_validation),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> None:
     """Delete chat session in project."""
     user_id = get_current_user_id(request)

@@ -104,6 +104,7 @@ async def test_agent(db_session: AsyncSession, test_user: User, test_project: Us
         project_id=test_project.id,
         name="test_agent",
         config={
+            "name": "test_agent",
             "system_prompt": "You are a helpful assistant",
             "model": "gpt-4o-mini",
             "temperature": 0.7,

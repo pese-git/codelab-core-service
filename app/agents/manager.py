@@ -115,7 +115,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=AgentConfig.model_validate(agent.config),
+                config=AgentConfig(name=agent.name, **agent.config),
             )
             for agent in agents
         ]

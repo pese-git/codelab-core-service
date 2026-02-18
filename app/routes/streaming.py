@@ -10,7 +10,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.user_worker_space import UserWorkerSpace
 from app.database import get_db
+from app.dependencies import get_worker_space
 from app.middleware.project_validation import get_project_with_validation
 from app.middleware.user_isolation import get_current_user_id
 from app.models.chat_session import ChatSession
@@ -131,6 +133,7 @@ async def subscribe_to_project_events(
     request: Request,
     db: AsyncSession = Depends(get_db),
     project: UserProject = Depends(get_project_with_validation),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
     since: datetime | None = Query(
         default=None,
         description="ISO 8601 timestamp - only return buffered events after this time (prevents duplicates on reconnect)"

@@ -8,7 +8,9 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.manager import AgentManager
+from app.core.user_worker_space import UserWorkerSpace
 from app.database import get_db
+from app.dependencies import get_worker_space
 from app.middleware.project_validation import get_project_with_validation
 from app.middleware.user_isolation import get_current_user_id
 from app.models.user_project import UserProject
@@ -37,6 +39,7 @@ async def create_agent(
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> AgentResponse:
     """Create new agent in project.
 
@@ -59,6 +62,7 @@ async def list_agents(
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> AgentListResponse:
     """List all agents in project.
 
@@ -82,6 +86,7 @@ async def get_agent(
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> AgentResponse:
     """Get agent by ID from project.
 
@@ -117,6 +122,7 @@ async def update_agent(
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> AgentResponse:
     """Update agent in project.
 
@@ -152,6 +158,7 @@ async def delete_agent(
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> None:
     """Delete agent from project.
 
