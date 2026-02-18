@@ -63,7 +63,7 @@ class UserProject(Base):
         cascade="all, delete-orphan"
     )
 
-    # Indexes
+    # Indexes and constraints
     __table_args__ = (
         Index("ix_user_projects_user_id_name", "user_id", "name"),
         Index("ix_user_projects_user_id_created_at", "user_id", "created_at"),

@@ -28,9 +28,10 @@ async def create_project(
     db: AsyncSession = Depends(get_db),
     manager: WorkerSpaceManager = Depends(get_worker_space_manager),
 ) -> ProjectResponse:
-    """Create new project for user with Default Starter Pack.
+    """Create new project for user with Default Starter Pack or return existing.
 
-    Automatically initializes a new project with:
+    If a project with the same name already exists for the user, returns the existing project.
+    Otherwise, automatically initializes a new project with:
     - Default project record in database
     - Default Starter Pack agents (CodeAssistant, DataAnalyst, DocumentWriter)
     - User Worker Space for the project
@@ -42,9 +43,29 @@ async def create_project(
         manager: Worker space manager
 
     Returns:
-        ProjectResponse with created project information
+        ProjectResponse with created or existing project information
     """
+    from app.logging_config import get_logger
+    logger = get_logger(__name__)
+    
     user_id = get_current_user_id(request)
+
+    # Check if project with same name already exists for this user
+    result = await db.execute(
+        select(UserProject).where(
+            (UserProject.user_id == user_id) & (UserProject.name == project_data.name)
+        )
+    )
+    existing_project = result.scalar_one_or_none()
+    
+    if existing_project:
+        logger.info(
+            "project_already_exists",
+            user_id=str(user_id),
+            project_id=str(existing_project.id),
+            project_name=project_data.name,
+        )
+        return ProjectResponse.model_validate(existing_project)
 
     # Create project in database
     project = UserProject(
@@ -58,8 +79,6 @@ async def create_project(
     # Initialize Default Starter Pack agents for the project
     try:
         agents = await initialize_starter_pack(db, user_id, project.id)
-        from app.logging_config import get_logger
-        logger = get_logger(__name__)
         logger.info(
             "starter_pack_initialized",
             user_id=str(user_id),
@@ -68,8 +87,6 @@ async def create_project(
         )
     except Exception as e:
         # Log error but don't fail project creation
-        from app.logging_config import get_logger
-        logger = get_logger(__name__)
         logger.warning(
             "starter_pack_init_error",
             user_id=str(user_id),
@@ -80,6 +97,13 @@ async def create_project(
     # Commit all changes (project + agents)
     await db.commit()
     await db.refresh(project)
+
+    logger.info(
+        "project_created",
+        user_id=str(user_id),
+        project_id=str(project.id),
+        project_name=project.name,
+    )
 
     return ProjectResponse.model_validate(project)
 
