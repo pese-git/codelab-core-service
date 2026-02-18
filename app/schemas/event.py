@@ -59,6 +59,20 @@ class StreamEvent(BaseModel):
         """
         return self.model_dump_json() + "\n"
 
+    def to_sse_format(self) -> str:
+        """
+        Convert to SSE (Server-Sent Events) format.
+        
+        Returns SSE format with event type and JSON data.
+        Format: event: <event_type>\ndata: <json>\n\n
+        
+        Returns:
+            String in SSE format
+        """
+        event_type = self.event_type.value if hasattr(self.event_type, 'value') else str(self.event_type)
+        json_data = self.model_dump_json()
+        return f"event: {event_type}\ndata: {json_data}\n\n"
+
 
 # Backward compatibility aliases
 SSEEventType = StreamEventType
