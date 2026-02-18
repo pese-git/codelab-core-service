@@ -42,29 +42,108 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1YWM3YjFkNC01MjFlLTRmYmUtYWUxNy0
 
 ### 4. Тестирование API
 
+#### 4.1 Создание проекта
+
 ```bash
 # Установить токен в переменную
 export TOKEN="your-jwt-token-here"
 
-# Получить список агентов
-curl -X GET "http://localhost:8000/my/agents/" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" | jq .
-
-# Создать нового агента
-curl -X POST "http://localhost:8000/my/agents/" \
+# Создать новый проект
+curl -X POST "http://localhost:8000/my/projects/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "MyAgent",
-    "system_prompt": "You are a helpful assistant",
-    "model": "gpt-4-turbo-preview",
-    "tools": [],
+    "name": "My First Project",
+    "workspace_path": "/Users/john/projects/first"
+  }' | jq .
+
+# Сохранить ID проекта (из ответа, поле "id")
+export PROJECT_ID="550e8400-e29b-41d4-a716-446655440000"
+```
+
+Ожидаемый ответ:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "My First Project",
+  "workspace_path": "/Users/john/projects/first",
+  "created_at": "2026-02-18T05:30:00Z",
+  "updated_at": "2026-02-18T05:30:00Z"
+}
+```
+
+#### 4.2 Просмотр агентов проекта
+
+```bash
+# Получить список агентов (автоматически созданы Starter Pack)
+curl -X GET "http://localhost:8000/my/projects/$PROJECT_ID/agents/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" | jq .
+
+# Ожидается: CodeAssistant, DataAnalyst, DocumentWriter
+```
+
+#### 4.3 Создание нового агента
+
+```bash
+# Создать нового пользовательского агента в проекте
+curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/agents/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "MyCustomAgent",
+    "system_prompt": "You are a helpful AI assistant specialized in Python development",
+    "model": "openrouter/openai/gpt-4.1",
+    "tools": ["code_executor", "file_reader"],
     "concurrency_limit": 3,
     "temperature": 0.7,
     "max_tokens": 4096,
-    "metadata": {}
+    "metadata": {"specialty": "python"}
   }' | jq .
+```
+
+#### 4.4 Создание чат-сессии
+
+```bash
+# Создать новую сессию чата в проекте
+curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/sessions/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' | jq .
+
+# Сохранить ID сессии (из ответа, поле "id")
+export SESSION_ID="550e8400-e29b-41d4-a716-446655440001"
+```
+
+#### 4.5 Отправка сообщения агенту
+
+```bash
+# Режим 1: Прямой вызов конкретного агента ⚡ (быстрый, 1-2 сек)
+curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/$SESSION_ID/message/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Write me a Python function to validate email",
+    "target_agent": "MyCustomAgent"
+  }' | jq .
+
+# Режим 2: Автоматический 🧠 (медленнее, 5-10 сек, оркестратор анализирует)
+curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/$SESSION_ID/message/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Plan and implement a complete REST API with authentication"
+  }' | jq .
+```
+
+#### 4.6 Получение истории чата
+
+```bash
+# Получить все сообщения из сессии
+curl -X GET "http://localhost:8000/my/projects/$PROJECT_ID/chat/sessions/$SESSION_ID/messages/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" | jq .
 ```
 
 ## Использование Gradio UI
@@ -97,6 +176,9 @@ docker logs codelab-core-service --tail 50
 # Проверить health endpoint
 curl http://localhost:8000/health
 
+# Проверить readiness endpoint (проверяет все зависимости)
+curl http://localhost:8000/ready
+
 # Проверить подключение к PostgreSQL
 docker exec codelab-postgres psql -U postgres -d codelab -c "SELECT version();"
 
@@ -109,9 +191,23 @@ curl http://localhost:6333/collections
 
 ## Типичные проблемы и решения
 
-### ❌ Ошибка: "500 Internal Server Error" при создании агента
+### ❌ Ошибка: "404 Project not found"
 
-**Причина:** Пользователь с указанным `user_id` не существует в базе данных.
+**Причина:** Проект не существует или ID неверный.
+
+**Решение:**
+```bash
+# 1. Проверить список проектов
+curl -X GET "http://localhost:8000/my/projects/" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# 2. Убедиться, что используется правильный PROJECT_ID
+export PROJECT_ID="<копировать из списка выше>"
+```
+
+### ❌ Ошибка: "500 Internal Server Error" при создании проекта
+
+**Причина:** Пользователь не существует в базе данных или ошибка конфигурации.
 
 **Решение:**
 ```bash
@@ -148,13 +244,29 @@ docker-compose up -d
 
 # Проверить статус
 docker ps --filter "name=codelab"
+
+# Если конкретный сервис не запущен, перезапустить все
+docker-compose restart
 ```
 
-### ❌ Ошибка: "ForeignKeyViolationError" при создании агента
+### ❌ Ошибка: "ForeignKeyViolationError" при создании проекта
 
 **Причина:** Пользователь не существует в таблице `users`.
 
-**Решение:** См. первую проблему выше.
+**Решение:** См. проблему "500 Internal Server Error" выше.
+
+### ❌ Ошибка: "Agent not found" при отправке сообщения
+
+**Причина:** Агент с таким именем не существует в проекте или имя неверно.
+
+**Решение:**
+```bash
+# Проверить список агентов в проекте
+curl -X GET "http://localhost:8000/my/projects/$PROJECT_ID/agents/" \
+  -H "Authorization: Bearer $TOKEN" | jq '.agents[].name'
+
+# Использовать точное имя агента в target_agent
+```
 
 ## Переменные окружения
 
@@ -172,8 +284,7 @@ OPENAI_API_KEY=sk-your-api-key-here
 
 # LiteLLM (опционально, для использования собственного LLM прокси)
 OPENAI_BASE_URL=http://localhost:4000  # URL вашего LiteLLM сервера
-OPENAI_MODEL=gpt-4-turbo-preview        # Модель, поддерживаемая вашим LiteLLM
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_MODEL=openrouter/openai/gpt-4.1  # Модель, поддерживаемая вашим LiteLLM
 
 # JWT секрет (измените в продакшене!)
 JWT_SECRET_KEY=your-secret-key-change-in-production
@@ -186,6 +297,9 @@ REDIS_URL=redis://localhost:6379/0
 
 # Qdrant
 QDRANT_URL=http://localhost:6333
+
+# Debug режим (выключить в продакшене)
+DEBUG=false
 ```
 
 ### Использование LiteLLM
@@ -218,9 +332,79 @@ QDRANT_URL=http://localhost:6333
 3. Нажмите **"Authorize"**
 4. Теперь можете тестировать все endpoints
 
+### Примеры в Swagger:
+
+1. **POST /my/projects/** - Создать проект
+   - Вставьте JSON с `name` и `workspace_path`
+   - Получите ID проекта
+
+2. **GET /my/projects/{project_id}/agents/** - Список агентов
+   - Подставьте `project_id` из шага 1
+   - Увидите Starter Pack агентов
+
+3. **POST /my/projects/{project_id}/chat/sessions/** - Создать сессию
+   - Подставьте `project_id`
+   - Получите `session_id`
+
+4. **POST /my/projects/{project_id}/chat/{session_id}/message/** - Отправить сообщение
+   - Подставьте `project_id` и `session_id`
+   - Вставьте message с `content` и опциональным `target_agent`
+
+## Практический пример: Полный цикл
+
+```bash
+#!/bin/bash
+
+# Установить переменные
+export TOKEN="your-jwt-token-here"
+export BASE_URL="http://localhost:8000"
+
+# Шаг 1: Создать проект
+PROJECT=$(curl -s -X POST "$BASE_URL/my/projects/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Demo Project",
+    "workspace_path": "/workspace/demo"
+  }')
+
+PROJECT_ID=$(echo $PROJECT | jq -r '.id')
+echo "Created project: $PROJECT_ID"
+
+# Шаг 2: Создать сессию
+SESSION=$(curl -s -X POST "$BASE_URL/my/projects/$PROJECT_ID/chat/sessions/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}')
+
+SESSION_ID=$(echo $SESSION | jq -r '.id')
+echo "Created session: $SESSION_ID"
+
+# Шаг 3: Отправить сообщение
+MESSAGE=$(curl -s -X POST "$BASE_URL/my/projects/$PROJECT_ID/chat/$SESSION_ID/message/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Write a Python function to calculate factorial",
+    "target_agent": "CodeAssistant"
+  }')
+
+echo "Message response:"
+echo $MESSAGE | jq .
+
+# Шаг 4: Получить историю
+HISTORY=$(curl -s -X GET "$BASE_URL/my/projects/$PROJECT_ID/chat/sessions/$SESSION_ID/messages/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json")
+
+echo "Chat history:"
+echo $HISTORY | jq '.messages[] | "\(.role): \(.content)"'
+```
+
 ## Дополнительные ресурсы
 
 - [REST API документация](./rest-api.md)
 - [SSE Event Streaming](./sse-event-streaming.md)
 - [Gradio Client документация](../scripts/GRADIO_CLIENT.md)
 - [Технические требования](./techincal-requrements.md)
+- [Architecture Overview](./architecture/system-overview.md)

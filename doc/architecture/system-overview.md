@@ -1,626 +1,594 @@
-# Обзор архитектуры системы CodeLab Core Service
+# Обзор архитектуры системы CodeLab Core Service v0.2.0
 
-## Введение
+## 📖 Введение
 
-CodeLab Core Service - это персональная мультиагентная AI платформа с полной изоляцией пользователей. Каждый пользователь имеет свою изолированную AI команду с персональными агентами, семантической памятью и взаимодействием в реальном времени.
+CodeLab Core Service - это персональная мультиагентная AI платформа с полной изоляцией пользователей. Архитектура основана на **проектах** - каждый пользователь создает проекты, каждый проект имеет своих агентов, сессии чатов и семантическую память.
 
-## Ключевые принципы архитектуры
+---
+
+## 🎯 Ключевые принципы архитектуры
 
 ### 1. 100% Изоляция пользователей
-- Каждый пользователь имеет только своих агентов
-- Нет глобального состояния между пользователями
-- Middleware-based изоляция на всех `/my/*` endpoints
-- Персональные коллекции в Qdrant для каждого агента
 
-### 2. Два режима работы
+- **User Level**: Каждый пользователь видит только свои проекты
+- **Project Level**: Каждый проект содержит собственные агенты и сессии
+- **Agent Level**: Каждый агент имеет персональный Qdrant контекст
+- **Middleware**: Автоматическая проверка доступа на всех `/my/*` endpoints
 
-#### 🧠 Автоматический режим
-- Оркестратор планирует граф задач
-- Координирует выполнение между агентами
-- Время выполнения: 5-10 секунд
-- Подходит для сложных многошаговых задач
+```
+User123
+├─ Project A
+│  ├─ CodeAssistant (со своим Qdrant контекстом)
+│  ├─ DataAnalyst (со своим Qdrant контекстом)
+│  └─ Chat Sessions
+└─ Project B
+   ├─ FrontendDeveloper
+   ├─ BackendDeveloper
+   └─ Chat Sessions
 
-#### ⚡ Прямой вызов
-- Пользователь вызывает конкретного агента через `@agent_name`
-- Обходит оркестратор для скорости
-- Время выполнения: 1-2 секунды
-- Подходит для простых запросов
-
-### 3. Семантическая память
-- Каждый агент имеет персональный Qdrant контекст
-- Поддержка 1M+ векторов для RAG
-- Гибридный поиск с фильтрацией
-- Автоматическое управление памятью
-
-### 4. Real-time взаимодействие
-- Streaming Fetch API для мгновенных обновлений (NDJSON формат)
-- Буферизация событий в Redis (последние 100 событий, TTL 5 минут)
-- Поддержка переподключений
-- Heartbeat для поддержания соединения
-
-## Высокоуровневая архитектура
-
-```mermaid
-graph TB
-    subgraph "CLIENT LAYER"
-        WebUI[Web UI]
-        Mobile[Mobile App]
-        API[API Client]
-    end
-    
-    subgraph "API GATEWAY LAYER"
-        FastAPI[FastAPI Application]
-        Middleware[User Isolation Middleware]
-        Routes[Routes: Agents, Chat, Streaming, Health]
-    end
-    
-    subgraph "BUSINESS LOGIC LAYER"
-        subgraph "User Worker Space"
-            AgentMgr[Agent Manager]
-            AgentBus[Agent Bus]
-            StreamMgr[Stream Manager]
-            CtxAgent[Contextual Agent]
-            Orch[Orchestrator]
-            Approval[Approval Manager]
-        end
-    end
-    
-    subgraph "DATA LAYER"
-        Postgres[(PostgreSQL<br/>Users, Agents,<br/>Sessions, Messages)]
-        Redis[(Redis<br/>Queues, Cache,<br/>Stream Buffer)]
-        Qdrant[(Qdrant<br/>Vectors,<br/>Context, RAG)]
-    end
-    
-    WebUI --> FastAPI
-    Mobile --> FastAPI
-    API --> FastAPI
-    
-    FastAPI --> Middleware
-    Middleware --> Routes
-    
-    Routes --> AgentMgr
-    Routes --> AgentBus
-    Routes --> StreamMgr
-    
-    AgentMgr --> CtxAgent
-    AgentBus --> CtxAgent
-    CtxAgent --> Orch
-    CtxAgent --> Approval
-    
-    AgentMgr --> Postgres
-    AgentMgr --> Redis
-    AgentMgr --> Qdrant
-    
-    CtxAgent --> Qdrant
-    StreamMgr --> Redis
-    AgentBus --> Redis
-    
-    Routes --> Postgres
+User456 (изолирован, не видит User123 ресурсы)
+├─ Project C
+│  └─ ...
 ```
 
-## Компоненты системы
+### 2. Два режима работы с агентами
+
+#### ⚡ Прямой вызов (Direct Call) - 1-2 сек
+- Пользователь указывает конкретного агента: `target_agent: "CodeAssistant"`
+- Агент сразу выполняет задачу
+- Минимальная задержка, максимальная скорость
+- Идеально для простых запросов
+
+#### 🧠 Автоматический режим (Orchestrated) - 5-10 сек
+- Оркестратор анализирует запрос
+- Планирует последовательность задач (DAG)
+- Координирует несколько агентов
+- Идеально для сложных многошаговых задач
+
+### 3. Семантическая память каждого агента
+
+- **Per-Agent Storage**: Каждый агент имеет свою Qdrant коллекцию
+- **RAG Integration**: Автоматический поиск релевантного контекста при запросе
+- **Масштабируемость**: До 1M+ векторов на агента
+- **Метаданные**: Фильтрация по типу взаимодействия, времени, успеху
+
+### 4. Real-time взаимодействие
+
+- **Server-Sent Events (SSE)**: NDJSON формат для streaming
+- **Event Buffering**: Redis кэширует последние события (TTL 5 минут)
+- **Heartbeat**: Автоматическое поддержание соединения
+- **Auto-reconnect**: Клиент может переподключиться и получить историю
+
+---
+
+## 🏗️ Высокоуровневая архитектура
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CLIENT LAYER                            │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Web UI / Mobile App / API Client                    │   │
+│  │  (JWT Auth + User Isolation автоматическая)         │   │
+│  └──────────────────────────────────────────────────────┘   │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│              API GATEWAY LAYER (FastAPI)                    │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ User Isolation Middleware (JWT → user_id)           │   │
+│  │ Project Validation Middleware (project ownership)    │   │
+│  │ Routes:                                              │   │
+│  │  ├─ /my/projects/*              (CRUD проектов)     │   │
+│  │  ├─ /my/projects/{pid}/agents/* (агенты проекта)   │   │
+│  │  ├─ /my/projects/{pid}/chat/*   (чат проекта)      │   │
+│  │  └─ /health /ready              (здоровье)         │   │
+│  └──────────────────────────────────────────────────────┘   │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│           BUSINESS LOGIC LAYER                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  WorkerSpaceManager                                  │   │
+│  │  ├─ create_worker_space(project_id)                │   │
+│  │  ├─ get_worker_space(project_id)                   │   │
+│  │  └─ delete_worker_space(project_id)                │   │
+│  └──────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Per-Project Components                              │   │
+│  │  ├─ Agent Manager (создание/удаление/обновление)   │   │
+│  │  ├─ Agent Bus (координация агентов)                │   │
+│  │  ├─ Contextual Agents (выполнение с RAG)           │   │
+│  │  ├─ Orchestrator (планирование DAG)                │   │
+│  │  ├─ Approval Manager (контроль опасных операций)   │   │
+│  │  └─ Stream Manager (real-time события)             │   │
+│  └──────────────────────────────────────────────────────┘   │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+          ┌──────────────┼──────────────┬──────────────┐
+          ▼              ▼              ▼              ▼
+    ┌─────────┐    ┌──────────┐   ┌────────┐   ┌──────────────┐
+    │PostgreSQL   │  Redis   │   │ Qdrant │   │  LLM API     │
+    │            │          │   │        │   │              │
+    │ Users      │ Queues   │   │Vectors │   │ (OpenAI/etc) │
+    │ Projects   │ Cache    │   │RAG     │   │              │
+    │ Agents     │ Events   │   │Context │   │              │
+    │ Sessions   │ Sessions │   │        │   │              │
+    │ Messages   │          │   │        │   │              │
+    └─────────┘    └──────────┘   └────────┘   └──────────────┘
+```
+
+---
+
+## 🔧 Компоненты системы
 
 ### API Gateway Layer
 
-#### FastAPI Application
-- **Назначение**: Основной HTTP сервер и точка входа
-- **Технологии**: FastAPI 0.115+, Uvicorn
+#### FastAPI Application (`app/main.py`)
+- **Назначение**: HTTP сервер и точка входа
+- **Технологии**: FastAPI 0.115+, Uvicorn, Pydantic 2.0
 - **Функции**:
-  - Маршрутизация запросов
-  - Валидация данных (Pydantic)
-  - OpenAPI документация
-  - CORS middleware
+  - Маршрутизация запросов к routes
+  - Валидация данных (Pydantic schemas)
+  - Документация OpenAPI (Swagger/ReDoc)
+  - CORS middleware для фронтенда
+  - Lifespan управление (startup/shutdown)
 
-#### User Isolation Middleware
-- **Назначение**: Обеспечение изоляции пользователей
-- **Механизм**: JWT токен → User ID → Request State
-- **Защита**: Все `/my/*` endpoints требуют аутентификации
-- **Инъекция контекста**:
-  - `request.state.user_id` - UUID пользователя
-  - `request.state.user_prefix` - префикс для ресурсов
-  - `request.state.db_filter` - фильтр для БД запросов
+#### User Isolation Middleware (`app/middleware/user_isolation.py`)
+- **Назначение**: Извлечение user_id из JWT токена и инъекция в контекст
+- **Логика**:
+  1. Проверить заголовок `Authorization: Bearer <token>`
+  2. Декодировать JWT токен
+  3. Извлечь `user_id` из claim `sub`
+  4. Инъектировать в `request.state.user_id`
+- **Защита**: 401 Unauthorized если токен отсутствует или невалидный
+
+#### Project Validation Middleware (`app/middleware/project_validation.py`)
+- **Назначение**: Проверка прав доступа к проекту
+- **Логика**:
+  1. Получить `project_id` из URL параметра
+  2. Проверить в БД: `project.user_id == request.state.user_id`
+  3. Возвращать 404 если проект не найден или не принадлежит пользователю
+- **Защита**: 403 Forbidden/404 Not Found для неавторизованного доступа
+
+---
 
 ### Business Logic Layer
 
-#### Agent Manager
-- **Назначение**: Управление жизненным циклом агентов
-- **Операции**:
-  - Создание агента (CRUD)
-  - Обновление конфигурации
-  - Удаление агента
-  - Получение списка агентов
-- **Интеграция**:
-  - PostgreSQL для метаданных
-  - Redis для кэширования конфигураций
-  - Qdrant для инициализации контекста
+#### WorkerSpaceManager (`app/core/worker_space_manager.py`)
+- **Назначение**: Управление рабочими пространствами проектов
+- **Ответственность**:
+  - Создание новых worker space при создании проекта
+  - Кэширование активных worker spaces в памяти
+  - Удаление worker spaces при удалении проекта
+  - Предоставление доступа к компонентам проекта
+- **Структура**:
+  ```python
+  class WorkerSpaceManager:
+      _spaces: Dict[UUID, ProjectWorkerSpace] = {}
+      
+      async def create_worker_space(self, project_id: UUID) -> ProjectWorkerSpace
+      async def get_worker_space(self, project_id: UUID) -> ProjectWorkerSpace
+      async def delete_worker_space(self, project_id: UUID) -> None
+  ```
 
-#### Agent Bus
-- **Назначение**: Координация задач между агентами
+#### Agent Manager (`app/agents/manager.py`)
+- **Назначение**: Управление агентами проекта
+- **CRUD операции**:
+  - Создание агента с инициализацией Qdrant контекста
+  - Чтение метаданных агента
+  - Обновление конфигурации
+  - Удаление агента с очисткой контекста
+- **Интеграция**:
+  - PostgreSQL: метаданные агента
+  - Qdrant: коллекции для каждого агента
+  - Redis: кэширование конфигураций
+
+#### Contextual Agent (`app/agents/contextual_agent.py`)
+- **Назначение**: Выполнение задач с использованием семантической памяти
+- **Архитектура**:
+  ```
+  Input (задача)
+    ↓
+  Retrieve Context (RAG из Qdrant)
+    ↓
+  Build Prompt (с контекстом + system prompt)
+    ↓
+  Call LLM (OpenAI/LiteLLM)
+    ↓
+  Store Interaction (в Qdrant контекст агента)
+    ↓
+  Return Response
+  ```
+- **RAG Integration**:
+  - Вектоизация запроса в embedding
+  - Поиск K похожих взаимодействий в Qdrant
+  - Добавление контекста в prompt
+  - Сохранение взаимодействия для будущей реиспользования
+
+#### Agent Bus (`app/core/agent_bus.py`)
+- **Назначение**: Координация выполнения задач между агентами
 - **Архитектура**: asyncio.Queue per agent
 - **Функции**:
-  - Регистрация агентов
+  - Регистрация агентов при создании
   - Управление очередями задач
-  - Контроль параллелизма (max 3 задачи)
+  - Контроль параллелизма (concurrency_limit)
   - Обработка результатов и ошибок
-- **Метрики**:
-  - Размер очереди
-  - Активные задачи
-  - Статистика выполнения
+  - Метрики выполнения (успешные, ошибки, время)
 
-#### Contextual Agent
-- **Назначение**: Агент с семантической памятью
-- **Компоненты**:
-  - LLM интеграция (OpenAI/LiteLLM)
-  - RAG контекст (Qdrant)
-  - История сессий
-  - Обработка инструментов (tools)
-- **Процесс выполнения**:
-  1. Получение запроса пользователя
-  2. Поиск релевантного контекста (RAG)
-  3. Формирование промпта с контекстом
-  4. Вызов LLM
-  5. Сохранение взаимодействия в контекст
+#### Orchestrator (`app/core/orchestrator.py`)
+- **Назначение**: Планирование и координация сложных задач
+- **Алгоритм**:
+  1. Анализ входного запроса
+  2. Разбиение на подзадачи
+  3. Определение агентов для каждой подзадачи
+  4. Построение DAG (directed acyclic graph)
+  5. Параллельное/последовательное выполнение
+  6. Агрегирование результатов
+- **Метрики**: время планирования, время выполнения, успех
 
-#### Stream Manager
-- **Назначение**: Управление real-time событиями через Streaming Fetch API
+#### Approval Manager (`app/core/approval.py`)
+- **Назначение**: Контроль выполнения опасных операций
+- **Типы одобрений**:
+  - Tool approval (разрешение использовать специфический инструмент)
+  - Plan approval (разрешение выполнить сложный план)
+- **Процесс**:
+  1. Агент или оркестратор запрашивают одобрение
+  2. Отправляется SSE событие пользователю
+  3. Пользователь подтверждает или отклоняет
+  4. Агент разблокируется или отменяется
+- **Timeout**: 5 минут по умолчанию
+
+#### Stream Manager (`app/core/stream_manager.py`)
+- **Назначение**: Управление SSE подписками и буферизацией событий
 - **Функции**:
-  - Регистрация streaming соединений (NDJSON формат)
-  - Broadcast событий по сессиям
-  - Буферизация событий в Redis
-  - Heartbeat для поддержания соединений
-  - Буферизация в Redis
-  - Heartbeat (30 сек)
-  - Восстановление при переподключении
-- **Типы событий**:
-  - `DIRECT_AGENT_CALL` - прямой вызов агента
-  - `TASK_STARTED` - начало задачи
-  - `TASK_COMPLETED` - завершение задачи
-  - `CONTEXT_RETRIEVED` - получен контекст
-  - `ERROR` - ошибка выполнения
+  - Подписка на события сессии
+  - Отправка событий всем подписчикам
+  - Буферизация в Redis (FIFO, 100 событий, TTL 5 минут)
+  - Отправка истории при переподключении
+  - Heartbeat для поддержания соединения
 
-### Data Layer
+---
 
-#### PostgreSQL
-- **Назначение**: Основное хранилище метаданных
-- **Схема**:
-  - `users` - пользователи системы
-  - `user_agents` - персональные агенты
-  - `user_orchestrators` - конфигурации оркестраторов
-  - `chat_sessions` - чат сессии
-  - `messages` - сообщения в чатах
-  - `tasks` - задачи агентов
-  - `approval_requests` - запросы на подтверждение
-- **Индексы**: Оптимизированы для user_id фильтрации
-- **Миграции**: Alembic для версионирования схемы
+## 🗄️ Data Layer
 
-#### Redis
-- **Назначение**: Кэш и очереди
-- **Использование**:
-  - Кэш конфигураций агентов (TTL 5 мин)
-  - Буфер streaming событий (последние 100, TTL 5 мин)
-  - Agent Bus очереди
-  - Rate limiting
-  - Distributed locks
-- **Структуры данных**:
-  - Strings для кэша
-  - Lists для буферов событий
-  - Pub/Sub для уведомлений
+### PostgreSQL Database
 
-#### Qdrant
-- **Назначение**: Векторная база для семантической памяти
-- **Коллекции**: `user{id}_{agent_name}_context`
-- **Параметры**:
-  - Размер вектора: 1536 (OpenAI embeddings)
-  - Метрика: Cosine similarity
-  - Индексация: HNSW
-- **Данные**:
-  - Векторы сообщений
-  - Метаданные взаимодействий
-  - История выполнения задач
-- **Операции**:
-  - Hybrid search (векторный + фильтры)
-  - Upsert взаимодействий
-  - Pruning старых векторов
+**Таблицы**:
+```
+users
+├─ id (UUID PK)
+├─ email (unique)
+└─ created_at
 
-## Потоки данных
+user_projects
+├─ id (UUID PK)
+├─ user_id (FK → users)
+├─ name (varchar)
+├─ workspace_path (varchar, nullable)
+├─ created_at
+└─ updated_at
 
-### Поток 1: Прямой вызов агента
+user_agents
+├─ id (UUID PK)
+├─ project_id (FK → user_projects)
+├─ user_id (FK → users, denormalized for performance)
+├─ name (varchar)
+├─ status (enum: ready/busy/error)
+├─ config (jsonb: system_prompt, model, tools, etc)
+├─ created_at
+└─ updated_at
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant FastAPI
-    participant Middleware
-    participant ChatRoute
-    participant AgentMgr
-    participant CtxAgent
-    participant StreamMgr
-    participant Qdrant
-    participant LLM
-    participant Postgres
-    
-    User->>FastAPI: POST /my/chat/{session_id}/message/<br/>{target_agent: "coder"}
-    FastAPI->>Middleware: Authenticate
-    Middleware->>Middleware: Extract user_id from JWT
-    Middleware->>ChatRoute: Forward with user_id
-    
-    ChatRoute->>Postgres: Save user message
-    ChatRoute->>AgentMgr: Get agent by name
-    AgentMgr-->>ChatRoute: Agent config
-    
-    ChatRoute->>StreamMgr: Broadcast DIRECT_AGENT_CALL event
-    ChatRoute->>CtxAgent: Create contextual agent
-    
-    CtxAgent->>Qdrant: Search relevant context (RAG)
-    Qdrant-->>CtxAgent: Top-K context vectors
-    
-    ChatRoute->>StreamMgr: Broadcast CONTEXT_RETRIEVED event
-    
-    CtxAgent->>LLM: Call with context + history
-    LLM-->>CtxAgent: Response
-    
-    CtxAgent->>Qdrant: Save interaction
-    ChatRoute->>Postgres: Save assistant message
-    
-    ChatRoute->>StreamMgr: Broadcast TASK_COMPLETED event
-    ChatRoute-->>User: Return assistant message
+chat_sessions
+├─ id (UUID PK)
+├─ project_id (FK → user_projects)
+├─ user_id (FK → users)
+├─ created_at
+└─ updated_at
+
+messages
+├─ id (UUID PK)
+├─ session_id (FK → chat_sessions)
+├─ user_id (FK → users)
+├─ agent_id (FK → user_agents, nullable)
+├─ role (enum: user/assistant/system)
+├─ content (text)
+├─ timestamp
+└─ metadata (jsonb)
 ```
 
-### Поток 2: Создание агента
+### Redis Cache
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant FastAPI
-    participant Middleware
-    participant AgentsRoute
-    participant AgentMgr
-    participant Postgres
-    participant Redis
-    participant Qdrant
-    
-    User->>FastAPI: POST /my/agents/<br/>{name, config}
-    FastAPI->>Middleware: Authenticate
-    Middleware->>AgentsRoute: Forward with user_id
-    
-    AgentsRoute->>AgentMgr: Create agent
-    AgentMgr->>Postgres: Insert user_agent record
-    AgentMgr->>Qdrant: Initialize collection<br/>user{id}_{name}_context
-    AgentMgr->>Redis: Cache config (TTL 5min)
-    
-    AgentMgr-->>AgentsRoute: Agent response
-    AgentsRoute-->>User: Return agent details
+**Назначение**: Высокоскоростной кэш и очереди
+
+**Структуры данных**:
+```
+Keys:
+agent_config:{agent_id}              → JSON конфиг агента
+agent_status:{agent_id}              → строка статуса
+session_events:{session_id}          → List (FIFO очередь событий)
+user_sessions:{user_id}             → Set активных сессий пользователя
+
+Queues:
+agent_task_queue:{agent_id}         → asyncio.Queue для задач
 ```
 
-### Поток 3: Streaming подключение
+**TTLs**:
+- Конфиги агентов: 1 час
+- События сессии: 5 минут
+- Статусы: 10 минут
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant FastAPI
-    participant Middleware
-    participant StreamRoute
-    participant StreamMgr
-    participant Redis
-    
-    User->>FastAPI: GET /my/sse/{session_id}
-    FastAPI->>Middleware: Authenticate
-    Middleware->>StreamRoute: Forward with user_id
+### Qdrant Vector Database
 
-    StreamRoute->>StreamMgr: Register connection
-    StreamMgr->>StreamMgr: Create asyncio.Queue
-    StreamMgr->>Redis: Get buffered events
-    Redis-->>StreamMgr: Buffered events
+**Назначение**: Хранение эмбеддингов и RAG поиск
 
-    StreamMgr->>User: Send buffered events (NDJSON)
-
-    loop Heartbeat every 30s
-        StreamMgr->>User: Send heartbeat (JSON event)
-    end
-
-    loop On events
-        StreamMgr->>User: Stream events (NDJSON)
-    end
-
-    User->>FastAPI: Disconnect
-    StreamRoute->>StreamMgr: Unregister connection
+**Коллекции** (per agent):
+```
+{agent_id}_context
+├─ Points: эмбеддинги взаимодействий
+├─ Payload:
+│  ├─ agent_id (string)
+│  ├─ user_id (string)
+│  ├─ project_id (string)
+│  ├─ session_id (string, optional)
+│  ├─ content (text, indexed)
+│  ├─ interaction_type (enum: task/tool/direct_call)
+│  ├─ timestamp (datetime)
+│  ├─ success (boolean)
+│  ├─ tags (array: для категоризации)
+│  └─ metadata (object: дополнительные данные)
+├─ Vectors: 1536-dim (OpenAI embeddings)
+└─ Search: semantic + metadata filtering
 ```
 
-## Схема базы данных
-
-```mermaid
-erDiagram
-    users ||--o{ user_agents : owns
-    users ||--o{ user_orchestrators : has
-    users ||--o{ chat_sessions : creates
-    users ||--o{ approval_requests : requests
-    
-    chat_sessions ||--o{ messages : contains
-    chat_sessions ||--o{ tasks : has
-    
-    user_agents ||--o{ messages : generates
-    user_agents ||--o{ tasks : executes
-    
-    users {
-        uuid id PK
-        string email UK
-        timestamp created_at
-    }
-    
-    user_agents {
-        uuid id PK
-        uuid user_id FK
-        string name
-        jsonb config
-        string status
-        timestamp created_at
-    }
-    
-    user_orchestrators {
-        uuid id PK
-        uuid user_id FK,UK
-        jsonb config
-        timestamp created_at
-    }
-    
-    chat_sessions {
-        uuid id PK
-        uuid user_id FK
-        timestamp created_at
-    }
-    
-    messages {
-        uuid id PK
-        uuid session_id FK
-        string role
-        text content
-        uuid agent_id FK
-        timestamp created_at
-    }
-    
-    tasks {
-        uuid id PK
-        uuid session_id FK
-        uuid agent_id FK
-        string status
-        jsonb result
-        timestamp created_at
-        timestamp started_at
-        timestamp completed_at
-    }
-    
-    approval_requests {
-        uuid id PK
-        uuid user_id FK
-        string type
-        jsonb payload
-        string status
-        timestamp created_at
-        timestamp resolved_at
-        text decision
-    }
+**Использование**:
+```python
+# RAG поиск с фильтрацией
+results = await qdrant.search(
+    collection_name=f"{agent_id}_context",
+    query_vector=embedding,
+    query_filter=Filter(
+        must=[
+            HasPayload(key="agent_id", value=agent_id),
+            Range(key="timestamp", gte=week_ago)
+        ]
+    ),
+    limit=5
+)
 ```
 
-## Архитектура Agent Bus
+---
 
-```mermaid
-graph LR
-    subgraph "Agent Bus"
-        Queue1[Queue: Agent 1<br/>Max: 100 tasks]
-        Queue2[Queue: Agent 2<br/>Max: 100 tasks]
-        Queue3[Queue: Agent 3<br/>Max: 100 tasks]
-        
-        Worker1[Worker 1<br/>Concurrency: 3]
-        Worker2[Worker 2<br/>Concurrency: 3]
-        Worker3[Worker 3<br/>Concurrency: 3]
-        
-        Queue1 --> Worker1
-        Queue2 --> Worker2
-        Queue3 --> Worker3
-    end
-    
-    subgraph "Task Execution"
-        Worker1 --> Task1[Task 1]
-        Worker1 --> Task2[Task 2]
-        Worker1 --> Task3[Task 3]
-    end
-    
-    subgraph "Results"
-        Task1 --> Result1[Success/Error]
-        Task2 --> Result2[Success/Error]
-        Task3 --> Result3[Success/Error]
-    end
-    
-    Result1 --> Callback1[Callback]
-    Result2 --> Callback2[Callback]
-    Result3 --> Callback3[Callback]
+## 🔄 Потоки данных
+
+### Сценарий 1: Создание проекта
+
+```
+User → POST /my/projects/
+  ↓
+User Isolation Middleware (extract user_id)
+  ↓
+ProjectCreate validation
+  ↓
+Create UserProject in DB
+  ↓
+Initialize Starter Pack (3 agents: CodeAssistant, DataAnalyst, DocumentWriter)
+  ↓
+For each agent:
+  ├─ Create UserAgent in DB
+  ├─ Initialize Qdrant collection
+  └─ Cache config in Redis
+  ↓
+Create ProjectWorkerSpace
+  ↓
+Return ProjectResponse
 ```
 
-## Масштабируемость и производительность
+### Сценарий 2: Прямой вызов агента (⚡ быстро)
+
+```
+User → POST /my/projects/{pid}/chat/{sid}/message/ with target_agent="CodeAssistant"
+  ↓
+User Isolation + Project Validation
+  ↓
+Save user message to DB
+  ↓
+Get agent from cache/DB
+  ↓
+Contextual Agent:
+  ├─ Retrieve context from Qdrant (RAG)
+  ├─ Build prompt with system_prompt + context
+  ├─ Call LLM (with timeout)
+  ├─ Stream response to client (SSE)
+  └─ Store interaction in Qdrant
+  ↓
+Save agent message to DB
+  ↓
+Emit SSE event (agent_completed)
+```
+
+### Сценарий 3: Автоматический режим (🧠 медленнее)
+
+```
+User → POST /my/projects/{pid}/chat/{sid}/message/ without target_agent
+  ↓
+User Isolation + Project Validation
+  ↓
+Save user message to DB
+  ↓
+Emit SSE event (message_received)
+  ↓
+Orchestrator:
+  ├─ Analyze request
+  ├─ Plan task DAG
+  ├─ Identify required agents
+  └─ Emit SSE event (plan_created)
+  ↓
+For each task in DAG (parallel where possible):
+  ├─ Get agent from bus
+  ├─ Send task to agent_task_queue
+  ├─ Agent executes (with RAG + Qdrant)
+  ├─ Emit SSE events (agent_started, agent_working, agent_completed)
+  └─ Store results in message chain
+  ↓
+Aggregate results
+  ↓
+Save final message to DB
+  ↓
+Emit SSE event (orchestration_completed)
+```
+
+---
+
+## 📊 Масштабируемость
 
 ### Горизонтальное масштабирование
-- **Stateless API**: Все состояние в БД/Redis/Qdrant
-- **Load Balancer**: Nginx/HAProxy перед FastAPI
-- **Database Sharding**: По user_id для PostgreSQL
-- **Redis Cluster**: Для высокой доступности
-- **Qdrant Cluster**: Для больших объемов векторов
+
+- **Stateless API**: Можно запустить N инстансов FastAPI
+- **Shared Redis**: Для координации между инстансами
+- **Shared PostgreSQL**: Для хранения состояния
+- **Shared Qdrant**: Для RAG поиска
+
+### Вертикальное масштабирование
+
+- **Worker Spaces in Memory**: Кэширование активных проектов
+- **Async I/O**: Все операции async для эффективного использования CPU
+- **Connection Pooling**: PostgreSQL asyncpg, Redis connection pooling
 
 ### Оптимизации
-- **Connection Pooling**: PostgreSQL (10-30 соединений)
-- **Redis Pipeline**: Батчинг операций
-- **Qdrant HNSW**: Быстрый approximate search
-- **Async I/O**: Полностью асинхронная архитектура
-- **Кэширование**: Redis для горячих данных
 
-### Метрики производительности
-- **Direct call latency**: P95 < 2 сек
-- **Qdrant search**: < 50ms
-- **Streaming connections**: 1000+ per user
-- **Agent concurrency**: 3 задачи параллельно
-- **Database queries**: < 100ms P95
+- **Кэширование конфигов агентов в Redis**: Избежать частых DB запросов
+- **Lazy loading контекстов**: Инициализировать только когда нужно
+- **Burstable concurrency**: Динамическое управление concurrency_limit
+- **Batch operations**: Группировка операций для БД
 
-## Безопасность
+---
 
-### Аутентификация и авторизация
-- **JWT токены**: HS256 алгоритм
-- **User isolation**: Middleware на всех endpoints
-- **Token expiration**: 30 минут (access), 7 дней (refresh)
-- **Secret rotation**: Поддержка смены ключей
+## 🔐 Безопасность
 
-### Изоляция данных
-- **Database level**: WHERE user_id = :user_id на всех запросах
-- **Qdrant level**: Отдельные коллекции per user/agent
-- **Redis level**: Префиксы ключей с user_id
-- **API level**: Middleware проверка владения ресурсами
+### User Isolation
 
-### Защита от атак
-- **Rate limiting**: Redis-based (100 req/min)
-- **Input validation**: Pydantic schemas
-- **SQL injection**: SQLAlchemy ORM
-- **XSS protection**: Content-Type headers
-- **CORS**: Настраиваемые origins
+- **Middleware-level**: Все `/my/*` endpoints требуют JWT
+- **Database-level**: Запросы фильтруются по `user_id`
+- **Application-level**: Проверка ownership перед операциями
+- **Metric**: `USER_ISOLATION_VIOLATIONS` должен быть = 0
 
-## Мониторинг и наблюдаемость
+### Authentication
 
-```mermaid
-graph TB
-    subgraph "Application"
-        App[FastAPI App]
-    end
-    
-    subgraph "Metrics Collection"
-        Prometheus[Prometheus]
-    end
-    
-    subgraph "Visualization"
-        Grafana[Grafana Dashboards]
-    end
-    
-    subgraph "Logging"
-        Structlog[Structlog]
-        LogAggregator[Log Aggregator<br/>ELK/Loki]
-    end
-    
-    App -->|Metrics| Prometheus
-    App -->|Logs| Structlog
-    Structlog --> LogAggregator
-    Prometheus --> Grafana
-    
-    Grafana -->|Alerts| AlertManager[Alert Manager]
-    AlertManager -->|Notify| Slack[Slack/Email/PagerDuty]
+- **JWT Bearer Tokens**: Stateless аутентификация
+- **Token Claims**: `sub` (user UUID), `iat` (issued at), `exp` (expiration)
+- **Secret Key**: Конфигурируется через `JWT_SECRET_KEY`
+- **Token Validation**: На каждый `/my/*` запрос
+
+### Authorization
+
+- **Per-Project ACL**: Пользователь видит только свои проекты
+- **Per-Agent ACL**: Агенты привязаны к проекту пользователя
+- **Approval Workflow**: Критические операции требуют подтверждения
+
+---
+
+## 📈 Мониторинг и Метрики
+
+### Prometheus Metrics
+
+```
+# Counters
+projects_created_total{user_id}
+agents_created_total{project_id}
+messages_sent_total{project_id}
+direct_calls_total{agent_id}
+orchestrations_total{project_id}
+
+# Histograms
+agent_execution_seconds{agent_id,status}
+orchestration_planning_seconds{project_id}
+qdrant_search_latency_seconds{agent_id}
+user_isolation_check_duration_seconds
+
+# Gauges
+active_projects_count
+active_agents_count
+redis_queue_size{agent_id}
+qdrant_collection_size{agent_id}
 ```
 
-### Логирование
-- **Структурированные логи**: structlog
-- **Уровни**: DEBUG, INFO, WARNING, ERROR
-- **Контекст**: user_id, session_id, agent_id
-- **Формат**: JSON для парсинга
+### Health Checks
 
-### Метрики (Prometheus)
-- HTTP запросы (latency, throughput, errors)
-- Database connections и query time
-- Redis operations
-- Agent tasks (queued, running, completed, failed)
-- Streaming connections (active, total)
-- Qdrant operations (search time, vector count)
+- **GET /health** - базовая проверка (должна всегда вернуть 200)
+- **GET /ready** - проверка зависимостей (PostgreSQL, Redis, Qdrant)
 
-### Алерты
-- High error rate (> 5%)
-- Slow queries (> 1s)
-- Queue overflow
-- Memory/CPU usage
-- Database connection exhaustion
+---
 
-## Развертывание
+## 🚀 Развертывание
 
-### Docker Compose (Development)
+### Docker Compose (local development)
+
 ```yaml
 services:
-  - app (FastAPI)
-  - postgres (PostgreSQL 16)
-  - redis (Redis 7)
-  - qdrant (Qdrant latest)
+  api:
+    image: codelab-core-service:latest
+    ports: [8000:8000]
+    depends_on: [postgres, redis, qdrant]
+  
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: codelab
+  
+  redis:
+    image: redis:7
+  
+  qdrant:
+    image: qdrant/qdrant:v1.7.1
 ```
 
-### Production (Kubernetes)
+### Kubernetes (production)
 
-```mermaid
-graph TB
-    subgraph "Kubernetes Cluster"
-        subgraph "Ingress"
-            Ingress[Ingress Controller<br/>HTTPS, Rate Limiting]
-        end
-        
-        subgraph "Application"
-            API1[API Pod 1]
-            API2[API Pod 2]
-            API3[API Pod 3]
-        end
-        
-        subgraph "Databases"
-            PG[PostgreSQL<br/>StatefulSet]
-            Redis[Redis<br/>StatefulSet]
-            Qdrant[Qdrant<br/>StatefulSet]
-        end
-        
-        subgraph "Storage"
-            PV1[PersistentVolume<br/>PostgreSQL]
-            PV2[PersistentVolume<br/>Redis]
-            PV3[PersistentVolume<br/>Qdrant]
-        end
-    end
-    
-    Internet[Internet] --> Ingress
-    Ingress --> API1
-    Ingress --> API2
-    Ingress --> API3
-    
-    API1 --> PG
-    API2 --> PG
-    API3 --> PG
-    
-    API1 --> Redis
-    API2 --> Redis
-    API3 --> Redis
-    
-    API1 --> Qdrant
-    API2 --> Qdrant
-    API3 --> Qdrant
-    
-    PG --> PV1
-    Redis --> PV2
-    Qdrant --> PV3
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codelab-core-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: codelab
+  template:
+    spec:
+      containers:
+      - name: api
+        image: codelab-core-service:v0.2.0
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: codelab-secrets
+              key: database-url
 ```
 
-## Будущие улучшения
+---
 
-### Запланированные функции
-1. **Orchestrator** - автоматическое планирование задач
-2. **Approval Manager** - контроль опасных операций
-3. **Tool System** - расширяемые инструменты для агентов
-4. **Multi-modal support** - изображения, аудио, видео
-5. **Agent collaboration** - взаимодействие между агентами
-6. **Advanced RAG** - гибридный поиск, re-ranking
-7. **Cost tracking** - учет затрат на LLM вызовы
-8. **A/B testing** - эксперименты с промптами
+## 📚 Дополнительные ресурсы
 
-### Технические улучшения
-1. **GraphQL API** - альтернатива REST
-2. **WebSocket** - двусторонняя коммуникация
-3. **Event Sourcing** - полная история изменений
-4. **CQRS** - разделение чтения и записи
-5. **Distributed tracing** - OpenTelemetry
-6. **Service mesh** - Istio для микросервисов
-
-## Заключение
-
-CodeLab Core Service представляет собой современную, масштабируемую архитектуру для персональных мультиагентных AI систем. Ключевые преимущества:
-
-- ✅ **Полная изоляция** пользователей
-- ✅ **Гибкие режимы** работы (прямой/автоматический)
-- ✅ **Семантическая память** через RAG
-- ✅ **Real-time** взаимодействие
-- ✅ **Масштабируемость** и производительность
-- ✅ **Безопасность** и надежность
-
-Архитектура спроектирована с учетом лучших практик и готова к production использованию.
+- [REST API документация](./rest-api.md)
+- [Component Details](./component-details.md)
+- [Developer Guide](./developer-guide.md)
+- [Deployment Guide](./deployment-guide.md)
+- [Примеры кода](../samples.md)
