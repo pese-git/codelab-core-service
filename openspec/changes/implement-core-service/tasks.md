@@ -231,21 +231,54 @@
 - [ ] 11.12 Оптимизировать производительность (direct mode P95 < 2 сек)
 - [ ] 11.13 Написать integration тесты для обоих режимов
 
-## 12. SSE Event Streaming
+## 12. Event Stream (Fetch API)
 
-- [ ] 12.1 Реализовать SSE endpoint GET `/my/chat/{session_id}/events/`
-- [ ] 12.2 Реализовать поддержку множественных SSE connections per session
-- [ ] 12.3 Реализовать все типы событий (direct_agent_call, agent_status_changed, task_plan_created, task_started, task_progress, task_completed, tool_request, plan_request, context_retrieved, approval_required)
-- [ ] 12.4 Реализовать JSON serialization для событий (event_type, payload, timestamp)
-- [ ] 12.5 Реализовать heartbeat для поддержания connections (каждые 30 сек)
-- [ ] 12.6 Реализовать graceful close при завершении сессии
-- [ ] 12.7 Реализовать event buffering в Redis (max 100 событий, TTL 5 мин)
-- [ ] 12.8 Реализовать восстановление пропущенных событий при reconnect
-- [ ] 12.9 Реализовать broadcasting событий всем connections сессии
-- [ ] 12.10 Реализовать изоляцию событий между пользователями
-- [ ] 12.11 Оптимизировать latency доставки событий (P99 < 100ms)
-- [ ] 12.12 Добавить метрики (active_connections, events_sent, latency)
-- [ ] 12.13 Написать load тесты (1000+ connections per user)
+### 12.1 Streaming endpoint
+- [ ] 12.1.1 Реализовать streaming endpoint GET `/my/projects/{project_id}/chat/{session_id}/events`
+- [ ] 12.1.2 Использовать HTTP streaming с Content-Type: application/x-ndjson (newline-delimited JSON)
+- [ ] 12.1.3 Реализовать поддержку Fetch API с ReadableStream.getReader() на frontend
+- [ ] 12.1.4 Отправлять события в формате `{json_event}\n` (каждое событие на новой строке)
+
+### 12.2 Event types и форматы
+- [ ] 12.2.1 Реализовать все типы событий: MESSAGE_CREATED, DIRECT_AGENT_CALL, TASK_STARTED, TASK_COMPLETED, CONTEXT_RETRIEVED, ERROR, TASK_PROGRESS
+- [ ] 12.2.2 Реализовать JSON serialization для всех событий (event_type, payload, timestamp, session_id)
+- [ ] 12.2.3 Обеспечить consistency между events из streaming endpoint и SSE (если есть legacy code)
+
+### 12.3 Event buffering и recovery
+- [ ] 12.3.1 Реализовать event buffering в Redis (max 100 событий, TTL 5 мин)
+- [ ] 12.3.2 Реализовать параметр ?last_event_id для восстановления при reconnect
+- [ ] 12.3.3 При reconnect отправлять пропущенные события от last_event_id
+- [ ] 12.3.4 Гарантировать что client получит все события даже при network issues
+
+### 12.4 Isolation и security
+- [ ] 12.4.1 Реализовать изоляцию событий между пользователями (check user_id + project_id)
+- [ ] 12.4.2 Проверять что session_id принадлежит текущему пользователю
+- [ ] 12.4.3 Использовать JWT authentication для streaming endpoint
+- [ ] 12.4.4 Логировать все streaming connections для audit
+
+### 12.5 Performance и heartbeat
+- [ ] 12.5.1 Реализовать heartbeat событие каждые 30 сек для поддержания connection
+- [ ] 12.5.2 Оптимизировать latency доставки событий (P99 < 100ms)
+- [ ] 12.5.3 Реализовать graceful close при завершении сессии
+- [ ] 12.5.4 Обработать client-side disconnection корректно
+
+### 12.6 StreamManager integration
+- [ ] 12.6.1 Использовать StreamManager для broadcasting событий
+- [ ] 12.6.2 Реализовать async broadcast_event() для отправки всем connected clients сессии
+- [ ] 12.6.3 Реализовать per-session connection tracking
+- [ ] 12.6.4 Очищать connections при disconnect
+
+### 12.7 Testing
+- [ ] 12.7.1 Написать unit тесты для event formatting
+- [ ] 12.7.2 Написать integration тесты для streaming endpoint
+- [ ] 12.7.3 Написать тесты для event buffering и recovery
+- [ ] 12.7.4 Написать тесты для isolation между users/sessions
+- [ ] 12.7.5 Load тесты (1000+ concurrent connections per session)
+
+### 12.8 Metrics и monitoring
+- [ ] 12.8.1 Добавить метрики (active_connections_per_session, events_sent, lost_connections)
+- [ ] 12.8.2 Мониторить latency доставки событий
+- [ ] 12.8.3 Мониторить buffer fill rate (избежать переполнения)
 
 ## 13. REST API Endpoints
 
