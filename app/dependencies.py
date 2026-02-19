@@ -14,6 +14,7 @@ from app.logging_config import get_logger
 from app.middleware.user_isolation import get_current_user_id
 from app.qdrant_client import get_qdrant
 from app.redis_client import get_redis
+from app.vectorstore.agent_context_store import AgentContextStore
 
 logger = get_logger(__name__)
 
@@ -67,3 +68,37 @@ async def get_worker_space(
     )
 
     return space
+
+
+async def get_agent_context_store(
+    agent_id: UUID,
+    workspace: UserWorkerSpace = Depends(get_worker_space),
+) -> AgentContextStore | None:
+    """
+    Get agent context store (Qdrant) for RAG operations.
+
+    This dependency retrieves the context store for a specific agent,
+    which is used for vector search and context retrieval.
+
+    Args:
+        agent_id: Agent UUID
+        workspace: User workspace from get_worker_space dependency
+
+    Returns:
+        AgentContextStore instance or None if agent not found or disabled
+
+    Note:
+        Returns None if Qdrant is disabled in settings
+    """
+    if not workspace.initialized:
+        await workspace.initialize()
+
+    context_store = await workspace.get_agent_context_store(agent_id)
+
+    logger.debug(
+        "context_store_obtained",
+        agent_id=str(agent_id),
+        enabled=context_store is not None and context_store.enabled,
+    )
+
+    return context_store
