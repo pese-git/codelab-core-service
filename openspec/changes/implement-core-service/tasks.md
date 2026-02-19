@@ -88,214 +88,258 @@
 - [ ] 7.10 Реализовать каскадное удаление (agent + Qdrant collection + cache)
 - [ ] 7.11 Написать unit тесты для agent management
 
-## 8. Personal Orchestrator
+## 8. Agent Tools System
 
-- [ ] 8.1 Реализовать PersonalOrchestrator класс для планирования задач
-- [ ] 8.2 Реализовать анализ natural language запросов и создание графа задач
-- [ ] 8.3 Реализовать определение зависимостей между задачами
-- [ ] 8.4 Реализовать обнаружение циклических зависимостей
-- [ ] 8.5 Реализовать топологическую сортировку для параллельного выполнения
-- [ ] 8.6 Реализовать выбор подходящих агентов для задач (по capabilities)
-- [ ] 8.7 Реализовать оценку стоимости выполнения (LLM API calls + embeddings)
-- [ ] 8.8 Реализовать оценку времени выполнения (последовательно vs параллельно)
-- [ ] 8.9 Реализовать интеграцию с Approval Manager (для сложных планов)
-- [ ] 8.10 Реализовать мониторинг выполнения плана и отправку SSE событий
-- [ ] 8.11 Реализовать обработку ошибок (partial success, failed tasks)
-- [ ] 8.12 Реализовать кеширование планов в Redis (TTL 24 часа)
-- [ ] 8.13 Оптимизировать производительность планирования (< 5 сек)
-- [ ] 8.14 Написать unit тесты для orchestrator
+### 8.1 Tool Signatures и Definitions
+- [-] 8.1.1 Реализовать tool_read_file(path, user_id) для чтения файлов из workspace
+- [-] 8.1.2 Реализовать tool_write_file(path, content, mode, user_id) для редактирования файлов
+- [-] 8.1.3 Реализовать tool_execute_command(command, args, timeout, user_id) для выполнения команд
+- [-] 8.1.4 Реализовать tool_list_directory(path, user_id, recursive, pattern) для просмотра директорий
 
-## 9. Approval Manager
+### 8.2 Security & Validation
+- [-] 8.2.1 Реализовать валидацию путей (не выходить за пределы workspace, проверка ..)
+- [-] 8.2.2 Реализовать whitelist для разрешенных команд (grep, find, git, npm, python и т.д.)
+- [-] 8.2.3 Реализовать blacklist для опасных команд (rm -rf, dd, sudo, su, pacman, apt)
+- [-] 8.2.4 Реализовать ограничение размера файлов (макс 100MB для чтения/записи)
+- [-] 8.2.5 Реализовать ограничение размера вывода (макс 1MB)
+- [-] 8.2.6 Реализовать таймаут выполнения команд (макс 300 сек)
+- [-] 8.2.7 Реализовать проверку расширений файлов (запретить .exe, .bin, .so для записи)
 
-- [ ] 9.1 Реализовать ApprovalManager класс для управления approvals
-- [ ] 9.2 Реализовать tool approval workflow (request → SSE → confirm/reject)
-- [ ] 9.3 Реализовать plan approval workflow (для сложных планов)
-- [ ] 9.4 Реализовать timeout management (300 сек по умолчанию)
-- [ ] 9.5 Реализовать уведомление о приближении timeout (60 сек до истечения)
-- [ ] 9.6 Реализовать интеграцию с SSE для отправки approval_required событий
-- [ ] 9.7 Реализовать разблокировку агентов после approve/reject
-- [ ] 9.8 Реализовать хранение истории approvals в БД
-- [ ] 9.9 Реализовать risk level assessment (high, medium, low)
-- [ ] 9.10 Реализовать auto-approve для low risk tools (опционально)
-- [ ] 9.11 Реализовать retry mechanism с лимитом (max 3 попытки)
-- [ ] 9.12 Реализовать batch approval для множественных requests
-- [ ] 9.13 Добавить метрики (approval_rate, timeout_rate, response_time)
-- [ ] 9.14 Написать unit тесты для Approval Manager
+### 8.3 Risk Assessment
+- [-] 8.3.1 Реализовать классификацию tools по risk level (LOW, MEDIUM, HIGH)
+- [-] 8.3.2 Реализовать get_risk_level(tool_name, params) функцию
+- [-] 8.3.3 Документировать risk level для каждого tool и параметров
+- [-] 8.3.4 Реализовать timeout для approval в зависимости от risk level (LOW=no timeout, MEDIUM=5min, HIGH=10min)
 
-## 10. User Worker Space
+### 8.4 Integration с Approval Manager
+- [-] 8.4.1 Интегрировать tool execution с ApprovalManager.request_tool_approval()
+- [-] 8.4.2 Реализовать автоматическое одобрение для LOW_RISK tools
+- [-] 8.4.3 Реализовать запрос подтверждения для MEDIUM/HIGH_RISK tools
+- [-] 8.4.4 Реализовать обработку timeout (автоматический reject после timeout)
+- [-] 8.4.5 Реализовать batch approval (одобрить класс операций)
+
+### 8.5 Client-Side Execution
+- [-] 8.5.1 Создать ToolHandler на frontend для выполнения tools
+- [-] 8.5.2 Реализовать file system access API для чтения/записи (через Electron IPC или Web APIs)
+- [-] 8.5.3 Реализовать command execution на client side
+- [-] 8.5.4 Реализовать workspace boundary validation на client
+- [-] 8.5.5 Реализовать error handling и retry механизм
+
+### 8.6 Testing
+- [-] 8.6.1 Unit тесты для валидации путей и команд
+- [-] 8.6.2 Unit тесты для risk assessment
+- [-] 8.6.3 Integration тесты для tool execution flow
+- [-] 8.6.4 Integration тесты для approval integration
+- [-] 8.6.5 Security тесты для path traversal и command injection
+
+## 9. Personal Orchestrator
+
+- [-] 9.1 Реализовать PersonalOrchestrator класс для планирования задач
+- [-] 9.2 Реализовать анализ natural language запросов и создание графа задач
+- [-] 9.3 Реализовать определение зависимостей между задачами
+- [-] 9.4 Реализовать обнаружение циклических зависимостей
+- [-] 9.5 Реализовать топологическую сортировку для параллельного выполнения
+- [-] 9.6 Реализовать выбор подходящих агентов для задач (по capabilities)
+- [-] 9.7 Реализовать оценку стоимости выполнения (LLM API calls + embeddings)
+- [-] 9.8 Реализовать оценку времени выполнения (последовательно vs параллельно)
+- [-] 9.9 Реализовать интеграцию с Approval Manager (для сложных планов)
+- [-] 9.10 Реализовать мониторинг выполнения плана и отправку SSE событий
+- [-] 9.11 Реализовать обработку ошибок (partial success, failed tasks)
+- [-] 9.12 Реализовать кеширование планов в Redis (TTL 24 часа)
+- [-] 9.13 Оптимизировать производительность планирования (< 5 сек)
+- [-] 9.14 Написать unit тесты для orchestrator
+
+## 10. Approval Manager
+
+- [-] 10.1 Реализовать ApprovalManager класс для управления approvals
+- [-] 10.2 Реализовать tool approval workflow (request → SSE → confirm/reject)
+- [-] 10.3 Реализовать plan approval workflow (для сложных планов)
+- [-] 10.4 Реализовать timeout management (300 сек по умолчанию)
+- [-] 10.5 Реализовать уведомление о приближении timeout (60 сек до истечения)
+- [-] 10.6 Реализовать интеграцию с SSE для отправки approval_required событий
+- [-] 10.7 Реализовать разблокировку агентов после approve/reject
+- [-] 10.8 Реализовать хранение истории approvals в БД
+- [-] 10.9 Реализовать risk level assessment (high, medium, low)
+- [-] 10.10 Реализовать auto-approve для low risk tools (опционально)
+- [-] 10.11 Реализовать retry mechanism с лимитом (max 3 попытки)
+- [-] 10.12 Реализовать batch approval для множественных requests
+- [-] 10.13 Добавить метрики (approval_rate, timeout_rate, response_time)
+- [-] 10.14 Написать unit тесты для Approval Manager
+
+## 11. User Worker Space
 
 ### 10.1 Базовая структура и инициализация
-- [ ] 10.1.1 Реализовать UserWorkerSpace класс с полями (user_id, project_id, agent_cache, agent_bus, redis, qdrant, db)
-- [ ] 10.1.2 Реализовать __init__ с инициализацией компонентов
-- [ ] 10.1.3 Реализовать async def initialize() для инициализации ресурсов при первом запросе
-- [ ] 10.1.4 Реализовать AgentCache вспомогательный класс (in-memory + Redis TTL)
+- [x] 10.1.1 Реализовать UserWorkerSpace класс с полями (user_id, project_id, agent_cache, agent_bus, redis, qdrant, db)
+- [x] 10.1.2 Реализовать __init__ с инициализацией компонентов
+- [x] 10.1.3 Реализовать async def initialize() для инициализации ресурсов при первом запросе
+- [x] 10.1.4 Реализовать AgentCache вспомогательный класс (in-memory + Redis TTL)
 
 ### 10.2 Управление кешем агентов
-- [ ] 10.2.1 Реализовать async def get_agent(agent_id) - получение из кеша с fallback на БД
-- [ ] 10.2.2 Реализовать async def add_agent(config) - добавление нового агента
-- [ ] 10.2.3 Реализовать async def remove_agent(agent_id) - удаление агента
-- [ ] 10.2.4 Реализовать async def reload_agent(agent_id) - перезагрузка конфигурации
-- [ ] 10.2.5 Реализовать async def invalidate_agent(agent_id) - инвалидация кеша одного агента
-- [ ] 10.2.6 Реализовать async def clear_agent_cache() - очистка всего кеша проекта
-- [ ] 10.2.7 Реализовать async def list_agents_for_project() - список агентов проекта
+- [x] 10.2.1 Реализовать async def get_agent(agent_id) - получение из кеша с fallback на БД
+- [x] 10.2.2 Реализовать async def add_agent(config) - добавление нового агента
+- [x] 10.2.3 Реализовать async def remove_agent(agent_id) - удаление агента
+- [x] 10.2.4 Реализовать async def reload_agent(agent_id) - перезагрузка конфигурации
+- [x] 10.2.5 Реализовать async def invalidate_agent(agent_id) - инвалидация кеша одного агента
+- [x] 10.2.6 Реализовать async def clear_agent_cache() - очистка всего кеша проекта
+- [x] 10.2.7 Реализовать async def list_agents_for_project() - список агентов проекта
 
 ### 10.3 Интеграция с Agent Bus
-- [ ] 10.3.1 Реализовать async def _register_agent(agent_db_model) - внутренняя регистрация
-- [ ] 10.3.2 Реализовать async def register_agent(agent_id) - публичный метод регистрации
-- [ ] 10.3.3 Реализовать async def deregister_agent(agent_id) - публичный метод дерегистрации
-- [ ] 10.3.4 Реализовать async def get_agent_status(agent_id) - получение статуса из Agent Bus
-- [ ] 10.3.5 Реализовать async def get_agent_metrics(agent_id) - получение метрик из Agent Bus
-- [ ] 10.3.6 Реализовать async def send_task_to_agent(agent_id, task_payload) - отправка задачи
+- [x] 10.3.1 Реализовать async def _register_agent(agent_db_model) - внутренняя регистрация
+- [x] 10.3.2 Реализовать async def register_agent(agent_id) - публичный метод регистрации
+- [x] 10.3.3 Реализовать async def deregister_agent(agent_id) - публичный метод дерегистрации
+- [x] 10.3.4 Реализовать async def get_agent_status(agent_id) - получение статуса из Agent Bus
+- [x] 10.3.5 Реализовать async def get_agent_metrics(agent_id) - получение метрик из Agent Bus
+- [x] 10.3.6 Реализовать async def send_task_to_agent(agent_id, task_payload) - отправка задачи
 
 ### 10.4 Интеграция с Qdrant контекстом
-- [ ] 10.4.1 Реализовать async def get_agent_context_store(agent_id) - получение store для RAG
-- [ ] 10.4.2 Реализовать async def ensure_agent_collection(agent_id) - проверка/создание collection
-- [ ] 10.4.3 Реализовать async def search_context(agent_id, query) - семантический поиск контекста
-- [ ] 10.4.4 Реализовать async def add_context(agent_id, interaction) - сохранение взаимодействия
-- [ ] 10.4.5 Реализовать async def clear_context(agent_id) - очистка памяти агента
+- [x] 10.4.1 Реализовать async def get_agent_context_store(agent_id) - получение store для RAG
+- [x] 10.4.2 Реализовать async def ensure_agent_collection(agent_id) - проверка/создание collection
+- [x] 10.4.3 Реализовать async def search_context(agent_id, query) - семантический поиск контекста
+- [x] 10.4.4 Реализовать async def add_context(agent_id, interaction) - сохранение взаимодействия
+- [x] 10.4.5 Реализовать async def clear_context(agent_id) - очистка памяти агента
 
 ### 10.5 Координация режимов выполнения
-- [ ] 10.5.1 Реализовать async def direct_execution(agent_id, task_payload) - прямое выполнение
-- [ ] 10.5.2 Реализовать async def orchestrated_execution(task_payload) - делегирование на Orchestrator
-- [ ] 10.5.3 Реализовать async def handle_message(message, target_agent_id=None) - единый API
-- [ ] 10.5.4 Интегрировать direct_execution с результатом -> add_context для RAG
-- [ ] 10.5.5 Интегрировать orchestrated_execution для multi-step workflows
+- [x] 10.5.1 Реализовать async def direct_execution(agent_id, task_payload) - прямое выполнение
+- [x] 10.5.2 Реализовать async def orchestrated_execution(task_payload) - делегирование на Orchestrator
+- [x] 10.5.3 Реализовать async def handle_message(message, target_agent_id=None) - единый API
+- [x] 10.5.4 Интегрировать direct_execution с результатом -> add_context для RAG
+- [x] 10.5.5 Интегрировать orchestrated_execution для multi-step workflows
 
 ### 10.6 Lifecycle management
-- [ ] 10.6.1 Реализовать async def cleanup() - graceful cleanup ресурсов
-- [ ] 10.6.2 Реализовать async def reset() - force reset Worker Space
-- [ ] 10.6.3 Реализовать def is_healthy() - health check
-- [ ] 10.6.4 Реализовать async def get_metrics() - полные метрики с registered_agents, task_counter, uptime
-- [ ] 10.6.5 Реализовать async def get_agent_stats() - статистика по агентам
+- [x] 10.6.1 Реализовать async def cleanup() - graceful cleanup ресурсов
+- [x] 10.6.2 Реализовать async def reset() - force reset Worker Space
+- [x] 10.6.3 Реализовать def is_healthy() - health check
+- [x] 10.6.4 Реализовать async def get_metrics() - полные метрики с registered_agents, task_counter, uptime
+- [x] 10.6.5 Реализовать async def get_agent_stats() - статистика по агентам
 
 ### 10.7 Изоляция и безопасность
-- [ ] 10.7.1 Гарантировать что per-project architecture соблюдается везде
-- [ ] 10.7.2 Проверить что agent_cache изолирован между проектами
-- [ ] 10.7.3 Проверить что Qdrant collections per-project
-- [ ] 10.7.4 Проверить что Agent Bus user_prefix используется везде
+- [x] 10.7.1 Гарантировать что per-project architecture соблюдается везде
+- [x] 10.7.2 Проверить что agent_cache изолирован между проектами
+- [x] 10.7.3 Проверить что Qdrant collections per-project
+- [x] 10.7.4 Проверить что Agent Bus user_prefix используется везде
 
 ### 10.8 WorkerSpaceManager (Singleton)
-- [ ] 10.8.1 Реализовать WorkerSpaceManager класс как Singleton
-- [ ] 10.8.2 Реализовать async def get_or_create(user_id, project_id, ...) - получение/создание
-- [ ] 10.8.3 Реализовать async def get(user_id, project_id) - получение существующего
-- [ ] 10.8.4 Реализовать async def remove(user_id, project_id) - удаление с cleanup
-- [ ] 10.8.5 Реализовать async def remove_user_spaces(user_id) - удаление всех проектов пользователя
-- [ ] 10.8.6 Реализовать async def cleanup_all() - полная очистка при shutdown
-- [ ] 10.8.7 Реализовать get_stats() - статистика всех spaces
-- [ ] 10.8.8 Реализовать get_user_project_count(user_id) - счетчик проектов
+- [x] 10.8.1 Реализовать WorkerSpaceManager класс как Singleton
+- [x] 10.8.2 Реализовать async def get_or_create(user_id, project_id, ...) - получение/создание
+- [x] 10.8.3 Реализовать async def get(user_id, project_id) - получение существующего
+- [x] 10.8.4 Реализовать async def remove(user_id, project_id) - удаление с cleanup
+- [x] 10.8.5 Реализовать async def remove_user_spaces(user_id) - удаление всех проектов пользователя
+- [x] 10.8.6 Реализовать async def cleanup_all() - полная очистка при shutdown
+- [x] 10.8.7 Реализовать get_stats() - статистика всех spaces
+- [x] 10.8.8 Реализовать get_user_project_count(user_id) - счетчик проектов
 
 ### 10.9 Dependency Injection
-- [ ] 10.9.1 Реализовать app/dependencies.py с async def get_worker_space()
-- [ ] 10.9.2 Интегрировать get_worker_space dependency во все project endpoints
-- [ ] 10.9.3 Обновить routes/project_chat.py для использования workspace.handle_message()
-- [ ] 10.9.4 Обновить routes/project_agents.py для использования workspace методов
+- [x] 10.9.1 Реализовать app/dependencies.py с async def get_worker_space()
+- [x] 10.9.2 Интегрировать get_worker_space dependency во все project endpoints
+- [x] 10.9.3 Обновить routes/project_chat.py для использования workspace.handle_message()
+- [x] 10.9.4 Обновить routes/project_agents.py для использования workspace методов
 
 ### 10.10 Тестирование (Unit)
-- [ ] 10.10.1 Тесты для AgentCache (get, set, invalidate, clear)
-- [ ] 10.10.2 Тесты для инициализации Worker Space
-- [ ] 10.10.3 Тесты для управления кешем (invalidate, clear)
-- [ ] 10.10.4 Тесты для Agent Bus интеграции (register, deregister, metrics, status)
-- [ ] 10.10.5 Тесты для Qdrant интеграции (context store, search, add, clear)
-- [ ] 10.10.6 Тесты для режимов выполнения (direct, orchestrated, handle_message)
-- [ ] 10.10.7 Тесты для lifecycle (cleanup, reset, is_healthy, get_metrics)
-- [ ] 10.10.8 Тесты для изоляции между проектами одного пользователя
-- [ ] 10.10.9 Тесты для WorkerSpaceManager singleton
-- [ ] 10.10.10 Тесты для изоляции между пользователями
+- [x] 10.10.1 Тесты для AgentCache (get, set, invalidate, clear)
+- [x] 10.10.2 Тесты для инициализации Worker Space
+- [x] 10.10.3 Тесты для управления кешем (invalidate, clear)
+- [x] 10.10.4 Тесты для Agent Bus интеграции (register, deregister, metrics, status)
+- [x] 10.10.5 Тесты для Qdrant интеграции (context store, search, add, clear)
+- [x] 10.10.6 Тесты для режимов выполнения (direct, orchestrated, handle_message)
+- [x] 10.10.7 Тесты для lifecycle (cleanup, reset, is_healthy, get_metrics)
+- [x] 10.10.8 Тесты для изоляции между проектами одного пользователя
+- [x] 10.10.9 Тесты для WorkerSpaceManager singleton
+- [x] 10.10.10 Тесты для изоляции между пользователями
 
 ### 10.11 Интеграционные тесты
-- [ ] 10.11.1 Full flow: инициализация → создание агента → отправка задачи → cleanup
-- [ ] 10.11.2 Direct mode: отправка сообщения конкретному агенту
-- [ ] 10.11.3 Orchestrated mode: отправка сообщения без target_agent (с Orchestrator)
-- [ ] 10.11.4 RAG integration: add_context → search_context → использование в следующем запросе
-- [ ] 10.11.5 Параллельные запросы в одном Worker Space
-- [ ] 10.11.6 Параллельные Worker Spaces разных пользователей/проектов
+- [x] 10.11.1 Full flow: инициализация → создание агента → отправка задачи → cleanup
+- [x] 10.11.2 Direct mode: отправка сообщения конкретному агенту
+- [x] 10.11.3 Orchestrated mode: отправка сообщения без target_agent (с Orchestrator)
+- [x] 10.11.4 RAG integration: add_context → search_context → использование в следующем запросе
+- [x] 10.11.5 Параллельные запросы в одном Worker Space
+- [x] 10.11.6 Параллельные Worker Spaces разных пользователей/проектов
 
 ### 10.12 Мониторинг и отладка
-- [ ] 10.12.1 Добавить логирование всех операций
-- [ ] 10.12.2 Добавить метрики для Prometheus (active_workers, agents_per_project)
-- [ ] 10.12.3 Обновить health endpoint для включения Worker Space статуса
+- [x] 10.12.1 Добавить логирование всех операций
+- [x] 10.12.2 Добавить метрики для Prometheus (active_workers, agents_per_project)
+- [x] 10.12.3 Обновить health endpoint для включения Worker Space статуса
 
 ## 11. Chat System (Dual Modes)
 
-- [ ] 11.1 Реализовать единый endpoint POST `/my/chat/{session_id}/message/`
-- [ ] 11.2 Реализовать автоматический выбор режима (direct vs orchestrated)
-- [ ] 11.3 Реализовать direct mode execution (обход orchestrator)
-- [ ] 11.4 Реализовать orchestrated mode execution (с планированием)
-- [ ] 11.5 Реализовать session management (create, list, get, delete)
-- [ ] 11.6 Реализовать сохранение message history в БД
-- [ ] 11.7 Реализовать получение истории сообщений с пагинацией
-- [ ] 11.8 Реализовать context injection для агентов (session history + RAG)
-- [ ] 11.9 Реализовать ограничение размера контекста (10 сообщений или 4000 токенов)
-- [ ] 11.10 Реализовать обработку ошибок (timeout, agent unavailable)
-- [ ] 11.11 Реализовать concurrent requests handling (блокировка сессии)
-- [ ] 11.12 Оптимизировать производительность (direct mode P95 < 2 сек)
-- [ ] 11.13 Написать integration тесты для обоих режимов
+- [x] 11.1 Реализовать единый endpoint POST `/my/chat/{session_id}/message/`
+- [x] 11.2 Реализовать автоматический выбор режима (direct vs orchestrated)
+- [x] 11.3 Реализовать direct mode execution (обход orchestrator)
+- [x] 11.4 Реализовать orchestrated mode execution (с планированием)
+- [x] 11.5 Реализовать session management (create, list, get, delete)
+- [x] 11.6 Реализовать сохранение message history в БД
+- [x] 11.7 Реализовать получение истории сообщений с пагинацией
+- [x] 11.8 Реализовать context injection для агентов (session history + RAG)
+- [x] 11.9 Реализовать ограничение размера контекста (10 сообщений или 4000 токенов)
+- [x] 11.10 Реализовать обработку ошибок (timeout, agent unavailable)
+- [x] 11.11 Реализовать concurrent requests handling (блокировка сессии)
+- [x] 11.12 Оптимизировать производительность (direct mode P95 < 2 сек)
+- [x] 11.13 Написать integration тесты для обоих режимов
 
 ## 12. Event Stream (Fetch API)
 
 ### 12.1 Streaming endpoint
-- [ ] 12.1.1 Реализовать streaming endpoint GET `/my/projects/{project_id}/chat/{session_id}/events`
-- [ ] 12.1.2 Использовать HTTP streaming с Content-Type: application/x-ndjson (newline-delimited JSON)
-- [ ] 12.1.3 Реализовать поддержку Fetch API с ReadableStream.getReader() на frontend
-- [ ] 12.1.4 Отправлять события в формате `{json_event}\n` (каждое событие на новой строке)
+- [x] 12.1.1 Реализовать streaming endpoint GET `/my/projects/{project_id}/chat/{session_id}/events`
+- [x] 12.1.2 Использовать HTTP streaming с Content-Type: application/x-ndjson (newline-delimited JSON)
+- [x] 12.1.3 Реализовать поддержку Fetch API с ReadableStream.getReader() на frontend
+- [x] 12.1.4 Отправлять события в формате `{json_event}\n` (каждое событие на новой строке)
 
 ### 12.2 Event types и форматы
-- [ ] 12.2.1 Реализовать все типы событий: MESSAGE_CREATED, DIRECT_AGENT_CALL, TASK_STARTED, TASK_COMPLETED, CONTEXT_RETRIEVED, ERROR, TASK_PROGRESS
-- [ ] 12.2.2 Реализовать JSON serialization для всех событий (event_type, payload, timestamp, session_id)
-- [ ] 12.2.3 Обеспечить consistency между events из streaming endpoint и SSE (если есть legacy code)
+- [x] 12.2.1 Реализовать все типы событий: MESSAGE_CREATED, DIRECT_AGENT_CALL, TASK_STARTED, TASK_COMPLETED, CONTEXT_RETRIEVED, ERROR, TASK_PROGRESS
+- [x] 12.2.2 Реализовать JSON serialization для всех событий (event_type, payload, timestamp, session_id)
+- [x] 12.2.3 Обеспечить consistency между events из streaming endpoint и SSE (если есть legacy code)
 
 ### 12.3 Event buffering и recovery
-- [ ] 12.3.1 Реализовать event buffering в Redis (max 100 событий, TTL 5 мин)
-- [ ] 12.3.2 Реализовать параметр ?last_event_id для восстановления при reconnect
-- [ ] 12.3.3 При reconnect отправлять пропущенные события от last_event_id
-- [ ] 12.3.4 Гарантировать что client получит все события даже при network issues
+- [x] 12.3.1 Реализовать event buffering в Redis (max 100 событий, TTL 5 мин)
+- [x] 12.3.2 Реализовать параметр ?last_event_id для восстановления при reconnect
+- [x] 12.3.3 При reconnect отправлять пропущенные события от last_event_id
+- [x] 12.3.4 Гарантировать что client получит все события даже при network issues
 
 ### 12.4 Isolation и security
-- [ ] 12.4.1 Реализовать изоляцию событий между пользователями (check user_id + project_id)
-- [ ] 12.4.2 Проверять что session_id принадлежит текущему пользователю
-- [ ] 12.4.3 Использовать JWT authentication для streaming endpoint
-- [ ] 12.4.4 Логировать все streaming connections для audit
+- [x] 12.4.1 Реализовать изоляцию событий между пользователями (check user_id + project_id)
+- [x] 12.4.2 Проверять что session_id принадлежит текущему пользователю
+- [x] 12.4.3 Использовать JWT authentication для streaming endpoint
+- [x] 12.4.4 Логировать все streaming connections для audit
 
 ### 12.5 Performance и heartbeat
-- [ ] 12.5.1 Реализовать heartbeat событие каждые 30 сек для поддержания connection
-- [ ] 12.5.2 Оптимизировать latency доставки событий (P99 < 100ms)
-- [ ] 12.5.3 Реализовать graceful close при завершении сессии
-- [ ] 12.5.4 Обработать client-side disconnection корректно
+- [x] 12.5.1 Реализовать heartbeat событие каждые 30 сек для поддержания connection
+- [x] 12.5.2 Оптимизировать latency доставки событий (P99 < 100ms)
+- [x] 12.5.3 Реализовать graceful close при завершении сессии
+- [x] 12.5.4 Обработать client-side disconnection корректно
 
 ### 12.6 StreamManager integration
-- [ ] 12.6.1 Использовать StreamManager для broadcasting событий
-- [ ] 12.6.2 Реализовать async broadcast_event() для отправки всем connected clients сессии
-- [ ] 12.6.3 Реализовать per-session connection tracking
-- [ ] 12.6.4 Очищать connections при disconnect
+- [x] 12.6.1 Использовать StreamManager для broadcasting событий
+- [x] 12.6.2 Реализовать async broadcast_event() для отправки всем connected clients сессии
+- [x] 12.6.3 Реализовать per-session connection tracking
+- [x] 12.6.4 Очищать connections при disconnect
 
 ### 12.7 Testing
-- [ ] 12.7.1 Написать unit тесты для event formatting
-- [ ] 12.7.2 Написать integration тесты для streaming endpoint
-- [ ] 12.7.3 Написать тесты для event buffering и recovery
-- [ ] 12.7.4 Написать тесты для isolation между users/sessions
-- [ ] 12.7.5 Load тесты (1000+ concurrent connections per session)
+- [x] 12.7.1 Написать unit тесты для event formatting
+- [x] 12.7.2 Написать integration тесты для streaming endpoint
+- [x] 12.7.3 Написать тесты для event buffering и recovery
+- [x] 12.7.4 Написать тесты для isolation между users/sessions
+- [x] 12.7.5 Load тесты (1000+ concurrent connections per session)
 
 ### 12.8 Metrics и monitoring
-- [ ] 12.8.1 Добавить метрики (active_connections_per_session, events_sent, lost_connections)
-- [ ] 12.8.2 Мониторить latency доставки событий
-- [ ] 12.8.3 Мониторить buffer fill rate (избежать переполнения)
+- [x] 12.8.1 Добавить метрики (active_connections_per_session, events_sent, lost_connections)
+- [x] 12.8.2 Мониторить latency доставки событий
+- [x] 12.8.3 Мониторить buffer fill rate (избежать переполнения)
 
 ## 13. REST API Endpoints
 
-- [ ] 13.1 Реализовать Agent management endpoints (GET/POST/PUT/DELETE `/my/agents/`)
+- [x] 13.1 Реализовать Agent management endpoints (GET/POST/PUT/DELETE `/my/agents/`)
 - [ ] 13.2 Реализовать Orchestrator configuration endpoints (GET/PUT `/my/orchestrator/config`)
-- [ ] 13.3 Реализовать Chat endpoints (POST/GET/DELETE `/my/chat/sessions/`, POST `/my/chat/{session_id}/message/`)
+- [x] 13.3 Реализовать Chat endpoints (POST/GET/DELETE `/my/chat/sessions/`, POST `/my/chat/{session_id}/message/`)
 - [ ] 13.4 Реализовать Approval endpoints (GET/POST `/my/approvals/`, POST `/my/approvals/{id}/confirm`)
 - [ ] 13.5 Реализовать Context management endpoints (GET/POST/DELETE `/my/agents/{id}/context/`)
-- [ ] 13.6 Настроить JWT authentication для всех `/my/*` endpoints
-- [ ] 13.7 Реализовать JSON Schema validation (Pydantic) для всех endpoints
+- [x] 13.6 Настроить JWT authentication для всех `/my/*` endpoints
+- [x] 13.7 Реализовать JSON Schema validation (Pydantic) для всех endpoints
 - [ ] 13.8 Реализовать rate limiting (100 req/min per user, разные лимиты для тяжелых endpoints)
-- [ ] 13.9 Реализовать стандартизированные error responses (400, 401, 403, 404, 422, 429, 500)
-- [ ] 13.10 Реализовать pagination для list endpoints (limit, offset, cursor-based)
-- [ ] 13.11 Реализовать filtering и sorting для list endpoints
+- [x] 13.9 Реализовать стандартизированные error responses (400, 401, 403, 404, 422, 429, 500)
+- [x] 13.10 Реализовать pagination для list endpoints (limit, offset, cursor-based)
+- [x] 13.11 Реализовать filtering и sorting для list endpoints
 - [ ] 13.12 Настроить CORS для frontend интеграции
-- [ ] 13.13 Настроить Swagger/OpenAPI документацию на `/my/docs`
-- [ ] 13.14 Написать integration тесты для всех endpoints
+- [x] 13.13 Настроить Swagger/OpenAPI документацию на `/my/docs`
+- [x] 13.14 Написать integration тесты для всех endpoints
 
 ## 14. Testing
 
@@ -332,9 +376,9 @@
 - [ ] 16.1 Настроить Prometheus metrics для всех компонентов
 - [ ] 16.2 Создать Grafana dashboards (system health, performance, user activity)
 - [ ] 16.3 Настроить алерты для критических метрик (error rate, latency, isolation violations)
-- [ ] 16.4 Настроить structured logging (JSON format, correlation IDs)
+- [x] 16.4 Настроить structured logging (JSON format, correlation IDs)
 - [ ] 16.5 Настроить distributed tracing (OpenTelemetry)
-- [ ] 16.6 Настроить health check endpoints (`/health`, `/ready`)
+- [x] 16.6 Настроить health check endpoints (`/health`, `/ready`)
 - [ ] 16.7 Настроить мониторинг database connections и query performance
 - [ ] 16.8 Настроить мониторинг Redis memory usage
 - [ ] 16.9 Настроить мониторинг Qdrant collections size
@@ -355,8 +399,8 @@
 
 ## 18. Deployment
 
-- [ ] 18.1 Создать Dockerfile для core service
-- [ ] 18.2 Создать Docker Compose для локальной разработки (все сервисы)
+- [x] 18.1 Создать Dockerfile для core service
+- [x] 18.2 Создать Docker Compose для локальной разработки (все сервисы)
 - [ ] 18.3 Создать Kubernetes manifests (deployments, services, configmaps, secrets)
 - [ ] 18.4 Настроить CI/CD pipeline (GitHub Actions / GitLab CI)
 - [ ] 18.5 Настроить автоматические тесты в CI
