@@ -132,8 +132,8 @@ async def subscribe_to_project_events(
     session_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    project: UserProject = Depends(get_project_with_validation),
-    workspace: UserWorkerSpace = Depends(get_worker_space),
+    project: UserProject = Depends(get_project_with_validation),  # Validates user owns project
+    workspace: UserWorkerSpace = Depends(get_worker_space),        # Initializes workspace (ensures project loaded)
     since: datetime | None = Query(
         default=None,
         description="ISO 8601 timestamp - only return buffered events after this time (prevents duplicates on reconnect)"

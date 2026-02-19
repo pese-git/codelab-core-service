@@ -16,7 +16,8 @@
 ### Для разработчиков
 1. 👨‍💻 [Developer Guide](./architecture/developer-guide.md) - Руководство разработчика
 2. 🏗️ [Architecture Overview](./architecture/system-overview.md) - Архитектура системы
-3. 🧪 [Testing Guide](../tests/README.md) - Тестирование
+3. 📐 [Workspace Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md) - Доступ к workspace и инструменты
+4. 🧪 [Testing Guide](../tests/README.md) - Тестирование
 
 ### Для DevOps
 1. 🚀 [Deployment Guide](./architecture/deployment-guide.md) - Развертывание
@@ -86,6 +87,15 @@ doc/
 ---
 
 ### 🏗️ Архитектура
+
+#### [Workspace Access Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md)
+**Доступ к workspace в личной платформе**
+- Архитектурный поток (Client → Agent → Tool → Backend -> Client -> Backend)
+- Доступ к файлам через инструменты
+- Валидация на стороне клиента
+- Граничные условия безопасности
+- Tool signatures для работы с файлами
+- Code review реализации
 
 #### [Architecture Overview](./architecture/system-overview.md)
 **Обзор архитектуры системы**
@@ -254,6 +264,13 @@ doc/
 
 ### 📝 История и изменения
 
+#### [Workspace Architecture Changelog](./CHANGELOG_WORKSPACE_ARCHITECTURE.md)
+**История уточнений архитектуры workspace**
+- v0.2.0 - Уточнение механизма доступа к workspace
+- Обновления спецификации
+- Новые tool signatures
+- Документы по архитектуре
+
 #### [Infrastructure Complete](../INFRASTRUCTURE_COMPLETE.md)
 **Статус инфраструктуры**
 - Реализованные компоненты
@@ -353,13 +370,14 @@ graph LR
 | Тема | Документы |
 |------|-----------|
 | **Установка** | [README](../README.md), [QUICKSTART](../QUICKSTART.md), [Setup Guide](./setup-guide.md) |
-| **Архитектура** | [System Overview](./architecture/system-overview.md), [Component Details](./architecture/component-details.md) |
+| **Архитектура** | [System Overview](./architecture/system-overview.md), [Component Details](./architecture/component-details.md), [Workspace Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md) |
 | **API** | [API Specification](./architecture/api-specification.md), [REST API](./rest-api.md) |
 | **Развертывание** | [Deployment Guide](./architecture/deployment-guide.md), [Infrastructure Setup](./infrastructure-setup.md) |
 | **Разработка** | [Developer Guide](./architecture/developer-guide.md), [Testing Guide](../tests/README.md) |
 | **Real-time** | [SSE Events](./sse-event-streaming.md) |
 | **LLM** | [LiteLLM Integration](./litellm-integration.md), [LLM Error Handling](./llm-error-handling.md), [Agent Context](./agent-context.md) |
 | **Обработка ошибок** | [LLM Error Handling](./llm-error-handling.md) |
+| **Workspace Access** | [Workspace Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md), [Workspace Changelog](./CHANGELOG_WORKSPACE_ARCHITECTURE.md), [Team Announcement](./TEAM_ANNOUNCEMENT_WORKSPACE_ARCHITECTURE.md) |
 
 ### По роли
 
