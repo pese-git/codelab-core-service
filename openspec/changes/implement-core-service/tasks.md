@@ -124,18 +124,96 @@
 
 ## 10. User Worker Space
 
-- [ ] 10.1 Реализовать UserWorkerSpace класс для управления рабочим пространством
-- [ ] 10.2 Реализовать инициализацию Worker Space при первом запросе пользователя
-- [ ] 10.3 Реализовать управление agent_cache (загрузка, инвалидация, очистка)
-- [ ] 10.4 Реализовать интеграцию с Agent Bus (регистрация/дерегистрация агентов)
-- [ ] 10.5 Реализовать интеграцию с Qdrant (доступ к per-agent collections)
-- [ ] 10.6 Реализовать координацию между direct и orchestrated режимами
-- [ ] 10.7 Реализовать lifecycle management (initialization, cleanup, reset)
-- [ ] 10.8 Реализовать graceful cleanup при завершении сессии
-- [ ] 10.9 Реализовать crash recovery (восстановление Worker Space)
-- [ ] 10.10 Реализовать изоляцию между Worker Spaces разных пользователей
-- [ ] 10.11 Добавить метрики (active_agents, cache_size, queue_size)
-- [ ] 10.12 Написать unit тесты для Worker Space
+### 10.1 Базовая структура и инициализация
+- [ ] 10.1.1 Реализовать UserWorkerSpace класс с полями (user_id, project_id, agent_cache, agent_bus, redis, qdrant, db)
+- [ ] 10.1.2 Реализовать __init__ с инициализацией компонентов
+- [ ] 10.1.3 Реализовать async def initialize() для инициализации ресурсов при первом запросе
+- [ ] 10.1.4 Реализовать AgentCache вспомогательный класс (in-memory + Redis TTL)
+
+### 10.2 Управление кешем агентов
+- [ ] 10.2.1 Реализовать async def get_agent(agent_id) - получение из кеша с fallback на БД
+- [ ] 10.2.2 Реализовать async def add_agent(config) - добавление нового агента
+- [ ] 10.2.3 Реализовать async def remove_agent(agent_id) - удаление агента
+- [ ] 10.2.4 Реализовать async def reload_agent(agent_id) - перезагрузка конфигурации
+- [ ] 10.2.5 Реализовать async def invalidate_agent(agent_id) - инвалидация кеша одного агента
+- [ ] 10.2.6 Реализовать async def clear_agent_cache() - очистка всего кеша проекта
+- [ ] 10.2.7 Реализовать async def list_agents_for_project() - список агентов проекта
+
+### 10.3 Интеграция с Agent Bus
+- [ ] 10.3.1 Реализовать async def _register_agent(agent_db_model) - внутренняя регистрация
+- [ ] 10.3.2 Реализовать async def register_agent(agent_id) - публичный метод регистрации
+- [ ] 10.3.3 Реализовать async def deregister_agent(agent_id) - публичный метод дерегистрации
+- [ ] 10.3.4 Реализовать async def get_agent_status(agent_id) - получение статуса из Agent Bus
+- [ ] 10.3.5 Реализовать async def get_agent_metrics(agent_id) - получение метрик из Agent Bus
+- [ ] 10.3.6 Реализовать async def send_task_to_agent(agent_id, task_payload) - отправка задачи
+
+### 10.4 Интеграция с Qdrant контекстом
+- [ ] 10.4.1 Реализовать async def get_agent_context_store(agent_id) - получение store для RAG
+- [ ] 10.4.2 Реализовать async def ensure_agent_collection(agent_id) - проверка/создание collection
+- [ ] 10.4.3 Реализовать async def search_context(agent_id, query) - семантический поиск контекста
+- [ ] 10.4.4 Реализовать async def add_context(agent_id, interaction) - сохранение взаимодействия
+- [ ] 10.4.5 Реализовать async def clear_context(agent_id) - очистка памяти агента
+
+### 10.5 Координация режимов выполнения
+- [ ] 10.5.1 Реализовать async def direct_execution(agent_id, task_payload) - прямое выполнение
+- [ ] 10.5.2 Реализовать async def orchestrated_execution(task_payload) - делегирование на Orchestrator
+- [ ] 10.5.3 Реализовать async def handle_message(message, target_agent_id=None) - единый API
+- [ ] 10.5.4 Интегрировать direct_execution с результатом -> add_context для RAG
+- [ ] 10.5.5 Интегрировать orchestrated_execution для multi-step workflows
+
+### 10.6 Lifecycle management
+- [ ] 10.6.1 Реализовать async def cleanup() - graceful cleanup ресурсов
+- [ ] 10.6.2 Реализовать async def reset() - force reset Worker Space
+- [ ] 10.6.3 Реализовать def is_healthy() - health check
+- [ ] 10.6.4 Реализовать async def get_metrics() - полные метрики с registered_agents, task_counter, uptime
+- [ ] 10.6.5 Реализовать async def get_agent_stats() - статистика по агентам
+
+### 10.7 Изоляция и безопасность
+- [ ] 10.7.1 Гарантировать что per-project architecture соблюдается везде
+- [ ] 10.7.2 Проверить что agent_cache изолирован между проектами
+- [ ] 10.7.3 Проверить что Qdrant collections per-project
+- [ ] 10.7.4 Проверить что Agent Bus user_prefix используется везде
+
+### 10.8 WorkerSpaceManager (Singleton)
+- [ ] 10.8.1 Реализовать WorkerSpaceManager класс как Singleton
+- [ ] 10.8.2 Реализовать async def get_or_create(user_id, project_id, ...) - получение/создание
+- [ ] 10.8.3 Реализовать async def get(user_id, project_id) - получение существующего
+- [ ] 10.8.4 Реализовать async def remove(user_id, project_id) - удаление с cleanup
+- [ ] 10.8.5 Реализовать async def remove_user_spaces(user_id) - удаление всех проектов пользователя
+- [ ] 10.8.6 Реализовать async def cleanup_all() - полная очистка при shutdown
+- [ ] 10.8.7 Реализовать get_stats() - статистика всех spaces
+- [ ] 10.8.8 Реализовать get_user_project_count(user_id) - счетчик проектов
+
+### 10.9 Dependency Injection
+- [ ] 10.9.1 Реализовать app/dependencies.py с async def get_worker_space()
+- [ ] 10.9.2 Интегрировать get_worker_space dependency во все project endpoints
+- [ ] 10.9.3 Обновить routes/project_chat.py для использования workspace.handle_message()
+- [ ] 10.9.4 Обновить routes/project_agents.py для использования workspace методов
+
+### 10.10 Тестирование (Unit)
+- [ ] 10.10.1 Тесты для AgentCache (get, set, invalidate, clear)
+- [ ] 10.10.2 Тесты для инициализации Worker Space
+- [ ] 10.10.3 Тесты для управления кешем (invalidate, clear)
+- [ ] 10.10.4 Тесты для Agent Bus интеграции (register, deregister, metrics, status)
+- [ ] 10.10.5 Тесты для Qdrant интеграции (context store, search, add, clear)
+- [ ] 10.10.6 Тесты для режимов выполнения (direct, orchestrated, handle_message)
+- [ ] 10.10.7 Тесты для lifecycle (cleanup, reset, is_healthy, get_metrics)
+- [ ] 10.10.8 Тесты для изоляции между проектами одного пользователя
+- [ ] 10.10.9 Тесты для WorkerSpaceManager singleton
+- [ ] 10.10.10 Тесты для изоляции между пользователями
+
+### 10.11 Интеграционные тесты
+- [ ] 10.11.1 Full flow: инициализация → создание агента → отправка задачи → cleanup
+- [ ] 10.11.2 Direct mode: отправка сообщения конкретному агенту
+- [ ] 10.11.3 Orchestrated mode: отправка сообщения без target_agent (с Orchestrator)
+- [ ] 10.11.4 RAG integration: add_context → search_context → использование в следующем запросе
+- [ ] 10.11.5 Параллельные запросы в одном Worker Space
+- [ ] 10.11.6 Параллельные Worker Spaces разных пользователей/проектов
+
+### 10.12 Мониторинг и отладка
+- [ ] 10.12.1 Добавить логирование всех операций
+- [ ] 10.12.2 Добавить метрики для Prometheus (active_workers, agents_per_project)
+- [ ] 10.12.3 Обновить health endpoint для включения Worker Space статуса
 
 ## 11. Chat System (Dual Modes)
 
