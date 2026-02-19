@@ -248,7 +248,10 @@ class WorkerSpaceManager:
         Returns:
             Statistics dictionary with:
             - active_spaces: number of active spaces
-            - spaces: per-space statistics
+            - spaces: per-space statistics (basic info only)
+        
+        Note:
+            For detailed async stats, use individual workspace.get_metrics()
         """
         spaces_stats = {}
         for key, space in self.spaces.items():
@@ -256,7 +259,9 @@ class WorkerSpaceManager:
             spaces_stats[key] = {
                 "user_id": user_id_str,
                 "project_id": project_id,
-                **space.get_agent_stats(),
+                "initialized": space.initialized,
+                "active_agents": len(space.active_agents),
+                "cache_size": space.agent_cache.get_size(),
             }
 
         return {

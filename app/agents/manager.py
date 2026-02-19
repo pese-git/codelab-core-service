@@ -115,7 +115,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=AgentConfig(name=agent.name, **agent.config),
+                config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
             )
             for agent in agents
         ]

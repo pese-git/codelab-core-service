@@ -9,7 +9,6 @@ from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
 from app.core.stream_manager import get_stream_manager
 from app.core.user_worker_space import UserWorkerSpace
@@ -22,7 +21,6 @@ from app.models.message import Message
 from app.models.user_project import UserProject
 from app.qdrant_client import get_qdrant
 from app.redis_client import get_redis
-from app.schemas.agent import AgentConfig
 from app.schemas.chat import (
     ChatSessionListResponse,
     ChatSessionResponse,
@@ -187,7 +185,12 @@ async def send_project_message(
     project: UserProject = Depends(get_project_with_validation),
     workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> MessageResponse:
-    """Send message to chat session in project (direct or orchestrated mode)."""
+    """Send message to chat session in project (direct or orchestrated mode).
+    
+    Uses unified workspace.handle_message() API which automatically:
+    - Routes to direct_execution() if target_agent specified
+    - Routes to orchestrated_execution() if no target_agent
+    """
     user_id = get_current_user_id(request)
     logger.info(f"Sending message to session: session_id={session_id}, project_id={project_id}")
     
@@ -234,266 +237,206 @@ async def send_project_message(
         ),
     )
     
-    # Direct mode: target_agent specified
+    # Get session history for workspace execution
+    history_result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session_id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history_messages = history_result.scalars().all()
+    session_history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in reversed(history_messages)
+    ]
+    
+    # Parse target agent ID if provided
+    target_agent_id = None
     if message_request.target_agent:
-        # Get agent from workspace (per-project cache and bus)
         try:
-            target_agent_uuid = UUID(message_request.target_agent)
+            target_agent_id = UUID(message_request.target_agent)
         except ValueError:
-            # If not a valid UUID, treat as error
             logger.warning(f"Invalid agent_id: {message_request.target_agent}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="target_agent must be a valid agent UUID",
             )
+    
+    try:
+        # Use unified workspace API
+        exec_result = await workspace.handle_message(
+            message_content=message_request.content,
+            target_agent_id=target_agent_id,
+            session_history=session_history,
+            task_id=str(session_id),
+        )
         
-        # Get agent from workspace cache
-        agent = await workspace.get_agent(target_agent_uuid)
-        if not agent:
-            logger.warning(f"Agent not found in workspace: agent_id={target_agent_uuid}, project_id={project_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Agent '{message_request.target_agent}' not found in this project",
-            )
-        
-        # Get agent config from database for response
+        # Get agent info for SSE events
         agent_manager = AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
-        agent_response = await agent_manager.get_agent_by_project(
-            agent_id=target_agent_uuid,
-            project_id=project_id,
-        )
+        agent_id = target_agent_id or exec_result.get("selected_agent_id")
         
-        if not agent_response:
-            logger.warning(f"Agent config not found: agent_id={target_agent_uuid}, project_id={project_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Agent '{message_request.target_agent}' not found in this project",
-            )
-        
-        # Send SSE event: direct agent call started
-        await stream_manager.broadcast_event(
-            session_id=session_id,
-            event=StreamEvent(
-                event_type=StreamEventType.DIRECT_AGENT_CALL,
-                payload={
-                    "agent_id": str(agent_response.id),
-                    "agent_name": agent_response.name,
-                    "message": message_request.content,
-                },
-                session_id=session_id,
-            ),
-        )
-        
-        # Create contextual agent
-        contextual_agent = ContextualAgent(
-            agent_id=agent_response.id,
-            user_id=user_id,
-            config=agent_response.config,
-            qdrant_client=qdrant,
-        )
-        
-        # Get session history
-        result = await db.execute(
-            select(Message)
-            .where(Message.session_id == session_id)
-            .order_by(Message.created_at.desc())
-            .limit(10)
-        )
-        history_messages = result.scalars().all()
-        session_history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in reversed(history_messages)
-        ]
-        
-        # Send SSE event: task started
-        await stream_manager.broadcast_event(
-            session_id=session_id,
-            event=StreamEvent(
-                event_type=StreamEventType.TASK_STARTED,
-                payload={
-                    "agent_id": str(agent_response.id),
-                    "agent_name": agent_response.name,
-                    "task_description": f"Processing message: {message_request.content[:100]}...",
-                },
-                session_id=session_id,
-            ),
-        )
-        
-        # Execute agent
-        try:
-            result = await contextual_agent.execute(
-                user_message=message_request.content,
-                session_history=session_history,
-                task_id=str(session_id),
-            )
-            
-            if not result["success"]:
-                error_type = result.get("error_type", "unknown")
-                error_msg = result.get("error")
-                provider = result.get("provider", "unknown")
-                model = result.get("model", agent_response.config.model)
-                
-                # Send detailed error event
-                await stream_manager.broadcast_event(
-                    session_id=session_id,
-                    event=StreamEvent(
-                        event_type=StreamEventType.ERROR,
-                        payload={
-                            "agent_id": str(agent_response.id),
-                            "agent_name": agent_response.name,
-                            "error_type": error_type,
-                            "error": error_msg,
-                            "provider": provider,
-                            "model": model,
-                        },
-                        session_id=session_id,
-                    ),
+        if agent_id:
+            try:
+                agent_id_uuid = UUID(str(agent_id))
+                agent_response = await agent_manager.get_agent_by_project(
+                    agent_id=agent_id_uuid,
+                    project_id=project_id,
                 )
-                
-                # Return detailed error response
-                if error_type in ["timeout", "connection", "rate_limit", "authentication", "bad_request"]:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=LLMProviderError(
-                            detail=error_msg,
-                            error_code="LLM_PROVIDER_ERROR",
-                            metadata={
-                                "provider": provider,
-                                "model": model,
-                                "error_type": error_type,
-                                "agent_id": str(agent_response.id),
-                                "agent_name": agent_response.name,
-                            }
-                        ).model_dump(),
-                    )
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Agent execution failed: {error_msg}",
-                    )
-            
-            # Send context retrieved event if context was used
-            if result.get("context"):
-                await stream_manager.broadcast_event(
-                    session_id=session_id,
-                    event=StreamEvent(
-                        event_type=StreamEventType.CONTEXT_RETRIEVED,
-                        payload={
-                            "agent_id": str(agent_response.id),
-                            "context_count": len(result["context"]),
-                            "context_preview": result["context"][:200] if result["context"] else "",
-                        },
-                        session_id=session_id,
-                    ),
-                )
-            
-            # Save assistant message
-            assistant_message = Message(
-                session_id=session_id,
-                role=MessageRole.ASSISTANT.value,
-                content=result["response"],
-                agent_id=agent_response.id,
-            )
-            db.add(assistant_message)
-            await db.flush()
-            
-            # Send SSE event: message created
+            except (ValueError, Exception):
+                agent_response = None
+        else:
+            agent_response = None
+        
+        # Send appropriate SSE events based on mode
+        if target_agent_id:
+            # Direct mode
             await stream_manager.broadcast_event(
                 session_id=session_id,
                 event=StreamEvent(
-                    event_type=StreamEventType.MESSAGE_CREATED,
+                    event_type=StreamEventType.DIRECT_AGENT_CALL,
                     payload={
-                        "message_id": str(assistant_message.id),
-                        "role": MessageRole.ASSISTANT.value,
-                        "content": assistant_message.content,
-                        "agent_id": str(agent_response.id),
-                        "agent_name": agent_response.name,
-                        "timestamp": assistant_message.created_at.isoformat(),
+                        "agent_id": str(target_agent_id),
+                        "agent_name": agent_response.name if agent_response else "Unknown",
+                        "message": message_request.content,
                     },
                     session_id=session_id,
                 ),
             )
-            
-            # Send SSE event: task completed
+        else:
+            # Orchestrated mode
             await stream_manager.broadcast_event(
                 session_id=session_id,
                 event=StreamEvent(
-                    event_type=StreamEventType.TASK_COMPLETED,
+                    event_type=StreamEventType.TASK_STARTED,
                     payload={
-                        "agent_id": str(agent_response.id),
-                        "agent_name": agent_response.name,
-                        "status": "success",
-                        "response_preview": result["response"][:200],
+                        "routing_score": exec_result.get("routing_score", 0.0),
+                        "selected_agent_id": str(agent_id),
+                        "message": message_request.content,
                     },
                     session_id=session_id,
                 ),
             )
+        
+        # Check for execution errors
+        if not exec_result.get("success"):
+            error_msg = exec_result.get("response", "Unknown error")
+            logger.error(f"Execution failed: {error_msg}")
             
-            logger.info(f"Message processed successfully: session_id={session_id}, agent={agent_response.name}, project_id={project_id}")
-            
-            return MessageResponse(
-                id=assistant_message.id,
-                role=MessageRole.ASSISTANT,
-                content=assistant_message.content,
-                agent_id=assistant_message.agent_id,
-                timestamp=assistant_message.created_at,
-            )
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error processing message: {e}", exc_info=True)
             # Send error event
             await stream_manager.broadcast_event(
                 session_id=session_id,
                 event=StreamEvent(
                     event_type=StreamEventType.ERROR,
                     payload={
-                        "agent_id": str(agent_response.id),
-                        "agent_name": agent_response.name,
-                        "error_type": "internal",
-                        "error": str(e),
+                        "agent_id": str(agent_id) if agent_id else "unknown",
+                        "error": error_msg,
+                        "error_type": "execution_error",
                     },
                     session_id=session_id,
                 ),
             )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Internal error: {str(e)}",
+                detail=f"Agent execution failed: {error_msg}",
             )
-    
-    # Orchestrated mode: TODO - implement orchestrator
-    # For MVP, return a placeholder response
-    assistant_message = Message(
-        session_id=session_id,
-        role=MessageRole.ASSISTANT.value,
-        content="Orchestrated mode not yet implemented. Please specify target_agent for direct mode.",
-    )
-    db.add(assistant_message)
-    await db.flush()
-    
-    # Send SSE event: message created
-    await stream_manager.broadcast_event(
-        session_id=session_id,
-        event=StreamEvent(
-            event_type=StreamEventType.MESSAGE_CREATED,
-            payload={
-                "message_id": str(assistant_message.id),
-                "role": MessageRole.ASSISTANT.value,
-                "content": assistant_message.content,
-                "timestamp": assistant_message.created_at.isoformat(),
-            },
+        
+        # Save assistant message
+        assistant_message = Message(
             session_id=session_id,
-        ),
-    )
-    
-    return MessageResponse(
-        id=assistant_message.id,
-        role=MessageRole.ASSISTANT,
-        content=assistant_message.content,
-        agent_id=None,
-        timestamp=assistant_message.created_at,
-    )
+            role=MessageRole.ASSISTANT.value,
+            content=exec_result.get("response"),
+            agent_id=UUID(str(agent_id)) if agent_id else None,
+        )
+        db.add(assistant_message)
+        await db.flush()
+        
+        # Send SSE event: message created
+        await stream_manager.broadcast_event(
+            session_id=session_id,
+            event=StreamEvent(
+                event_type=StreamEventType.MESSAGE_CREATED,
+                payload={
+                    "message_id": str(assistant_message.id),
+                    "role": MessageRole.ASSISTANT.value,
+                    "content": assistant_message.content,
+                    "agent_id": str(agent_id) if agent_id else None,
+                    "agent_name": agent_response.name if agent_response else "System",
+                    "timestamp": assistant_message.created_at.isoformat(),
+                    "context_used": exec_result.get("context_used", 0),
+                    "tokens_used": exec_result.get("tokens_used", 0),
+                    "execution_time_ms": exec_result.get("execution_time_ms", 0),
+                },
+                session_id=session_id,
+            ),
+        )
+        
+        # Send SSE event: task completed
+        await stream_manager.broadcast_event(
+            session_id=session_id,
+            event=StreamEvent(
+                event_type=StreamEventType.TASK_COMPLETED,
+                payload={
+                    "agent_id": str(agent_id) if agent_id else "system",
+                    "agent_name": agent_response.name if agent_response else "System",
+                    "status": "success",
+                    "response_preview": exec_result.get("response", "")[:200],
+                    "execution_time_ms": exec_result.get("execution_time_ms", 0),
+                },
+                session_id=session_id,
+            ),
+        )
+        
+        logger.info(
+            f"Message processed successfully: session_id={session_id}, "
+            f"agent_id={agent_id}, execution_time_ms={exec_result.get('execution_time_ms')}, "
+            f"project_id={project_id}"
+        )
+        
+        return MessageResponse(
+            id=assistant_message.id,
+            role=MessageRole.ASSISTANT,
+            content=assistant_message.content,
+            agent_id=assistant_message.agent_id,
+            timestamp=assistant_message.created_at,
+        )
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"Invalid request: {e}")
+        await stream_manager.broadcast_event(
+            session_id=session_id,
+            event=StreamEvent(
+                event_type=StreamEventType.ERROR,
+                payload={
+                    "error_type": "validation_error",
+                    "error": str(e),
+                },
+                session_id=session_id,
+            ),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error processing message: {e}", exc_info=True)
+        await stream_manager.broadcast_event(
+            session_id=session_id,
+            event=StreamEvent(
+                event_type=StreamEventType.ERROR,
+                payload={
+                    "error_type": "internal",
+                    "error": str(e),
+                },
+                session_id=session_id,
+            ),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal error: {str(e)}",
+        )
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
