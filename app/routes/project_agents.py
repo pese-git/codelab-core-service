@@ -16,7 +16,7 @@ from app.middleware.user_isolation import get_current_user_id
 from app.models.user_project import UserProject
 from app.qdrant_client import get_qdrant
 from app.redis_client import get_redis
-from app.schemas.agent import AgentConfig, AgentListResponse, AgentResponse, AgentUpdate
+from app.schemas.agent import AgentConfig, AgentCreate, AgentListResponse, AgentResponse, AgentUpdate
 
 router = APIRouter(prefix="/my/projects/{project_id}/agents", tags=["project-agents"])
 
@@ -35,7 +35,7 @@ async def get_agent_manager(
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=AgentResponse)
 async def create_agent(
     project_id: UUID,
-    config: AgentConfig,
+    agent_data: AgentCreate,
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
@@ -45,7 +45,7 @@ async def create_agent(
 
     Args:
         project_id: Project UUID from path
-        config: Agent configuration
+        agent_data: Agent creation data (name + config)
         request: FastAPI request
         project: Validated project object
         manager: Agent manager
@@ -53,7 +53,7 @@ async def create_agent(
     Returns:
         Created agent information
     """
-    return await manager.create_agent_with_project(config, project_id)
+    return await manager.create_agent_with_project(agent_data.name, agent_data.config, project_id)
 
 
 @router.get("/", response_model=AgentListResponse)
@@ -118,7 +118,7 @@ async def get_agent(
 async def update_agent(
     project_id: UUID,
     agent_id: UUID,
-    config: AgentConfig,
+    agent_data: AgentUpdate,
     request: Request,
     project: UserProject = Depends(get_project_with_validation),
     manager: AgentManager = Depends(get_agent_manager),
@@ -129,7 +129,7 @@ async def update_agent(
     Args:
         project_id: Project UUID from path
         agent_id: Agent UUID from path
-        config: Updated agent configuration
+        agent_data: Updated agent data (name + config)
         request: FastAPI request
         project: Validated project object
         manager: Agent manager
@@ -140,7 +140,7 @@ async def update_agent(
     Raises:
         HTTPException: 404 if agent not found in project
     """
-    agent = await manager.update_agent_with_project(agent_id, project_id, config)
+    agent = await manager.update_agent_with_project(agent_id, project_id, agent_data.name, agent_data.config)
 
     if not agent:
         raise HTTPException(

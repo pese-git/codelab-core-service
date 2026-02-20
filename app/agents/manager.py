@@ -39,20 +39,13 @@ class AgentManager:
         self.qdrant = qdrant
         self.user_id = user_id
 
-    def _build_agent_config(self, agent: UserAgent) -> AgentConfig:
-        """Build AgentConfig from DB model, ensuring required name is present."""
-        if isinstance(agent.config, dict):
-            return AgentConfig.model_validate({"name": agent.name, **agent.config})
-        return agent.config
-
-    async def create_agent(self, config: AgentConfig) -> AgentResponse:
+    async def create_agent(self, name: str, config: AgentConfig) -> AgentResponse:
         """Create new agent."""
         # Create database record
-        # Exclude 'name' from config as it's stored separately in UserAgent.name
-        config_dict = config.model_dump(exclude={'name'})
+        config_dict = config.model_dump()
         agent = UserAgent(
             user_id=self.user_id,
-            name=config.name,
+            name=name,
             config=config_dict,
             status=AgentStatus.READY.value,
         )
@@ -63,6 +56,7 @@ class AgentManager:
         contextual_agent = ContextualAgent(
             agent_id=agent.id,
             user_id=self.user_id,
+            agent_name=name,
             config=config,
             qdrant_client=self.qdrant,
         )
@@ -76,7 +70,7 @@ class AgentManager:
             "agent_created",
             agent_id=str(agent.id),
             user_id=str(self.user_id),
-            agent_name=config.name,
+            agent_name=name,
         )
 
         return AgentResponse(
@@ -105,7 +99,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=self._build_agent_config(agent),
+            config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
         )
 
     async def list_agents(self) -> list[AgentResponse]:
@@ -121,7 +115,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=self._build_agent_config(agent),
+                config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
             )
             for agent in agents
         ]
@@ -142,7 +136,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=self._build_agent_config(agent),
+                config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
             )
             for agent in agents
         ]
@@ -168,18 +162,18 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=self._build_agent_config(agent),
+            config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
         )
 
     async def create_agent_with_project(
-        self, config: AgentConfig, project_id: UUID
+        self, name: str, config: AgentConfig, project_id: UUID
     ) -> AgentResponse:
         """Create new agent in a specific project."""
-        config_dict = config.model_dump(exclude={"name"})
+        config_dict = config.model_dump()
         agent = UserAgent(
             user_id=self.user_id,
             project_id=project_id,
-            name=config.name,
+            name=name,
             config=config_dict,
             status=AgentStatus.READY.value,
         )
@@ -190,6 +184,7 @@ class AgentManager:
         contextual_agent = ContextualAgent(
             agent_id=agent.id,
             user_id=self.user_id,
+            agent_name=name,
             config=config,
             qdrant_client=self.qdrant,
         )
@@ -204,7 +199,7 @@ class AgentManager:
             agent_id=str(agent.id),
             user_id=str(self.user_id),
             project_id=str(project_id),
-            agent_name=config.name,
+            agent_name=name,
         )
 
         return AgentResponse(
@@ -216,7 +211,7 @@ class AgentManager:
         )
 
     async def update_agent_with_project(
-        self, agent_id: UUID, project_id: UUID, config: AgentConfig
+        self, agent_id: UUID, project_id: UUID, name: str, config: AgentConfig
     ) -> AgentResponse | None:
         """Update agent in a specific project."""
         result = await self.db.execute(
@@ -231,8 +226,8 @@ class AgentManager:
         if not agent:
             return None
 
-        agent.name = config.name
-        agent.config = config.model_dump(exclude={"name"})
+        agent.name = name
+        agent.config = config.model_dump()
         await self.db.flush()
 
         # Update cache
@@ -251,7 +246,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=self._build_agent_config(agent),
+            config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
         )
 
     async def delete_agent_with_project(
@@ -298,7 +293,7 @@ class AgentManager:
 
         return True
 
-    async def update_agent(self, agent_id: UUID, config: AgentConfig) -> AgentResponse | None:
+    async def update_agent(self, agent_id: UUID, name: str, config: AgentConfig) -> AgentResponse | None:
         """Update agent configuration."""
         result = await self.db.execute(
             select(UserAgent).where(
@@ -311,9 +306,9 @@ class AgentManager:
         if not agent:
             return None
 
-        # Update config (exclude 'name' as it's stored separately)
-        agent.name = config.name
-        agent.config = config.model_dump(exclude={'name'})
+        # Update config
+        agent.name = name
+        agent.config = config.model_dump()
         await self.db.flush()
 
         # Update cache
@@ -392,5 +387,5 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=self._build_agent_config(agent),
+            config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
         )

@@ -21,6 +21,7 @@ class ContextualAgent:
         self,
         agent_id: UUID,
         user_id: UUID,
+        agent_name: str,
         config: AgentConfig,
         qdrant_client: AsyncQdrantClient | None,
     ):
@@ -29,11 +30,13 @@ class ContextualAgent:
         Args:
             agent_id: Agent ID
             user_id: User ID
+            agent_name: Agent name
             config: Agent configuration
             qdrant_client: Qdrant client instance, or None if Qdrant is disabled
         """
         self.agent_id = agent_id
         self.user_id = user_id
+        self.agent_name = agent_name
         self.config = config
         
         # Initialize OpenAI client (supports LiteLLM via base_url)
@@ -46,7 +49,7 @@ class ContextualAgent:
         self.context_store = AgentContextStore(
             client=qdrant_client,
             user_id=user_id,
-            agent_name=config.name,
+            agent_name=agent_name,
         )
 
     async def initialize(self) -> None:
@@ -55,7 +58,7 @@ class ContextualAgent:
         logger.info(
             "agent_initialized",
             agent_id=str(self.agent_id),
-            agent_name=self.config.name,
+            agent_name=self.agent_name,
         )
 
     async def execute(
@@ -117,7 +120,7 @@ class ContextualAgent:
             logger.info(
                 "agent_executed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 task_id=task_id,
                 context_used=len(context_results),
             )
@@ -134,7 +137,7 @@ class ContextualAgent:
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 error=error_msg,
                 error_type="timeout",
                 model=self.config.model,
@@ -162,7 +165,7 @@ class ContextualAgent:
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 error=error_msg,
                 error_type="connection",
                 model=self.config.model,
@@ -190,7 +193,7 @@ class ContextualAgent:
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 error=error_msg,
                 error_type="rate_limit",
                 model=self.config.model,
@@ -218,7 +221,7 @@ class ContextualAgent:
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 error=error_msg,
                 error_type="authentication",
                 model=self.config.model,
@@ -246,7 +249,7 @@ class ContextualAgent:
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 error=error_msg,
                 error_type="bad_request",
                 model=self.config.model,
@@ -274,7 +277,7 @@ class ContextualAgent:
             logger.error(
                 "agent_execution_failed",
                 agent_id=str(self.agent_id),
-                agent_name=self.config.name,
+                agent_name=self.agent_name,
                 error=error_msg,
                 error_type="unknown",
                 model=self.config.model,

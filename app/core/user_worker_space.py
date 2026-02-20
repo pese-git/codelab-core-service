@@ -224,6 +224,7 @@ class UserWorkerSpace:
             agent = ContextualAgent(
                 agent_id=agent_db_model.id,
                 user_id=self.user_id,
+                agent_name=agent_db_model.name,
                 config=agent_config,
                 qdrant_client=self.qdrant,
             )
@@ -702,7 +703,7 @@ class UserWorkerSpace:
                 "success": result.get("success", False),
                 "response": result.get("response") or result.get("error"),
                 "agent_id": str(agent_id),
-                "agent_name": agent.config.name,
+                "agent_name": agent.agent_name,
                 "context_used": result.get("context_used", 0),
                 "tokens_used": result.get("tokens_used", 0),
                 "timestamp": datetime.utcnow().isoformat(),
@@ -932,7 +933,7 @@ class UserWorkerSpace:
 
         return {
             "agent_id": str(agent_id),
-            "agent_name": agent.config.name,
+            "agent_name": agent.agent_name,
             "is_active": agent_id in self.active_agents,
             "is_in_cache": await self.agent_cache.get(agent_id) is not None,
             "execution": {

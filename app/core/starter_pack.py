@@ -13,7 +13,6 @@ DEFAULT_AGENTS_CONFIG = [
     {
         "name": "Architect",
         "config": {
-            "name": "Architect",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.3,
             "system_prompt": """You are a project architect and task planner.
@@ -55,7 +54,6 @@ Output format (JSON):
     {
         "name": "Orchestrator",
         "config": {
-            "name": "Orchestrator",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.5,
             "system_prompt": """You are a project orchestrator and execution coordinator.
@@ -94,7 +92,6 @@ When coordinating tasks:
     {
         "name": "CodeAssistant",
         "config": {
-            "name": "CodeAssistant",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.7,
             "system_prompt": "You are a helpful coding assistant specialized in Python and web development.",
@@ -113,7 +110,6 @@ When coordinating tasks:
     {
         "name": "DataAnalyst",
         "config": {
-            "name": "DataAnalyst",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.3,
             "system_prompt": "You are a data analyst expert. Help users analyze data and create visualizations.",
@@ -132,7 +128,6 @@ When coordinating tasks:
     {
         "name": "DocumentWriter",
         "config": {
-            "name": "DocumentWriter",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.8,
             "system_prompt": "You are a technical writer. Help users create clear and comprehensive documentation.",

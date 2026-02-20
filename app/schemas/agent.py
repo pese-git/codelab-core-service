@@ -19,7 +19,6 @@ class AgentStatus(str, Enum):
 class AgentConfig(BaseModel):
     """Agent configuration schema."""
 
-    name: str = Field(..., min_length=1, max_length=100, description="Agent name")
     system_prompt: str = Field(..., min_length=1, description="System prompt for the agent")
     model: str = Field(default="openrouter/openai/gpt-4.1", description="LLM model to use")
     tools: list[str] = Field(default_factory=list, description="List of available tools")
@@ -30,7 +29,6 @@ class AgentConfig(BaseModel):
 
     model_config = {"json_schema_extra": {
         "example": {
-            "name": "coder",
             "system_prompt": "You are an expert Python developer...",
             "model": "openrouter/openai/gpt-4.1",
             "tools": ["code_executor", "file_reader"],
@@ -54,9 +52,17 @@ class AgentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentCreate(BaseModel):
+    """Agent creation schema."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Agent name")
+    config: AgentConfig = Field(..., description="Agent configuration")
+
+
 class AgentUpdate(BaseModel):
     """Agent update schema."""
 
+    name: str = Field(..., min_length=1, max_length=100, description="Agent name")
     config: AgentConfig = Field(..., description="Updated agent configuration")
 
 
