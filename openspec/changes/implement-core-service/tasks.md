@@ -134,37 +134,37 @@
 
 ## 9. Personal Orchestrator
 
-- [-] 9.1 Реализовать PersonalOrchestrator класс для планирования задач
-- [-] 9.2 Реализовать анализ natural language запросов и создание графа задач
-- [-] 9.3 Реализовать определение зависимостей между задачами
-- [-] 9.4 Реализовать обнаружение циклических зависимостей
-- [-] 9.5 Реализовать топологическую сортировку для параллельного выполнения
-- [-] 9.6 Реализовать выбор подходящих агентов для задач (по capabilities)
-- [-] 9.7 Реализовать оценку стоимости выполнения (LLM API calls + embeddings)
-- [-] 9.8 Реализовать оценку времени выполнения (последовательно vs параллельно)
-- [-] 9.9 Реализовать интеграцию с Approval Manager (для сложных планов)
-- [-] 9.10 Реализовать мониторинг выполнения плана и отправку SSE событий
-- [-] 9.11 Реализовать обработку ошибок (partial success, failed tasks)
-- [-] 9.12 Реализовать кеширование планов в Redis (TTL 24 часа)
-- [-] 9.13 Оптимизировать производительность планирования (< 5 сек)
-- [-] 9.14 Написать unit тесты для orchestrator
+- [x] 9.1 Реализовать PersonalOrchestrator класс для планирования задач
+- [x] 9.2 Реализовать анализ natural language запросов и создание графа задач
+- [x] 9.3 Реализовать определение зависимостей между задачами
+- [x] 9.4 Реализовать обнаружение циклических зависимостей
+- [x] 9.5 Реализовать топологическую сортировку для параллельного выполнения
+- [x] 9.6 Реализовать выбор подходящих агентов для задач (по capabilities)
+- [x] 9.7 Реализовать оценку стоимости выполнения (LLM API calls + embeddings)
+- [x] 9.8 Реализовать оценку времени выполнения (последовательно vs параллельно)
+- [x] 9.9 Реализовать интеграцию с Approval Manager (для сложных планов)
+- [x] 9.10 Реализовать мониторинг выполнения плана и отправку SSE событий
+- [x] 9.11 Реализовать обработку ошибок (partial success, failed tasks)
+- [x] 9.12 Реализовать кеширование планов в Redis (TTL 24 часа)
+- [x] 9.13 Оптимизировать производительность планирования (< 5 сек)
+- [x] 9.14 Написать unit тесты для orchestrator
 
 ## 10. Approval Manager
 
-- [-] 10.1 Реализовать ApprovalManager класс для управления approvals
-- [-] 10.2 Реализовать tool approval workflow (request → SSE → confirm/reject)
-- [-] 10.3 Реализовать plan approval workflow (для сложных планов)
-- [-] 10.4 Реализовать timeout management (300 сек по умолчанию)
-- [-] 10.5 Реализовать уведомление о приближении timeout (60 сек до истечения)
-- [-] 10.6 Реализовать интеграцию с SSE для отправки approval_required событий
-- [-] 10.7 Реализовать разблокировку агентов после approve/reject
-- [-] 10.8 Реализовать хранение истории approvals в БД
-- [-] 10.9 Реализовать risk level assessment (high, medium, low)
-- [-] 10.10 Реализовать auto-approve для low risk tools (опционально)
-- [-] 10.11 Реализовать retry mechanism с лимитом (max 3 попытки)
-- [-] 10.12 Реализовать batch approval для множественных requests
-- [-] 10.13 Добавить метрики (approval_rate, timeout_rate, response_time)
-- [-] 10.14 Написать unit тесты для Approval Manager
+- [x] 10.1 Реализовать ApprovalManager класс для управления approvals
+- [x] 10.2 Реализовать tool approval workflow (request → SSE → confirm/reject)
+- [x] 10.3 Реализовать plan approval workflow (для сложных планов)
+- [x] 10.4 Реализовать timeout management (300 сек по умолчанию)
+- [x] 10.5 Реализовать уведомление о приближении timeout (60 сек до истечения)
+- [x] 10.6 Реализовать интеграцию с SSE для отправки approval_required событий
+- [x] 10.7 Реализовать разблокировку агентов после approve/reject
+- [x] 10.8 Реализовать хранение истории approvals в БД
+- [x] 10.9 Реализовать risk level assessment (high, medium, low)
+- [x] 10.10 Реализовать auto-approve для low risk tools (опционально)
+- [x] 10.11 Реализовать retry mechanism с лимитом (max 3 попытки)
+- [x] 10.12 Реализовать batch approval для множественных requests
+- [x] 10.13 Добавить метрики (approval_rate, timeout_rate, response_time)
+- [x] 10.14 Написать unit тесты для Approval Manager
 
 ## 11. User Worker Space
 
@@ -327,9 +327,9 @@
 ## 13. REST API Endpoints
 
 - [x] 13.1 Реализовать Agent management endpoints (GET/POST/PUT/DELETE `/my/agents/`)
-- [ ] 13.2 Реализовать Orchestrator configuration endpoints (GET/PUT `/my/orchestrator/config`)
+- [x] 13.2 Реализовать Orchestrator configuration endpoints (GET/PUT `/my/orchestrator/config`)
 - [x] 13.3 Реализовать Chat endpoints (POST/GET/DELETE `/my/chat/sessions/`, POST `/my/chat/{session_id}/message/`)
-- [ ] 13.4 Реализовать Approval endpoints (GET/POST `/my/approvals/`, POST `/my/approvals/{id}/confirm`)
+- [x] 13.4 Реализовать Approval endpoints (GET/POST `/my/approvals/`, POST `/my/approvals/{id}/confirm`)
 - [ ] 13.5 Реализовать Context management endpoints (GET/POST/DELETE `/my/agents/{id}/context/`)
 - [x] 13.6 Настроить JWT authentication для всех `/my/*` endpoints
 - [x] 13.7 Реализовать JSON Schema validation (Pydantic) для всех endpoints

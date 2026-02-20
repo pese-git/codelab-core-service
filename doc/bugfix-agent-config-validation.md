@@ -1,142 +1,95 @@
-# Исправление: Ошибка валидации AgentConfig
+# Исправление ошибки валидации AgentConfig
+
+**Дата:** 2026-02-20  
+**Статус:** ✅ Исправлено
 
 ## Проблема
 
-При выполнении `GET /my/agents/` возникала ошибка валидации Pydantic:
+При инициализации Worker Space возникала ошибка валидации Pydantic:
 
 ```
-Field required [type=missing, input_value={'model': 'gpt-4-turbo-pr...}, input_type=dict]
+1 validation error for AgentConfig
+name
+  Field required [type=missing, input_value={'model': 'openrouter/ope...imated_duration': 10.0}}, input_type=dict]
 ```
 
 ## Причина
 
-В базе данных поле `config` (JSON) хранилось двумя способами:
+Структура `DEFAULT_AGENTS_CONFIG` в [`app/core/starter_pack.py`](../app/core/starter_pack.py) была неправильной:
 
-1. **Seed данные** (scripts/init_db.py): `config` НЕ содержал поле `name`
-2. **API создание** (app/agents/manager.py): `config` СОДЕРЖАЛ поле `name` (дублирование с `UserAgent.name`)
+**Неправильная структура:**
+```python
+{
+    "name": "Architect",  # ← name вне config
+    "config": {
+        "model": "...",
+        # name отсутствует внутри config
+    }
+}
+```
 
-При десериализации `AgentConfig(**agent.config)` требовалось обязательное поле `name`, которого не было в seed данных.
+**Требуемая структура согласно [`AgentConfig`](../app/schemas/agent.py):**
+```python
+class AgentConfig(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)  # ← REQUIRED
+    system_prompt: str
+    model: str
+    tools: list[str]
+    ...
+```
 
 ## Решение
 
-Исключить поле `name` из `config` при сохранении, так как оно уже хранится в отдельном поле `UserAgent.name`.
+### 1. Обновлена структура DEFAULT_AGENTS_CONFIG
 
-### Изменения в `app/agents/manager.py`
+Добавлено поле `name` внутрь `config` для всех 5 агентов:
+- Architect
+- Orchestrator  
+- CodeAssistant
+- DataAnalyst
+- DocumentWriter
 
-#### 1. Метод `create_agent()` (строка 35-43)
+Также добавлены недостающие обязательные поля `concurrency_limit` и `max_tokens` для CodeAssistant, DataAnalyst и DocumentWriter.
 
-**Было:**
-```python
-agent = UserAgent(
-    user_id=self.user_id,
-    name=config.name,
-    config=config.model_dump(),
-    status=AgentStatus.READY.value,
-)
-```
+### 2. Исправлена логика чтения в AgentManager
 
-**Стало:**
-```python
-# Exclude 'name' from config as it's stored separately in UserAgent.name
-config_dict = config.model_dump(exclude={'name'})
-agent = UserAgent(
-    user_id=self.user_id,
-    name=config.name,
-    config=config_dict,
-    status=AgentStatus.READY.value,
-)
-```
-
-#### 2. Метод `update_agent()` (строка 114-129)
+В [`app/agents/manager.py`](../app/agents/manager.py) обновлены методы чтения агентов:
 
 **Было:**
-```python
-# Update config
-agent.config = config.model_dump()
-await self.db.flush()
-```
-
-**Стало:**
-```python
-# Update config (exclude 'name' as it's stored separately)
-agent.name = config.name
-agent.config = config.model_dump(exclude={'name'})
-await self.db.flush()
-```
-
-#### 3. Методы чтения: `get_agent()`, `list_agents()`, `get_agent_by_name()`
-
-**Было:**
-```python
-config=AgentConfig(**agent.config)
-```
-
-**Стало:**
 ```python
 config=AgentConfig(name=agent.name, **agent.config)
 ```
 
-## Результат
-
-✅ Все операции CRUD для агентов работают корректно:
-- `POST /my/agents/` - создание агента
-- `GET /my/agents/` - список агентов
-- `GET /my/agents/{id}` - получение агента
-- `PUT /my/agents/{id}` - обновление агента
-- `DELETE /my/agents/{id}` - удаление агента
-
-✅ Seed данные корректно десериализуются
-✅ Нет дублирования поля `name` в JSON config
-✅ Логирование работает корректно
-
-## Тестирование
-
-```bash
-# Генерация JWT токена
-docker-compose exec app python scripts/generate_test_jwt.py --user-id 3c07246a-6310-4e83-aa5c-73c6010d74f1
-
-# Список агентов
-curl -X GET "http://localhost:8000/my/agents/" \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json"
-
-# Создание агента
-curl -X POST "http://localhost:8000/my/agents/" \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "TestAgent",
-    "system_prompt": "You are a test agent",
-    "model": "gpt-4-turbo-preview",
-    "tools": ["test_tool"],
-    "concurrency_limit": 2,
-    "temperature": 0.5,
-    "max_tokens": 2048,
-    "metadata": {"test": true}
-  }'
-
-# Обновление агента
-curl -X PUT "http://localhost:8000/my/agents/{agent_id}" \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "config": {
-      "name": "UpdatedAgent",
-      "system_prompt": "Updated prompt",
-      "model": "gpt-4-turbo-preview",
-      "tools": ["updated_tool"],
-      "concurrency_limit": 5,
-      "temperature": 0.9,
-      "max_tokens": 8192,
-      "metadata": {"updated": true}
-    }
-  }'
-
-# Удаление агента
-curl -X DELETE "http://localhost:8000/my/agents/{agent_id}" \
-  -H "Authorization: Bearer <TOKEN>"
+**Стало:**
+```python
+config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config
 ```
 
-## Дата исправления
+Это позволяет правильно обрабатывать новую структуру, где `name` уже внутри `config`.
 
-2026-02-12
+### 3. Обновлены тесты
+
+Тесты в [`tests/test_create_project_with_starter_pack.py`](../tests/test_create_project_with_starter_pack.py) обновлены для проверки всех 5 агентов вместо 3.
+
+## Результат
+
+✅ Ошибка валидации устранена  
+✅ Все агенты имеют `name` внутри `config`  
+✅ Тесты проходят успешно  
+✅ Сервис запускается без ошибок
+
+## Затронутые файлы
+
+- [`app/core/starter_pack.py`](../app/core/starter_pack.py) - обновлена структура DEFAULT_AGENTS_CONFIG
+- [`app/agents/manager.py`](../app/agents/manager.py) - исправлена логика чтения AgentConfig
+- [`tests/test_create_project_with_starter_pack.py`](../tests/test_create_project_with_starter_pack.py) - обновлены тесты
+
+## Проверка
+
+```bash
+# Валидация конфигурации агентов
+uv run python -c "from app.core.starter_pack import DEFAULT_AGENTS_CONFIG; from app.schemas.agent import AgentConfig; [AgentConfig(**agent['config']) for agent in DEFAULT_AGENTS_CONFIG]; print('✅ Все агенты валидны!')"
+
+# Запуск тестов
+uv run pytest tests/test_create_project_with_starter_pack.py -v
+```

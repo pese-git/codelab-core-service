@@ -56,8 +56,10 @@ async def test_create_project_with_starter_pack():
         assert created_project.workspace_path == "/test/workspace"
 
         # Verify agents were created
-        assert len(agents) == 3
+        assert len(agents) == 5
         agent_names = [agent.name for agent in agents]
+        assert "Architect" in agent_names
+        assert "Orchestrator" in agent_names
         assert "CodeAssistant" in agent_names
         assert "DataAnalyst" in agent_names
         assert "DocumentWriter" in agent_names
@@ -73,7 +75,7 @@ async def test_create_project_with_starter_pack():
             select(UserAgent).where(UserAgent.project_id == project.id)
         )
         db_agents = result.scalars().all()
-        assert len(db_agents) == 3
+        assert len(db_agents) == 5
 
 
 @pytest.mark.asyncio
@@ -84,8 +86,8 @@ async def test_starter_pack_configuration():
     config = get_starter_pack_config()
     
     assert config["name"] == "Default Starter Pack"
-    assert config["agents_count"] == 3
-    assert len(config["agents"]) == 3
+    assert config["agents_count"] == 5
+    assert len(config["agents"]) == 5
     
     # Verify each agent has required fields
     for agent_config in config["agents"]:

@@ -39,6 +39,12 @@ class AgentManager:
         self.qdrant = qdrant
         self.user_id = user_id
 
+    def _build_agent_config(self, agent: UserAgent) -> AgentConfig:
+        """Build AgentConfig from DB model, ensuring required name is present."""
+        if isinstance(agent.config, dict):
+            return AgentConfig.model_validate({"name": agent.name, **agent.config})
+        return agent.config
+
     async def create_agent(self, config: AgentConfig) -> AgentResponse:
         """Create new agent."""
         # Create database record
@@ -99,7 +105,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig(name=agent.name, **agent.config),
+            config=self._build_agent_config(agent),
         )
 
     async def list_agents(self) -> list[AgentResponse]:
@@ -115,7 +121,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
+                config=self._build_agent_config(agent),
             )
             for agent in agents
         ]
@@ -136,7 +142,7 @@ class AgentManager:
                 name=agent.name,
                 status=AgentStatus(agent.status),
                 created_at=agent.created_at,
-                config=AgentConfig(name=agent.name, **agent.config),
+                config=self._build_agent_config(agent),
             )
             for agent in agents
         ]
@@ -162,7 +168,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig.model_validate({"name": agent.name, **agent.config}),
+            config=self._build_agent_config(agent),
         )
 
     async def create_agent_with_project(
@@ -245,7 +251,7 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig(name=agent.name, **agent.config),
+            config=self._build_agent_config(agent),
         )
 
     async def delete_agent_with_project(
@@ -386,5 +392,5 @@ class AgentManager:
             name=agent.name,
             status=AgentStatus(agent.status),
             created_at=agent.created_at,
-            config=AgentConfig(name=agent.name, **agent.config),
+            config=self._build_agent_config(agent),
         )

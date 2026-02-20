@@ -77,6 +77,18 @@ class ApprovalDecision(BaseModel):
     }}
 
 
+class ApprovalDecisionRequest(BaseModel):
+    """Approval decision request schema."""
+
+    reason: str | None = Field(None, description="Optional rejection reason")
+
+    model_config = {"json_schema_extra": {
+        "example": {
+            "reason": "Not ready to proceed at this time"
+        }
+    }}
+
+
 class ApprovalListResponse(BaseModel):
     """Approval list response schema."""
 

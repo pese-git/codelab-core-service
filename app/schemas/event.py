@@ -22,6 +22,9 @@ class StreamEventType(str, Enum):
     PLAN_REQUEST = "plan_request"
     CONTEXT_RETRIEVED = "context_retrieved"
     APPROVAL_REQUIRED = "approval_required"
+    APPROVAL_RESOLVED = "approval_resolved"
+    APPROVAL_TIMEOUT = "approval_timeout"
+    APPROVAL_TIMEOUT_WARNING = "approval_timeout_warning"
     HEARTBEAT = "heartbeat"
     ERROR = "error"
 

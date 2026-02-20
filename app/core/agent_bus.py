@@ -212,3 +212,30 @@ class AgentBus:
                 for agent_id in self.queues
             },
         }
+
+    async def cleanup(self) -> None:
+        """Cleanup all agents and workers.
+        
+        Called during shutdown to gracefully stop all workers
+        and clear all queues and handlers.
+        """
+        logger.info("agent_bus_cleanup_started", agent_count=len(self.queues))
+
+        # Cancel all workers
+        for agent_id in list(self.workers.keys()):
+            try:
+                await self.deregister_agent(agent_id)
+            except Exception as e:
+                logger.error(
+                    "agent_deregister_error",
+                    agent_id=str(agent_id),
+                    error=str(e),
+                )
+
+        # Clear all remaining data structures
+        self.queues.clear()
+        self.agent_handlers.clear()
+        self.max_concurrency.clear()
+        self.active_tasks.clear()
+
+        logger.info("agent_bus_cleanup_completed")

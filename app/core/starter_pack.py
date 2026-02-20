@@ -11,30 +11,141 @@ from app.models.user_agent import UserAgent
 # Default agents configuration for new projects
 DEFAULT_AGENTS_CONFIG = [
     {
+        "name": "Architect",
+        "config": {
+            "name": "Architect",
+            "model": "openrouter/openai/gpt-4.1",
+            "temperature": 0.3,
+            "system_prompt": """You are a project architect and task planner.
+
+Your role:
+- Analyze user requests and break them down into structured task plans
+- Define clear, actionable tasks with priorities
+- Identify dependencies between tasks
+- Estimate complexity and time requirements
+- Create comprehensive project plans
+
+Output format (JSON):
+{
+  "title": "Plan title",
+  "description": "Plan description",
+  "tasks": [
+    {
+      "title": "Task title",
+      "description": "Task description",
+      "priority": "high|medium|low",
+      "estimated_time": "2h",
+      "dependencies": [],
+      "agent_type": "CodeAssistant|DataAnalyst|DocumentWriter"
+    }
+  ]
+}""",
+            "tools": [],
+            "concurrency_limit": 3,
+            "max_tokens": 4096,
+            "metadata": {
+                "role": "architect",
+                "capabilities": ["planning", "task_breakdown", "dependency_analysis"],
+                "risk_level": "LOW",
+                "cost_per_call": 0.02,
+                "estimated_duration": 10.0,
+            },
+        },
+    },
+    {
+        "name": "Orchestrator",
+        "config": {
+            "name": "Orchestrator",
+            "model": "openrouter/openai/gpt-4.1",
+            "temperature": 0.5,
+            "system_prompt": """You are a project orchestrator and execution coordinator.
+
+Your role:
+- Coordinate execution of task plans
+- Select appropriate agents for each task
+- Monitor task progress and dependencies
+- Handle task failures and retries
+- Report execution status
+
+Available agents:
+- CodeAssistant: for coding tasks
+- DataAnalyst: for data analysis
+- DocumentWriter: for documentation
+- Architect: for planning and design
+
+When coordinating tasks:
+1. Check task dependencies
+2. Execute tasks in correct order
+3. Pass results between dependent tasks
+4. Report progress via events
+5. Handle errors gracefully""",
+            "tools": [],
+            "concurrency_limit": 3,
+            "max_tokens": 4096,
+            "metadata": {
+                "role": "orchestrator",
+                "capabilities": ["coordination", "agent_selection", "progress_monitoring"],
+                "risk_level": "LOW",
+                "cost_per_call": 0.01,
+                "estimated_duration": 5.0,
+            },
+        },
+    },
+    {
         "name": "CodeAssistant",
         "config": {
+            "name": "CodeAssistant",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.7,
             "system_prompt": "You are a helpful coding assistant specialized in Python and web development.",
             "tools": ["code_search", "file_operations", "terminal"],
+            "concurrency_limit": 3,
+            "max_tokens": 4096,
+            "metadata": {
+                "role": "executor",
+                "capabilities": ["code_writing", "code_review", "debugging"],
+                "risk_level": "MEDIUM",
+                "cost_per_call": 0.015,
+                "estimated_duration": 5.0,
+            },
         },
     },
     {
         "name": "DataAnalyst",
         "config": {
+            "name": "DataAnalyst",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.3,
             "system_prompt": "You are a data analyst expert. Help users analyze data and create visualizations.",
             "tools": ["data_analysis", "visualization", "statistics"],
+            "concurrency_limit": 3,
+            "max_tokens": 4096,
+            "metadata": {
+                "role": "executor",
+                "capabilities": ["data_analysis", "visualization", "statistics"],
+                "risk_level": "LOW",
+                "cost_per_call": 0.01,
+                "estimated_duration": 8.0,
+            },
         },
     },
     {
         "name": "DocumentWriter",
         "config": {
+            "name": "DocumentWriter",
             "model": "openrouter/openai/gpt-4.1",
             "temperature": 0.8,
             "system_prompt": "You are a technical writer. Help users create clear and comprehensive documentation.",
             "tools": ["markdown", "diagrams", "templates"],
+            "concurrency_limit": 3,
+            "max_tokens": 4096,
+            "metadata": {
+                "role": "executor",
+                "capabilities": ["documentation", "technical_writing", "diagrams"],
+                "risk_level": "LOW",
+                "cost_per_call": 0.008,
+                "estimated_duration": 6.0,
+            },
         },
     },
 ]
