@@ -1,6 +1,6 @@
 """TaskPlan model for orchestrator task planning."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Boolean, Float
@@ -34,7 +34,7 @@ class TaskPlan(Base):
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     approval_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -50,7 +50,6 @@ class TaskPlan(Base):
     # Indexes
     __table_args__ = (
         Index("ix_task_plans_user_id_project_id", "user_id", "project_id"),
-        Index("ix_task_plans_session_id", "session_id"),
         Index("ix_task_plans_status_created_at", "status", "created_at"),
     )
 

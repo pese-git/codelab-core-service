@@ -45,12 +45,5 @@ class TaskPlanTask(Base):
     plan: Mapped["TaskPlan"] = relationship("TaskPlan", back_populates="tasks")
     agent: Mapped["UserAgent"] = relationship("UserAgent")
 
-    # Indexes
-    __table_args__ = (
-        Index("ix_task_plan_tasks_plan_id", "plan_id"),
-        Index("ix_task_plan_tasks_agent_id", "agent_id"),
-        Index("ix_task_plan_tasks_status", "status"),
-    )
-
     def __repr__(self) -> str:
         return f"<TaskPlanTask(id={self.id}, plan_id={self.plan_id}, task_id={self.task_id}, status={self.status})>"
