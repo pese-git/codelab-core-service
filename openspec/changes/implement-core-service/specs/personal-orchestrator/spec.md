@@ -270,11 +270,35 @@ Orchestrator ДОЛЖЕН сохранять полное состояние п�
 
 #### Scenario: Сохранение плана при создании
 - **WHEN** план создан
-- **THEN** план сохраняется в БД с таблицей task_plans (id, user_id, session_id, original_request, status, total_cost, total_duration, requires_approval, created_at)
+- **THEN** план сохраняется в БД с таблицей task_plans со следующими полями:
+  - id (UUID, primary key)
+  - user_id (UUID, foreign key to users)
+  - project_id (UUID, foreign key to user_projects)
+  - session_id (UUID, foreign key to chat_sessions)
+  - original_request (string)
+  - status (enum: created, pending_approval, executing, completed, failed, partial_success)
+  - total_estimated_cost (float)
+  - total_estimated_duration (float)
+  - requires_approval (boolean)
+  - approval_reason (string, nullable)
+  - created_at, started_at, completed_at (datetime with timezone)
 
 #### Scenario: Сохранение задач плана
 - **WHEN** план создан
-- **THEN** каждая задача сохраняется в таблице task_plan_tasks (id, plan_id, task_id, description, agent_id, dependencies, estimated_cost, estimated_duration, risk_level, status, result, created_at)
+- **THEN** каждая задача сохраняется в таблице task_plan_tasks со следующими полями:
+  - id (UUID, primary key)
+  - plan_id (UUID, foreign key to task_plans)
+  - task_id (string: logical ID like task_0, task_1, ...)
+  - description (string)
+  - agent_id (UUID, foreign key to user_agents)
+  - dependencies (JSON: list of task_ids)
+  - estimated_cost (float)
+  - estimated_duration (float)
+  - risk_level (enum: LOW, MEDIUM, HIGH)
+  - status (enum: pending, executing, completed, failed, aborted)
+  - result (JSON, nullable)
+  - error (string, nullable)
+  - created_at, started_at, completed_at (datetime with timezone)
 
 #### Scenario: Восстановление после перезагрузки
 - **WHEN** сервис перезагружается во время выполнения плана
