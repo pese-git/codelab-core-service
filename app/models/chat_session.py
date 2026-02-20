@@ -35,6 +35,9 @@ class ChatSession(Base):
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="session", cascade="all, delete-orphan"
     )
+    task_plans: Mapped[list["TaskPlan"]] = relationship(
+        "TaskPlan", back_populates="session", cascade="all, delete-orphan"
+    )
 
     # Indexes
     __table_args__ = (

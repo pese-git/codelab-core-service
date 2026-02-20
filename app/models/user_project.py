@@ -62,6 +62,11 @@ class UserProject(Base):
         back_populates="project",
         cascade="all, delete-orphan"
     )
+    task_plans: Mapped[list["TaskPlan"]] = relationship(
+        "TaskPlan",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
 
     # Indexes and constraints
     __table_args__ = (

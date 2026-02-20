@@ -36,6 +36,9 @@ class User(Base):
     approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
         "ApprovalRequest", back_populates="user", cascade="all, delete-orphan"
     )
+    task_plans: Mapped[list["TaskPlan"]] = relationship(
+        "TaskPlan", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email})>"
