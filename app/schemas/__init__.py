@@ -6,6 +6,19 @@ from app.schemas.chat import ChatSessionResponse, MessageRequest, MessageRespons
 from app.schemas.error import ErrorResponse
 from app.schemas.event import StreamEvent, StreamEventType, SSEEvent, SSEEventType
 from app.schemas.task import TaskPlan, TaskStatus
+from app.schemas.tool import (
+    ToolExecutionRequest,
+    ToolExecutionResponse,
+    ToolReadFileRequest,
+    ToolReadFileResponse,
+    ToolWriteFileRequest,
+    ToolWriteFileResponse,
+    ToolExecuteCommandRequest,
+    ToolExecuteCommandResponse,
+    ToolListDirectoryRequest,
+    ToolListDirectoryResponse,
+    FileInfo,
+)
 
 __all__ = [
     "AgentConfig",
@@ -28,4 +41,16 @@ __all__ = [
     "SSEEventType",  # Backward compatibility
     "TaskPlan",
     "TaskStatus",
+    # Tool execution schemas
+    "ToolExecutionRequest",
+    "ToolExecutionResponse",
+    "ToolReadFileRequest",
+    "ToolReadFileResponse",
+    "ToolWriteFileRequest",
+    "ToolWriteFileResponse",
+    "ToolExecuteCommandRequest",
+    "ToolExecuteCommandResponse",
+    "ToolListDirectoryRequest",
+    "ToolListDirectoryResponse",
+    "FileInfo",
 ]
