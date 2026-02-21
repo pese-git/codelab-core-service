@@ -2,7 +2,16 @@
 
 ## Обзор
 
-Агенты должны иметь возможность выполнять операции над файловой системой и командами на стороне пользователя (CLIENT side) через инструменты (tools). Все операции должны быть безопасными и могут требовать подтверждения пользователя для опасных операций.
+**Статус**: ✅ РЕАЛИЗОВАНО И ПРОТЕСТИРОВАНО (Все 6 фаз завершены)
+
+Агенты имеют возможность выполнять операции над файловой системой и командами на стороне пользователя (CLIENT side) через инструменты (tools). Все операции безопасны и могут требовать подтверждения пользователя для опасных операций.
+
+### Ключевые особенности реализации:
+- **Асинхронный workflow**: Клиент выполняет инструмент независимо (не блокирует сервер)
+- **Трёхслойная безопасность**: Валидация → Оценка рисков → Одобрение
+- **SSE уведомления**: Сервер отправляет события клиенту
+- **REST API**: Клиент отправляет результаты через REST
+- **Полная документация**: [Workflow](../../../doc/agent-tools-workflow.md), [Risk Matrix](../../../doc/tool-risk-assessment-matrix.md)
 
 ## 1. Доступные Tools
 
@@ -234,62 +243,133 @@ class ApprovalManager:
 
 ## 4. Implementation Details
 
-### 4.1 Tool Execution Context
+### 4.1 Созданные компоненты
 
-Все tools должны выполняться в контексте пользователя:
+**Phase 1: Definitions (Complete ✅)**
+- `app/core/tools/definitions.py` - Tool signatures (ToolName enum, ToolDefinition dataclass)
+- `app/schemas/tool.py` - Pydantic schemas for all request/response types
+- `app/core/tools/models.py` - SQLAlchemy ORM models for execution logging
+
+**Phase 2: Security & Validation (Complete ✅)**
+- `app/core/tools/validator.py` - PathValidator (path traversal prevention, workspace boundary)
+- `app/core/tools/command_whitelist.py` - CommandValidator (24 allowed, 20 blacklisted)
+- `app/core/tools/size_limiter.py` - SizeLimiter (limits for files, output, timeout)
+
+**Phase 3: Risk Assessment (Complete ✅)**
+- `app/core/tools/risk_assessor.py` - RiskAssessor (LOW/MEDIUM/HIGH classification)
+- `doc/tool-risk-assessment-matrix.md` - Complete risk matrix documentation
+
+**Phase 4: Approval Integration (Complete ✅)**
+- Extended `app/core/approval_manager.py` with tool-specific methods
+- `request_tool_execution_approval()`, `auto_approve_tool_if_low_risk()`, `wait_for_tool_approval()`
+
+**Phase 5: Executor & API (Complete ✅)**
+- `app/core/tools/executor.py` - Main ToolExecutor orchestrator
+- `app/routes/project_tools.py` - REST API endpoints (5 endpoints)
+- `doc/agent-tools-workflow.md` - Complete workflow with Mermaid diagram
+
+**Phase 6: Testing (Complete ✅)**
+- `tests/test_tool_path_validator.py` - 21 unit tests
+- `tests/test_tool_command_validator.py` - 28 unit tests
+- `tests/test_tool_risk_assessor.py` - 36 unit tests
+- **Total: 85 tests, 82 passed ✅**
+
+### 4.2 Tool Execution Workflow (Implemented)
 
 ```
-Frontend User → Backend (gets user_id from JWT) → 
-Tool validation (path check, command whitelist, risk level) →
-Approval check (if needed) →
-USER_SIDE execution (on client through tool handler) →
-Result return to Backend →
-Agent receives result
+Agent (on Server) calls ToolExecutor.execute_tool()
+    ↓
+ToolExecutor.validate_tool_params()
+  - PathValidator: read/write/list paths
+  - CommandValidator: whitelist check
+  - SizeLimiter: size constraints
+    ↓ (Error) → Return error to Agent
+    
+RiskAssessor.assess_tool_risk()
+  - Classify: LOW / MEDIUM / HIGH
+  - Get timeout: 0s / 300s / 600s
+    ↓
+    
+Check if LOW risk?
+  ├─ YES → Auto-approve, proceed to execution signal
+  └─ NO → Request approval
+  
+If MEDIUM/HIGH risk:
+  - ApprovalManager.request_tool_execution_approval()
+  - Send SSE event: TOOL_APPROVAL_REQUEST to client
+  - Block Agent in wait_for_tool_approval()
+  - Client shows approval dialog to User
+  - User decides: approve/reject via REST API
+  - timeout_seconds expires? → Auto-reject
+    ↓
+    
+Send execution signal via SSE: TOOL_EXECUTION_SIGNAL
+  - Client receives event
+  - Client executes tool locally (ASYNC - no server wait)
+    ↓
+    
+Client sends result via REST API: POST /tools/{tool_id}/result
+  - Server receives result
+  - ToolExecution status: EXECUTING → COMPLETED
+  - Agent unblocks and continues
+    ↓
+    
+Agent processes result and generates response to user
 ```
 
-### 4.2 Tool Validation Pattern
+### 4.3 Risk Assessment Mapping (Implemented)
 
 ```python
-async def validate_and_execute_tool(
-    tool_name: str,
-    tool_params: dict,
-    user_id: UUID,
-    session_id: UUID
-) -> dict:
-    # 1. Validate tool exists
-    if tool_name not in AVAILABLE_TOOLS:
-        return {"success": False, "error": "Tool not found"}
+# In app/core/tools/risk_assessor.py
+
+class RiskAssessor:
+    # read_file: Always LOW
+    # list_directory: Always LOW
     
-    # 2. Validate parameters (path, command, etc)
-    try:
-        validate_tool_params(tool_name, tool_params, user_id)
-    except ValidationError as e:
-        return {"success": False, "error": str(e)}
+    # write_file by extension:
+    #   .py, .json, .md, .yaml: MEDIUM (5 min)
+    #   .exe, .dll, .so: HIGH (10 min)
     
-    # 3. Check risk level and request approval if needed
-    risk_level = get_risk_level(tool_name, tool_params)
-    if risk_level != RiskLevel.LOW:
-        approval = await approval_manager.request_tool_approval(
-            user_id=user_id,
-            tool_name=tool_name,
-            tool_params=tool_params,
-            risk_level=risk_level,
-            timeout_seconds=get_timeout(risk_level),
-            session_id=session_id
-        )
-        
-        # Wait for user approval
-        result = await approval.wait_for_decision(timeout=get_timeout(risk_level))
-        if not result.approved:
-            return {"success": False, "error": "Approval denied"}
-    
-    # 4. Execute tool on CLIENT side
-    result = await execute_tool_on_client(tool_name, tool_params, user_id)
-    
-    # 5. Log execution
-    await log_tool_execution(user_id, tool_name, result, risk_level)
-    
-    return result
+    # execute_command by category:
+    #   grep, find, ls: LOW (0 sec)
+    #   git, npm, python: MEDIUM (5 min)
+    #   gcc, make, tar: HIGH (10 min)
+```
+
+### 4.4 REST API Endpoints (Implemented)
+
+```
+POST /my/projects/{project_id}/tools/execute
+  - Agent executes tool
+  - Returns: ToolExecutionResponse (status: pending/approved/rejected/completed/failed)
+
+POST /my/projects/{project_id}/tools/{tool_id}/result
+  - Client sends tool execution result
+  - Server processes and unblocks Agent
+
+POST /my/projects/{project_id}/approvals/{approval_id}/approve
+  - Client sends user approval decision
+
+POST /my/projects/{project_id}/approvals/{approval_id}/reject
+  - Client sends user rejection decision
+
+GET /my/projects/{project_id}/tools/available
+  - Client gets list of available tools with metadata
+```
+
+### 4.5 SSE Events (Implemented)
+
+```
+TOOL_APPROVAL_REQUEST (Server → Client)
+  - Sent when MEDIUM/HIGH risk tool needs approval
+  - Payload: approval_id, tool_name, risk_level, timeout_seconds
+
+TOOL_EXECUTION_SIGNAL (Server → Client)
+  - Sent after approval to signal execution
+  - Payload: tool_id, tool_name, tool_params
+
+TOOL_RESULT_ACK (Server → Client)
+  - Sent after server receives result
 ```
 
 ### 4.3 Client-Side Tool Handler
