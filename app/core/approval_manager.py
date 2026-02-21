@@ -835,3 +835,267 @@ class ApprovalManager:
                 error=str(e),
                 approval_id=str(approval.id),
             )
+
+    # ========================================================================
+    # PHASE 4: TOOL APPROVAL INTEGRATION WITH RISK ASSESSOR
+    # ========================================================================
+
+    async def request_tool_execution_approval(
+        self,
+        tool_name: str,
+        tool_params: dict,
+        risk_level: str,
+        timeout_seconds: int,
+        session_id: Optional[UUID] = None,
+    ) -> ApprovalRequest:
+        """Request approval for tool execution using RiskAssessor
+
+        Args:
+            tool_name: Name of the tool to execute
+            tool_params: Parameters for the tool
+            risk_level: Risk level from RiskAssessor (LOW/MEDIUM/HIGH)
+            timeout_seconds: Approval timeout in seconds
+            session_id: Optional chat session ID
+
+        Returns:
+            ApprovalRequest instance
+
+        Raises:
+            HTTPException: If approval request creation fails
+        """
+        try:
+            self.logger.info(
+                "request_tool_execution_approval_started",
+                tool_name=tool_name,
+                risk_level=risk_level,
+                timeout=timeout_seconds,
+            )
+
+            # Mask sensitive parameters before storing
+            masked_params = self._mask_tool_parameters(tool_name, tool_params)
+
+            # Create approval request
+            approval = ApprovalRequest(
+                user_id=self.user_id,
+                type=ApprovalType.TOOL,
+                payload={
+                    "tool_name": tool_name,
+                    "tool_params": masked_params,
+                    "risk_level": risk_level,
+                    "session_id": str(session_id) if session_id else None,
+                    "timeout_seconds": timeout_seconds,
+                    "created_at_timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+                status=ApprovalStatus.PENDING,
+            )
+
+            self.db.add(approval)
+            await self.db.flush()
+
+            self.logger.info(
+                "tool_execution_approval_request_created",
+                approval_id=str(approval.id),
+                tool_name=tool_name,
+                risk_level=risk_level,
+            )
+
+            # Send SSE notification
+            if self.stream_manager:
+                await self._send_tool_approval_notification(
+                    approval=approval,
+                    tool_name=tool_name,
+                    risk_level=risk_level,
+                    timeout=timeout_seconds,
+                )
+
+            return approval
+
+        except Exception as e:
+            self.logger.error(
+                "request_tool_execution_approval_failed",
+                error=str(e),
+                tool_name=tool_name,
+            )
+            raise HTTPException(status_code=500, detail="Failed to create tool approval request")
+
+    async def auto_approve_tool_if_low_risk(
+        self,
+        risk_level: str,
+    ) -> bool:
+        """Check if LOW risk tool should be auto-approved
+
+        Args:
+            risk_level: Risk level (LOW/MEDIUM/HIGH)
+
+        Returns:
+            True if should auto-approve (LOW risk), False otherwise
+        """
+        should_auto_approve = risk_level == "LOW"
+        self.logger.debug(
+            "auto_approve_check",
+            risk_level=risk_level,
+            should_auto_approve=should_auto_approve,
+        )
+        return should_auto_approve
+
+    def _mask_tool_parameters(self, tool_name: str, params: dict) -> dict:
+        """Mask sensitive parameters before storing in database
+
+        Args:
+            tool_name: Name of the tool
+            params: Original parameters
+
+        Returns:
+            Masked parameters dict
+        """
+        masked = params.copy()
+
+        # For write_file, don't store actual content (too large)
+        if tool_name == "write_file" and "content" in masked:
+            content_size = len(masked["content"])
+            masked["content"] = f"[CONTENT {content_size} bytes]"
+            self.logger.debug(
+                "masked_write_file_content",
+                original_size=content_size,
+            )
+
+        # For execute_command, mask sensitive args if needed
+        if tool_name == "execute_command" and "args" in masked:
+            # Keep args visible for audit trail, but could mask specific ones
+            # For now, just log that we're keeping them
+            self.logger.debug(
+                "execute_command_args_preserved",
+                arg_count=len(masked["args"]),
+            )
+
+        return masked
+
+    async def wait_for_tool_approval(
+        self,
+        approval_id: UUID,
+        timeout_seconds: int,
+    ) -> tuple[bool, Optional[str]]:
+        """Wait for user approval decision with timeout
+
+        Polls approval status until approved/rejected or timeout
+
+        Args:
+            approval_id: ID of the approval request
+            timeout_seconds: Maximum time to wait in seconds
+
+        Returns:
+            Tuple of (approved, reason)
+            - approved: True if approved, False if rejected/timeout
+            - reason: Error message if not approved
+        """
+        import asyncio
+
+        start_time = time.time()
+
+        self.logger.info(
+            "wait_for_tool_approval_started",
+            approval_id=str(approval_id),
+            timeout=timeout_seconds,
+        )
+
+        while time.time() - start_time < timeout_seconds:
+            # Check approval status
+            result = await self.db.execute(
+                select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+            )
+            approval = result.scalar_one_or_none()
+
+            if not approval:
+                error = "Approval request not found"
+                self.logger.error(error, approval_id=str(approval_id))
+                return False, error
+
+            # Check if approved
+            if approval.status == ApprovalStatus.APPROVED:
+                self.logger.info(
+                    "tool_execution_approved",
+                    approval_id=str(approval_id),
+                )
+                return True, None
+
+            # Check if rejected
+            if approval.status == ApprovalStatus.REJECTED:
+                reason = approval.decision or "User rejected"
+                self.logger.warning(
+                    "tool_execution_rejected",
+                    approval_id=str(approval_id),
+                    reason=reason,
+                )
+                return False, reason
+
+            # Wait before checking again
+            await asyncio.sleep(1)
+
+        # Timeout occurred
+        approval.status = ApprovalStatus.TIMEOUT
+        approval.resolved_at = datetime.now(timezone.utc)
+        approval.decision = "Approval timeout"
+        await self.db.flush()
+
+        error = "Approval timeout"
+        self.logger.warning(
+            "tool_execution_approval_timeout",
+            approval_id=str(approval_id),
+            timeout=timeout_seconds,
+        )
+        return False, error
+
+    async def _send_tool_approval_notification(
+        self,
+        approval: ApprovalRequest,
+        tool_name: str,
+        risk_level: str,
+        timeout: int,
+    ) -> None:
+        """Send SSE notification for tool approval request
+
+        Args:
+            approval: ApprovalRequest instance
+            tool_name: Name of the tool
+            risk_level: Risk level (LOW/MEDIUM/HIGH)
+            timeout: Timeout in seconds
+        """
+        try:
+            if not self.stream_manager:
+                return
+
+            payload = {
+                "approval_id": str(approval.id),
+                "type": approval.type,
+                "tool_name": tool_name,
+                "risk_level": risk_level,
+                "timeout": timeout,
+                "payload": approval.payload,
+                "timestamp": time.time(),
+            }
+
+            event = StreamEvent(
+                event_type=StreamEventType.APPROVAL_REQUIRED,
+                payload=payload,
+            )
+
+            # Broadcast to user
+            sent_count = await self.stream_manager.broadcast_to_user(
+                self.user_id,
+                event,
+                buffer=True,
+            )
+
+            self.logger.info(
+                "tool_approval_notification_sent",
+                approval_id=str(approval.id),
+                tool_name=tool_name,
+                sent_to_connections=sent_count,
+            )
+
+        except Exception as e:
+            self.logger.error(
+                "tool_approval_notification_failed",
+                error=str(e),
+                approval_id=str(approval.id),
+            )
