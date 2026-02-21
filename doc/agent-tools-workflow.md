@@ -13,6 +13,64 @@ Agent Tools System использует асинхронный workflow, где:
 
 ## Полный Flow Выполнения Tool
 
+### Диаграмма (Mermaid)
+
+```mermaid
+flowchart TD
+    A["👤 User отправляет задачу"] --> B["🖥️ Server получает сообщение"]
+    B --> C["🤖 Agent анализирует и выбирает tool"]
+    C --> D["✔️ ToolExecutor валидирует параметры"]
+    D -->|Ошибка| E["❌ Возврат ошибки Agent"]
+    D -->|OK| F["📊 RiskAssessor оценивает риск"]
+    F --> G{Риск LOW?}
+    G -->|Да| H["⚡ Auto-approve"]
+    G -->|Нет| I["📤 Запросить одобрение через SSE"]
+    I --> J["👁️ Client получает TOOL_APPROVAL_REQUEST"]
+    J --> K["💬 User видит диалог одобрения"]
+    K --> L{User решил?}
+    L -->|✅ Одобрил| M["📨 REST: /approvals/{id}/approve"]
+    L -->|❌ Отклонил| N["📨 REST: /approvals/{id}/reject"]
+    N --> O["🚫 Возврат ошибки Agent"]
+    M --> H
+    H --> P["📡 Отправить TOOL_EXECUTION_SIGNAL"]
+    P --> Q["🎯 Client получает сигнал выполнения"]
+    Q --> R["⚙️ Client выполняет tool ЛОКАЛЬНО"]
+    R --> S["📤 REST: /tools/{tool_id}/result"]
+    S --> T["💾 Server сохраняет результат"]
+    T --> U["🔓 Разблокировать Agent"]
+    U --> V["🧠 Agent обрабатывает результат"]
+    V --> W["💭 Agent генерирует ответ"]
+    W --> X["📝 User получает финальный ответ"]
+    E --> X
+    O --> X
+    
+    style A fill:#e1f5ff
+    style B fill:#f3e5f5
+    style C fill:#f3e5f5
+    style D fill:#fff3e0
+    style F fill:#fff3e0
+    style G fill:#fce4ec
+    style H fill:#e8f5e9
+    style I fill:#fce4ec
+    style J fill:#c8e6c9
+    style K fill:#c8e6c9
+    style L fill:#fce4ec
+    style M fill:#c8e6c9
+    style N fill:#ffcdd2
+    style O fill:#ffcdd2
+    style P fill:#e8f5e9
+    style Q fill:#c8e6c9
+    style R fill:#bbdefb
+    style S fill:#bbdefb
+    style T fill:#e0bee7
+    style U fill:#e0bee7
+    style V fill:#f3e5f5
+    style W fill:#f3e5f5
+    style X fill:#e1f5ff
+```
+
+### Текстовое описание
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. USER sends message/task to chat                          │
