@@ -13,6 +13,7 @@ from app.core.tools.definitions import (
 from app.core.tools.validator import PathValidator
 from app.core.tools.command_whitelist import CommandValidator
 from app.core.tools.size_limiter import SizeLimiter
+from app.core.tools.risk_assessor import RiskAssessor, RiskLevel
 
 __all__ = [
     # Definitions
@@ -27,4 +28,7 @@ __all__ = [
     "PathValidator",
     "CommandValidator",
     "SizeLimiter",
+    # Risk assessment
+    "RiskAssessor",
+    "RiskLevel",
 ]
