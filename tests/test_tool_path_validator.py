@@ -32,7 +32,7 @@ class TestPathValidatorReadFile:
         is_valid, result = validator.validate_read_path("test.txt")
 
         assert is_valid
-        assert str(test_file) == result
+        assert str(test_file.resolve()) == result
 
     def test_read_nonexistent_file(self, validator):
         """Test reading non-existent file"""
@@ -80,7 +80,7 @@ class TestPathValidatorWriteFile:
         is_valid, result = validator.validate_write_path("output.txt")
 
         assert is_valid
-        assert str(Path(temp_workspace) / "output.txt") == result
+        assert str((Path(temp_workspace) / "output.txt").resolve()) == result
 
     def test_write_forbidden_extension_exe(self, validator):
         """Test that .exe files cannot be written"""
@@ -128,7 +128,7 @@ class TestPathValidatorListDirectory:
         is_valid, result = validator.validate_directory_path(".")
 
         assert is_valid
-        assert temp_workspace == result or str(Path(temp_workspace)) == result
+        assert str(Path(temp_workspace).resolve()) == result
 
     def test_list_nonexistent_directory(self, validator):
         """Test listing non-existent directory"""
