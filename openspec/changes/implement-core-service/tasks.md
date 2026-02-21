@@ -91,46 +91,46 @@
 ## 8. Agent Tools System
 
 ### 8.1 Tool Signatures и Definitions
-- [-] 8.1.1 Реализовать tool_read_file(path, user_id) для чтения файлов из workspace
-- [-] 8.1.2 Реализовать tool_write_file(path, content, mode, user_id) для редактирования файлов
-- [-] 8.1.3 Реализовать tool_execute_command(command, args, timeout, user_id) для выполнения команд
-- [-] 8.1.4 Реализовать tool_list_directory(path, user_id, recursive, pattern) для просмотра директорий
+- [x] 8.1.1 Реализовать tool_read_file(path, user_id) для чтения файлов из workspace
+- [x] 8.1.2 Реализовать tool_write_file(path, content, mode, user_id) для редактирования файлов
+- [x] 8.1.3 Реализовать tool_execute_command(command, args, timeout, user_id) для выполнения команд
+- [x] 8.1.4 Реализовать tool_list_directory(path, user_id, recursive, pattern) для просмотра директорий
 
 ### 8.2 Security & Validation
-- [-] 8.2.1 Реализовать валидацию путей (не выходить за пределы workspace, проверка ..)
-- [-] 8.2.2 Реализовать whitelist для разрешенных команд (grep, find, git, npm, python и т.д.)
-- [-] 8.2.3 Реализовать blacklist для опасных команд (rm -rf, dd, sudo, su, pacman, apt)
-- [-] 8.2.4 Реализовать ограничение размера файлов (макс 100MB для чтения/записи)
-- [-] 8.2.5 Реализовать ограничение размера вывода (макс 1MB)
-- [-] 8.2.6 Реализовать таймаут выполнения команд (макс 300 сек)
-- [-] 8.2.7 Реализовать проверку расширений файлов (запретить .exe, .bin, .so для записи)
+- [x] 8.2.1 Реализовать валидацию путей (не выходить за пределы workspace, проверка ..)
+- [x] 8.2.2 Реализовать whitelist для разрешенных команд (grep, find, git, npm, python и т.д.)
+- [x] 8.2.3 Реализовать blacklist для опасных команд (rm -rf, dd, sudo, su, pacman, apt)
+- [x] 8.2.4 Реализовать ограничение размера файлов (макс 100MB для чтения/записи)
+- [x] 8.2.5 Реализовать ограничение размера вывода (макс 1MB)
+- [x] 8.2.6 Реализовать таймаут выполнения команд (макс 300 сек)
+- [x] 8.2.7 Реализовать проверку расширений файлов (запретить .exe, .bin, .so для записи)
 
 ### 8.3 Risk Assessment
-- [-] 8.3.1 Реализовать классификацию tools по risk level (LOW, MEDIUM, HIGH)
-- [-] 8.3.2 Реализовать get_risk_level(tool_name, params) функцию
-- [-] 8.3.3 Документировать risk level для каждого tool и параметров
-- [-] 8.3.4 Реализовать timeout для approval в зависимости от risk level (LOW=no timeout, MEDIUM=5min, HIGH=10min)
+- [x] 8.3.1 Реализовать классификацию tools по risk level (LOW, MEDIUM, HIGH)
+- [x] 8.3.2 Реализовать get_risk_level(tool_name, params) функцию
+- [x] 8.3.3 Документировать risk level для каждого tool и параметров
+- [x] 8.3.4 Реализовать timeout для approval в зависимости от risk level (LOW=no timeout, MEDIUM=5min, HIGH=10min)
 
 ### 8.4 Integration с Approval Manager
-- [-] 8.4.1 Интегрировать tool execution с ApprovalManager.request_tool_approval()
-- [-] 8.4.2 Реализовать автоматическое одобрение для LOW_RISK tools
-- [-] 8.4.3 Реализовать запрос подтверждения для MEDIUM/HIGH_RISK tools
-- [-] 8.4.4 Реализовать обработку timeout (автоматический reject после timeout)
-- [-] 8.4.5 Реализовать batch approval (одобрить класс операций)
+- [x] 8.4.1 Интегрировать tool execution с ApprovalManager.request_tool_approval()
+- [x] 8.4.2 Реализовать автоматическое одобрение для LOW_RISK tools
+- [x] 8.4.3 Реализовать запрос подтверждения для MEDIUM/HIGH_RISK tools
+- [x] 8.4.4 Реализовать обработку timeout (автоматический reject после timeout)
+- [x] 8.4.5 Реализовать batch approval (одобрить класс операций)
 
 ### 8.5 Client-Side Execution
-- [-] 8.5.1 Создать ToolHandler на frontend для выполнения tools
-- [-] 8.5.2 Реализовать file system access API для чтения/записи (через Electron IPC или Web APIs)
-- [-] 8.5.3 Реализовать command execution на client side
-- [-] 8.5.4 Реализовать workspace boundary validation на client
-- [-] 8.5.5 Реализовать error handling и retry механизм
+- [ ] 8.5.1 Создать ToolHandler на frontend для выполнения tools
+- [ ] 8.5.2 Реализовать file system access API для чтения/записи (через Electron IPC или Web APIs)
+- [ ] 8.5.3 Реализовать command execution на client side
+- [ ] 8.5.4 Реализовать workspace boundary validation на client
+- [ ] 8.5.5 Реализовать error handling и retry механизм
 
 ### 8.6 Testing
-- [-] 8.6.1 Unit тесты для валидации путей и команд
-- [-] 8.6.2 Unit тесты для risk assessment
-- [-] 8.6.3 Integration тесты для tool execution flow
-- [-] 8.6.4 Integration тесты для approval integration
-- [-] 8.6.5 Security тесты для path traversal и command injection
+- [x] 8.6.1 Unit тесты для валидации путей и команд
+- [x] 8.6.2 Unit тесты для risk assessment
+- [ ] 8.6.3 Integration тесты для tool execution flow
+- [ ] 8.6.4 Integration тесты для approval integration
+- [ ] 8.6.5 Security тесты для path traversal и command injection
 
 ## 9. Personal Orchestrator
 
