@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.agent_helpers import find_agent_by_role
+from app.core.agent_helpers import find_agent_by_role, get_orchestrator
 from app.core.approval_manager import ApprovalManager
 from app.core.user_worker_space import UserWorkerSpace
 from app.database import get_db
@@ -655,8 +655,8 @@ async def execute_plan(
             )
 
     # Find Orchestrator Agent
-    orchestrator_id = await find_agent_by_role(db, user_id, project_id, "orchestrator")
-    if not orchestrator_id:
+    orchestrator = await get_orchestrator(db, user_id, project_id)
+    if not orchestrator:
         logger.error(
             "orchestrator_agent_not_found",
             user_id=str(user_id),
@@ -696,7 +696,7 @@ Original request: {plan.original_request}
 Return a JSON object with execution results for each task."""
 
         orchestrator_result = await workspace.direct_execution(
-            agent_id=orchestrator_id,
+            agent_id=orchestrator.id,
             user_message=orchestrator_prompt,
             task_id=f"plan_execution_{plan_id}",
             metadata={
