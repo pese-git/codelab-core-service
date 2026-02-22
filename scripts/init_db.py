@@ -92,7 +92,6 @@ async def init_database() -> None:
             User,
             UserAgent,
             UserProject,
-            UserOrchestrator,
         )
         
         # Create tables

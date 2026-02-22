@@ -27,9 +27,6 @@ class User(Base):
     agents: Mapped[list["UserAgent"]] = relationship(
         "UserAgent", back_populates="user", cascade="all, delete-orphan"
     )
-    orchestrators: Mapped[list["UserOrchestrator"]] = relationship(
-        "UserOrchestrator", back_populates="user", cascade="all, delete-orphan"
-    )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user", cascade="all, delete-orphan"
     )

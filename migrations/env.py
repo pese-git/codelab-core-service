@@ -19,7 +19,6 @@ from app.models import (  # noqa: F401
     Task,
     User,
     UserAgent,
-    UserOrchestrator,
 )
 
 # this is the Alembic Config object

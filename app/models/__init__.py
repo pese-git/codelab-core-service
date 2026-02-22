@@ -8,14 +8,12 @@ from app.models.task_plan import TaskPlan
 from app.models.task_plan_task import TaskPlanTask
 from app.models.user import User
 from app.models.user_agent import UserAgent
-from app.models.user_orchestrator import UserOrchestrator
 from app.models.user_project import UserProject
 
 __all__ = [
     "User",
     "UserProject",
     "UserAgent",
-    "UserOrchestrator",
     "ChatSession",
     "Message",
     "Task",
