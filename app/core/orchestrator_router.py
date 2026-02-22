@@ -2,12 +2,13 @@
 
 import json
 from uuid import UUID
-from typing import Optional
+from typing import Optional, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.agent_helpers import get_agents_by_role
 from app.schemas.agent_role import AgentRole
+from app.schemas.event import StreamEvent, StreamEventType
 from app.models.user_agent import UserAgent
 
 
@@ -212,4 +213,60 @@ class OrchestratorRouter:
             Formatted string representation
         """
         return json.dumps(decision, indent=2, default=str)
+
+    @staticmethod
+    def create_agent_switched_event(
+        session_id: UUID,
+        selected_agent_id: UUID,
+        agent_name: str,
+        agent_role: str,
+        routing_score: float,
+        required_capabilities: list[str],
+        matched_capabilities: list[str],
+        confidence: str,
+    ) -> StreamEvent:
+        """Create a SSE event for agent switching/selection.
+
+        This event is sent to notify the client that the orchestrator
+        has selected a different agent for message processing.
+
+        Args:
+            session_id: Chat session ID
+            selected_agent_id: ID of selected agent
+            agent_name: Name of selected agent
+            agent_role: Role of selected agent
+            routing_score: Routing confidence score (0.0-1.0)
+            required_capabilities: Capabilities required for the message
+            matched_capabilities: Capabilities matched in selected agent
+            confidence: Confidence level (high/medium/low)
+
+        Returns:
+            StreamEvent ready to be broadcast
+
+        Example:
+            event = OrchestratorRouter.create_agent_switched_event(
+                session_id=session_id,
+                selected_agent_id=agent.id,
+                agent_name="Architect",
+                agent_role="architect",
+                routing_score=0.95,
+                required_capabilities=["design", "plan"],
+                matched_capabilities=["design"],
+                confidence="high"
+            )
+        """
+        return StreamEvent(
+            event_type=StreamEventType.AGENT_SWITCHED,
+            session_id=session_id,
+            payload={
+                "selected_agent_id": str(selected_agent_id),
+                "agent_name": agent_name,
+                "agent_role": agent_role,
+                "routing_score": round(routing_score, 3),
+                "confidence": confidence,
+                "required_capabilities": required_capabilities,
+                "matched_capabilities": matched_capabilities,
+                "match_percentage": round((len(matched_capabilities) / len(required_capabilities) * 100) if required_capabilities else 0, 1),
+            }
+        )
 

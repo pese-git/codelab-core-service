@@ -274,7 +274,7 @@ Output MUST be valid JSON:
             "concurrency_limit": 4,
             "max_tokens": 4096,
             "metadata": {
-                "role": "analyst",
+                "role": "ask",
                 "capabilities": [
                     "explanation",
                     "concept_analysis",
@@ -398,7 +398,7 @@ Output MUST be valid JSON:
             "concurrency_limit": 3,
             "max_tokens": 4096,
             "metadata": {
-                "role": "diagnostic",
+                "role": "debug",
                 "capabilities": [
                     "debugging",
                     "log_analysis",
@@ -507,7 +507,7 @@ Output MUST be valid JSON:
             "concurrency_limit": 2,
             "max_tokens": 4096,
             "metadata": {
-                "role": "executor",
+                "role": "code",
                 "capabilities": [
                     "code_writing",
                     "refactoring",

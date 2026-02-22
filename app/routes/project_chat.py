@@ -269,6 +269,7 @@ async def send_project_message(
             target_agent_id=target_agent_id,
             session_history=session_history,
             task_id=str(session_id),
+            session_id=session_id,
         )
         
         # Get agent info for SSE events

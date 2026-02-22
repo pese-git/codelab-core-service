@@ -160,20 +160,26 @@ async def get_agents_by_role(
         for agent in code_agents:
             print(agent.name)
     """
+    # First get all agents matching project and status
     query = select(UserAgent).where(
         UserAgent.project_id == project_id,
         UserAgent.status == status,
-        cast(
-            UserAgent.config['metadata']['role'],
-            String
-        ) == role.value
     )
     
     if user_id:
         query = query.where(UserAgent.user_id == user_id)
     
     result = await db.execute(query)
-    return result.scalars().all()
+    agents = result.scalars().all()
+    
+    # Filter by role in Python (JSON extraction from PostgreSQL might be unreliable)
+    matching_agents = []
+    for agent in agents:
+        agent_role = agent.config.get("metadata", {}).get("role")
+        if agent_role == role.value:
+            matching_agents.append(agent)
+    
+    return matching_agents
 
 
 async def get_agents_by_capability(

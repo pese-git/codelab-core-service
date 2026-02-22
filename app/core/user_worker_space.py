@@ -725,14 +725,15 @@ class UserWorkerSpace:
         session_history: Optional[list[dict[str, str]]] = None,
         task_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        session_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """Execute task through Project Orchestrator (intelligent routing).
 
         MODE: System automatically selects the best agent for the request.
 
         Process:
-        1. Get Project Orchestrator
-        2. Orchestrator analyzes request and selects best agent
+        1. Use OrchestratorRouter to analyze message and select best agent
+        2. Broadcast AGENT_SWITCHED SSE event to notify client
         3. Execute through direct_execution
         4. Return result with routing information
 
@@ -741,6 +742,7 @@ class UserWorkerSpace:
             session_history: Session history (optional)
             task_id: Task ID (optional)
             metadata: Additional metadata (optional)
+            session_id: Chat session ID for SSE events (optional)
 
         Returns:
             {
@@ -761,34 +763,64 @@ class UserWorkerSpace:
         if not self.initialized:
             await self.initialize()
 
-        agents = await self.list_agents_for_project()
-        if not agents:
-            logger.error(
-                "orchestrated_execution_no_agents",
-                project_id=self.project_id,
-            )
-            raise ValueError("No agents available for orchestration")
+        from app.core.orchestrator_router import OrchestratorRouter
+        from app.core.stream_manager import get_stream_manager
 
-        # Get Orchestrator or use fallback
-        selected_agent_id = agents[0]
-        routing_score = 1.0
+        # Perform intelligent routing
+        router = OrchestratorRouter()
+        routing_decision = await router.route_message(
+            db=self.db,
+            user_id=self.user_id,
+            project_id=UUID(self.project_id),
+            user_message=user_message,
+        )
 
-        try:
-            if self.agent_manager:
-                # Try to get orchestrator for intelligent routing
-                # For now, use first agent as fallback
-                logger.info(
-                    "orchestrated_execution_routing",
-                    agent_count=len(agents),
-                    selected_agent_id=str(selected_agent_id),
+        selected_agent_id = routing_decision["selected_agent_id"]
+        routing_score = routing_decision["routing_score"]
+        agent_name = routing_decision["agent_name"]
+        agent_role = routing_decision["agent_role"]
+        confidence = routing_decision["confidence"]
+        required_capabilities = routing_decision["required_capabilities"]
+        matched_capabilities = routing_decision["matched_capabilities"]
+
+        logger.info(
+            "orchestrated_execution_routing",
+            agent_id=str(selected_agent_id),
+            agent_name=agent_name,
+            routing_score=routing_score,
+            confidence=confidence,
+        )
+
+        # Send SSE event about agent switching
+        if session_id:
+            try:
+                stream_manager = await get_stream_manager(self.redis)
+                agent_switched_event = OrchestratorRouter.create_agent_switched_event(
+                    session_id=session_id,
+                    selected_agent_id=selected_agent_id,
+                    agent_name=agent_name,
+                    agent_role=agent_role,
+                    routing_score=routing_score,
+                    required_capabilities=required_capabilities,
+                    matched_capabilities=matched_capabilities,
+                    confidence=confidence,
                 )
-        except Exception as e:
-            logger.warning(
-                "orchestration_routing_error",
-                error=str(e),
-            )
-            # Keep fallback
-            routing_score = 0.5
+                await stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=agent_switched_event,
+                    buffer=True,
+                )
+                logger.info(
+                    "agent_switched_event_sent",
+                    session_id=str(session_id),
+                    agent_id=str(selected_agent_id),
+                )
+            except Exception as e:
+                logger.warning(
+                    "failed_to_send_agent_switched_event",
+                    error=str(e),
+                    session_id=str(session_id) if session_id else None,
+                )
 
         # Execute through direct execution
         start_time = time.time()
@@ -810,7 +842,9 @@ class UserWorkerSpace:
         return {
             **result,
             "selected_agent_id": str(selected_agent_id),
+            "selected_agent_name": agent_name,
             "routing_score": routing_score,
+            "confidence": confidence,
             "execution_time_ms": execution_time,
         }
 
@@ -821,6 +855,7 @@ class UserWorkerSpace:
         session_history: Optional[list[dict[str, str]]] = None,
         task_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        session_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """Unified API for message handling (auto-selects mode).
 
@@ -834,6 +869,7 @@ class UserWorkerSpace:
             session_history: Session history (optional)
             task_id: Task ID (optional)
             metadata: Additional metadata (optional)
+            session_id: Chat session ID for SSE events (optional)
 
         Returns:
             Result from direct_execution or orchestrated_execution
@@ -869,6 +905,7 @@ class UserWorkerSpace:
                 session_history=session_history,
                 task_id=task_id,
                 metadata=metadata,
+                session_id=session_id,
             )
 
     # ========== ЭТАП 3: Методы для получения метрик (10.6) ==========

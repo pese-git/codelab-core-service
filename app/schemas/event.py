@@ -12,6 +12,7 @@ class StreamEventType(str, Enum):
     """Stream event type enum."""
 
     MESSAGE_CREATED = "message_created"
+    AGENT_SWITCHED = "agent_switched"
     DIRECT_AGENT_CALL = "direct_agent_call"
     AGENT_STATUS_CHANGED = "agent_status_changed"
     TASK_PLAN_CREATED = "task_plan_created"
