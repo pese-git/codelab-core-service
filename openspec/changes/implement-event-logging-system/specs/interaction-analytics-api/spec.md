@@ -29,14 +29,14 @@
 - **WHEN** клиент отправляет `GET /my/projects/abc123/events?limit=20&offset=40`
 - **THEN** система возвращает события с offset 40, максимум 20 элементов; response включает total count
 
-### Requirement: REST API endpoint для событий конкретной сессии
-Система ДОЛЖНА предоставлять endpoint `GET /my/projects/{project_id}/events/{session_id}` для получения полной истории событий одной chat сессии.
+### Requirement: REST API endpoint для истории всех событий сессии (для аналитики)
+Система ДОЛЖНА предоставлять endpoint `GET /my/projects/{project_id}/analytics/sessions/{session_id}/events` для получения полной истории всех событий (включая системные) одной chat сессии.
 
-#### Scenario: Получение событий сессии
-- **WHEN** клиент отправляет `GET /my/projects/proj-id/events/sess-id`
-- **THEN** система возвращает все события для сессии в хронологическом порядке (created_at ASC)
+#### Scenario: Получение всех событий сессии (аналитика)
+- **WHEN** клиент отправляет `GET /my/projects/proj-id/analytics/sessions/sess-id/events`
+- **THEN** система возвращает ВСЕ события для сессии, включая системные (TOOL_REQUEST, CONTEXT_RETRIEVED и т.д.) в хронологическом порядке (created_at ASC)
 
-#### Scenario: User isolation для events/{session_id}
+#### Scenario: User isolation для аналитических events
 - **WHEN** пользователь A пытается получить события сессии, принадлежащей пользователю B
 - **THEN** система возвращает 404 NOT FOUND (не 403, чтобы не раскрывать существование ресурса)
 
@@ -125,3 +125,24 @@ Analytics endpoints ДОЛЖНЫ использовать EventRepository для
 #### Scenario: EventRepository.get_analytics()
 - **WHEN** endpoint вызывает `await event_repo.get_analytics(user_id, project_id)`
 - **THEN** метод возвращает объект с полями: event_type_counts, agent_interactions, error_stats, etc.
+
+### Requirement: Chat history содержит только user-facing сообщения
+История чата (из существующего endpoint `GET /my/projects/{project_id}/chat/{session_id}/messages/`) ДОЛЖНА содержать только сообщения, предназначенные для пользователя, исключая внутренние системные события и промежуточные логи агентов.
+
+#### Scenario: Chat history возвращает только user-facing сообщения
+- **WHEN** клиент запрашивает `GET /my/projects/{project_id}/chat/{session_id}/messages/`
+- **THEN** система возвращает только Message объекты (роль: user, assistant, system с user-friendly ошибками), исключая системные события типов TOOL_REQUEST, TOOL_RESULT, CONTEXT_RETRIEVED и другие внутренние события
+
+#### Scenario: Distinction между chat history и analytics events
+- **WHEN** клиент требует разные данные:
+  - Chat UI: пользователь видит историю чата (`/chat/{session_id}/messages/`) - только user-facing сообщения
+  - Analytics: аналитик получает все события (`/events?...` или `/analytics/sessions/{session_id}/events`) - включая системные события
+- **THEN** эти два endpoint возвращают разные наборы данных: первый - только Message объекты, второй - все Event объекты включая TOOL_REQUEST, CONTEXT_RETRIEVED и т.д.
+
+#### Scenario: Agent output в chat history
+- **WHEN** агент генерирует ответ пользователю
+- **THEN** Message в `/chat/{session_id}/messages/` содержит только финальный output для показа пользователю, не содержит внутренний reasoning, промежуточные шаги, или debug информацию
+
+#### Scenario: Error messages как user-facing events в chat
+- **WHEN** происходит ошибка при обработке сообщения
+- **THEN** в `/chat/{session_id}/messages/` появляется Message (role: system) с user-friendly error message (не raw exception)
