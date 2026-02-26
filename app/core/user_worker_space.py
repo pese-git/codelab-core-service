@@ -812,27 +812,44 @@ class UserWorkerSpace:
                 )
                 
                 # Also save system message about agent switching to chat history
-                from app.models.message import Message
-                agent_switch_message = Message(
-                    session_id=session_id,
-                    role="system",
-                    content=f"Switched to agent: {agent_name}",
-                    payload={
-                        "event_type": "agent_switched",
-                        "agent_id": str(selected_agent_id),
-                        "agent_name": agent_name,
-                        "agent_role": agent_role,
-                        "routing_score": routing_score,
-                        "confidence": confidence,
-                    }
-                )
-                self.db.add(agent_switch_message)
-                await self.db.flush()
+                # Use separate DB session for guaranteed persistence independent
+                # from the main endpoint transaction
+                try:
+                    from app.models.message import Message
+                    from app.database import AsyncSessionLocal
+                    
+                    # Create separate DB session to guarantee this message persists
+                    async with AsyncSessionLocal() as separate_db:
+                        agent_switch_message = Message(
+                            session_id=session_id,
+                            role="system",
+                            content=f"Switched to agent: {agent_name}",
+                            payload={
+                                "event_type": "agent_switched",
+                                "agent_id": str(selected_agent_id),
+                                "agent_name": agent_name,
+                                "agent_role": agent_role,
+                                "routing_score": routing_score,
+                                "confidence": confidence,
+                            }
+                        )
+                        separate_db.add(agent_switch_message)
+                        await separate_db.flush()
+                        await separate_db.commit()
+                        
+                        logger.info(
+                            f"Agent switch message saved: session_id={session_id}, "
+                            f"agent_id={selected_agent_id}, agent_name={agent_name}"
+                        )
+                except Exception as save_error:
+                    logger.error(
+                        f"Failed to save agent switch message: {save_error}",
+                        exc_info=True,
+                    )
                 
                 logger.info(
-                    "agent_switched_event_sent",
-                    session_id=str(session_id),
-                    agent_id=str(selected_agent_id),
+                    f"Agent switched event sent: session_id={session_id}, "
+                    f"agent_id={selected_agent_id}"
                 )
             except Exception as e:
                 logger.warning(
