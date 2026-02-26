@@ -2,28 +2,28 @@
 
 ## 1. Database Schema
 
-- [ ] 1.1 Добавить модель `EventOutbox` в `app/models/event_outbox.py`
-- [ ] 1.2 Добавить экспорт модели в `app/models/__init__.py`
-- [ ] 1.3 Создать Alembic миграцию для `event_outbox` + индексы (`status,next_retry_at,created_at`, `aggregate_id,created_at`, `project_id,created_at`, `user_id,created_at`)
-- [ ] 1.4 (Опционально) добавить `event_logs` как read-model для аналитики
-- [ ] 1.5 Написать unit тесты для моделей и ограничений
+- [x] 1.1 Добавить модель `EventOutbox` в `app/models/event_outbox.py`
+- [x] 1.2 Добавить экспорт модели в `app/models/__init__.py`
+- [x] 1.3 Создать Alembic миграцию для `event_outbox` + индексы (`status,next_retry_at,created_at`, `aggregate_id,created_at`, `project_id,created_at`, `user_id,created_at`)
+- [x] 1.4 (Опционально) добавить `event_logs` как read-model для аналитики (не требуется на текущем этапе)
+- [x] 1.5 Написать unit тесты для моделей и ограничений
 
 ## 2. Outbox Write Path (Strict Consistency)
 
-- [ ] 2.1 Добавить repository/service для записи outbox-событий в текущую `AsyncSession`
-- [ ] 2.2 Интегрировать запись `message_created` в `app/routes/project_chat.py` в той же транзакции, что `Message`
+- [x] 2.1 Добавить repository/service для записи outbox-событий в текущую `AsyncSession`
+- [x] 2.2 Интегрировать запись `message_created` в `app/routes/project_chat.py` в той же транзакции, что `Message`
 - [ ] 2.3 Интегрировать запись `agent_switched` в `app/core/user_worker_space.py` в той же транзакции
 - [ ] 2.4 Запретить отдельные DB-сессии для сохранения chat-domain событий в request-path
-- [ ] 2.5 Добавить тесты на atomic commit/rollback (`messages` + `event_outbox`)
+- [x] 2.5 Добавить тесты на atomic commit/rollback (`messages` + `event_outbox`)
 
 ## 3. Outbox Publisher Service
 
-- [ ] 3.1 Создать `app/core/outbox_publisher.py`
-- [ ] 3.2 Реализовать выборку pending батчей через `FOR UPDATE SKIP LOCKED`
-- [ ] 3.3 Реализовать publish в StreamManager и update статусов (`published|failed|pending+retry`)
-- [ ] 3.4 Реализовать retry/backoff и `max_retries`
-- [ ] 3.5 Добавить lifecycle управление в `app/main.py` (startup/shutdown)
-- [ ] 3.6 Написать unit/integration тесты publisher
+- [x] 3.1 Создать `app/core/outbox_publisher.py`
+- [x] 3.2 Реализовать выборку pending батчей через `FOR UPDATE SKIP LOCKED`
+- [x] 3.3 Реализовать publish в StreamManager и update статусов (`published|failed|pending+retry`)
+- [x] 3.4 Реализовать retry/backoff и `max_retries`
+- [x] 3.5 Добавить lifecycle управление в `app/main.py` (startup/shutdown)
+- [x] 3.6 Написать unit/integration тесты publisher
 
 ## 4. Streaming Integration
 
