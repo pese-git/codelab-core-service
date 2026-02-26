@@ -810,6 +810,25 @@ class UserWorkerSpace:
                     event=agent_switched_event,
                     buffer=True,
                 )
+                
+                # Also save system message about agent switching to chat history
+                from app.models.message import Message
+                agent_switch_message = Message(
+                    session_id=session_id,
+                    role="system",
+                    content=f"Switched to agent: {agent_name}",
+                    payload={
+                        "event_type": "agent_switched",
+                        "agent_id": str(selected_agent_id),
+                        "agent_name": agent_name,
+                        "agent_role": agent_role,
+                        "routing_score": routing_score,
+                        "confidence": confidence,
+                    }
+                )
+                self.db.add(agent_switch_message)
+                await self.db.flush()
+                
                 logger.info(
                     "agent_switched_event_sent",
                     session_id=str(session_id),
