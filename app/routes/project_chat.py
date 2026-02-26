@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.manager import AgentManager
 from app.core.stream_manager import get_stream_manager
 from app.core.user_worker_space import UserWorkerSpace
+from app.core.outbox_repository import OutboxRepository
 from app.database import get_db
 from app.dependencies import get_worker_space
 from app.middleware.project_validation import get_project_with_validation
@@ -237,7 +238,25 @@ async def send_project_message(
     db.add(user_message)
     await db.flush()
     
-    # Send SSE event: user message created
+    # Record event in outbox (same transaction as message)
+    await OutboxRepository.record_event(
+        session=db,
+        aggregate_type="chat_message",
+        aggregate_id=user_message.id,
+        user_id=user_id,
+        project_id=project_id,
+        event_type="message_created",
+        payload={
+            "message_id": str(user_message.id),
+            "session_id": str(session_id),
+            "role": MessageRole.USER.value,
+            "content": user_message.content,
+            "timestamp": user_message.created_at.isoformat(),
+        },
+    )
+    
+    # Send SSE event: user message created (not awaited to avoid blocking)
+    # Note: Actual delivery will be handled by OutboxPublisher background task
     await stream_manager.broadcast_event(
         session_id=session_id,
         event=StreamEvent(
@@ -423,6 +442,28 @@ async def send_project_message(
         )
         db.add(assistant_message)
         await db.flush()
+        
+        # Record event in outbox (same transaction as message)
+        await OutboxRepository.record_event(
+            session=db,
+            aggregate_type="chat_message",
+            aggregate_id=assistant_message.id,
+            user_id=user_id,
+            project_id=project_id,
+            event_type="message_created",
+            payload={
+                "message_id": str(assistant_message.id),
+                "session_id": str(session_id),
+                "role": MessageRole.ASSISTANT.value,
+                "content": assistant_message.content,
+                "agent_id": str(agent_id) if agent_id else None,
+                "agent_name": agent_response.name if agent_response else "System",
+                "timestamp": assistant_message.created_at.isoformat(),
+                "context_used": exec_result.get("context_used", 0),
+                "tokens_used": exec_result.get("tokens_used", 0),
+                "execution_time_ms": exec_result.get("execution_time_ms", 0),
+            },
+        )
         
         # Send SSE event: message created
         await stream_manager.broadcast_event(
