@@ -1,46 +1,48 @@
-# Proposal: Implement Event Logging System
+# Proposal: Implement Event Log + Outbox for Consistent Chat Events
 
 ## Why
 
-Текущая система генерирует события взаимодействия пользователя с агентами в реальном времени (MESSAGE_CREATED, AGENT_SWITCHED, TASK_STARTED, TOOL_REQUEST, APPROVAL_REQUIRED и т.д.) через SSE/WebSocket, однако события не сохраняются в базу данных и теряются при отключении клиента. Для анализа и аудита взаимодействий пользователей с агентами необходимо иметь полную историю всех событий с возможностью запроса и фильтрации.
+Текущая модель realtime событий не гарантирует строгую консистентность чата. Если событие отправлено в streaming, но транзакция запроса откатилась (или наоборот), состояние UI и БД расходится.
+
+Для режима с приоритетом на строгую консистентность требуется паттерн Outbox:
+
+- изменения доменной модели (`messages`) и intent события фиксируются атомарно в одной транзакции;
+- публикация в realtime выполняется асинхронно после commit;
+- неуспешная публикация ретраится без потери данных.
 
 ## What Changes
 
-- **Добавляется модель EventLog** для постоянного хранения всех событий в PostgreSQL (session_id, user_id, agent_id, event_type, payload, timestamp, metadata)
-- **Создается EventLogger сервис** для логирования событий из различных компонентов системы
-- **Интегрируется логирование** в StreamManager, AgentBus, ApprovalManager и другие ключевые компоненты
-- **Добавляются REST API endpoints** для получения истории событий, фильтрации и аналитики взаимодействий
-- **Реализуется EventRepository** для сложных запросов к истории событий (фильтрация по типам, агентам, периодам)
+- Добавляется таблица `event_outbox` как транзакционный буфер событий.
+- В request-path (`project_chat`, `user_worker_space`) события записываются в outbox в той же транзакции, что и `messages`.
+- Добавляется фоновый `OutboxPublisher`, публикующий pending события в streaming и помечающий их как `published`.
+- Добавляется/уточняется `event_log` (опциональный read-model) для аналитики и аудита.
+- Analytics API работает по консистентному источнику (`event_log` или `event_outbox` + materialization) и сохраняет user/project isolation.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `event-logging-persistence`: Сохранение всех событий взаимодействия в БД с полным контекстом (EventLog модель, миграция БД)
-- `event-logger-service`: Центральный сервис логирования событий, доступный для всех компонентов системы
-- `interaction-analytics-api`: REST API endpoints для анализа взаимодействий (история событий, статистика, временная шкала)
-- `event-instrumentation`: Интеграция логирования в ключевые точки системы (chat endpoints, agent operations, tool execution, approvals)
+- `event-logging-persistence`: Транзакционное хранение event intent в `event_outbox` и долговременное хранение событий для аналитики.
+- `event-logger-service`: Асинхронный publisher с retry/backoff и lifecycle management.
+- `interaction-analytics-api`: API для чтения истории событий и агрегатов по проекту.
+- `event-instrumentation`: Инструментация доменных операций через запись в outbox внутри той же транзакции.
 
 ### Modified Capabilities
 
-- `sse-event-streaming`: Требование интегрировать EventLogger в StreamManager для синхронного сохранения событий параллельно отправке клиентам
+- `sse-event-streaming`: Streaming становится downstream-каналом доставки подтвержденных (committed) событий, а не источником истины.
 
 ## Impact
 
 **Затронутый код:**
-- `app/models/` - добавляется модель EventLog
-- `app/schemas/` - расширяются схемы для API событий
-- `app/core/` - интеграция логирования в stream_manager.py, agent_bus.py, orchestrator_router.py, user_worker_space.py
-- `app/routes/` - добавляются новые endpoints для analytics (project_analytics.py или расширение project_chat.py)
-- `migrations/` - миграция БД для создания таблицы event_logs с индексами
-- `tests/` - добавляются тесты логирования и аналитики
+- `app/models/` - новые модели `EventOutbox` (и `EventLog`/read-model)
+- `app/core/` - `outbox_publisher.py`, repository слой, изменения stream_manager integration
+- `app/routes/project_chat.py` и `app/core/user_worker_space.py` - запись событий через outbox в одной транзакции
+- `migrations/` - схема outbox/event-log и индексы
+- `tests/` - транзакционная консистентность, retry/idempotency, API
 
 **API изменения:**
-- Новые endpoints: `GET /my/projects/{project_id}/events`, `GET /my/projects/{project_id}/analytics`
-- Новые query parameters для фильтрации: `event_type`, `agent_id`, `start_time`, `end_time`, `limit`, `offset`
+- Endpoints аналитики сохраняются и уточняются по источнику данных и SLA консистентности.
 
-**Зависимости:**
-- Существующие: FastAPI, SQLAlchemy, PostgreSQL, Redis
-- Нет новых внешних зависимостей
-
-**Breaking changes:** Нет
+**Breaking changes:**
+- Нет для пользовательских endpoint'ов.
+- Внутренний контракт публикации событий меняется: прямой publish из request-path считается недопустимым.

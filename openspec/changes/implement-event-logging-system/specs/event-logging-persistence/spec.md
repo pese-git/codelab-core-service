@@ -2,58 +2,59 @@
 
 ## ADDED Requirements
 
-### Requirement: EventLog model for persistent storage
-Система ДОЛЖНА сохранять все события взаимодействия пользователя с агентами в таблице PostgreSQL event_logs с полным контекстом для последующего анализа и аудита.
+### Requirement: Транзакционное хранение событий через outbox
+Система ДОЛЖНА сохранять intent событий в таблицу `event_outbox` в той же транзакции, что и доменные изменения чата (`messages`).
 
-#### Scenario: Event структура в БД
-- **WHEN** событие генерируется в системе
-- **THEN** система сохраняет событие с полями: id (UUID), session_id, user_id, project_id, agent_id, event_type, payload (JSONB), created_at, error_code, tool_name, approval_status
+#### Scenario: Атомарный commit
+- **WHEN** endpoint обработки сообщения успешно завершает транзакцию
+- **THEN** в БД зафиксированы и `messages`, и соответствующие `event_outbox` записи
 
-#### Scenario: EventLog модель наследует от Base
-- **WHEN** код использует EventLog модель
-- **THEN** модель наследует от app.database.Base и имеет аннотирующиеся типы (Mapped)
+#### Scenario: Атомарный rollback
+- **WHEN** endpoint обработки сообщения завершился ошибкой до commit
+- **THEN** ни `messages`, ни `event_outbox` записи не сохраняются
 
-#### Scenario: Индексирование для оптимизации запросов
-- **WHEN** пользователь выполняет поиск событий по session_id или user_id с сортировкой по времени
-- **THEN** система использует индекс ix_event_logs_session_id_created_at или ix_event_logs_user_id_created_at для быстрого поиска
+### Requirement: Схема таблицы event_outbox
+Система ДОЛЖНА иметь таблицу `event_outbox` с полями статуса публикации и retry-метаданными.
 
-#### Scenario: JSONB payload для гибкости структуры
-- **WHEN** различные типы событий имеют разные структуры payload
-- **THEN** payload хранится как JSONB для поддержки любой JSON структуры без изменения схемы
+#### Scenario: Структура outbox записи
+- **WHEN** создается outbox событие
+- **THEN** запись содержит: `id`, `aggregate_type`, `aggregate_id`, `user_id`, `project_id`, `event_type`, `payload`, `status`, `retry_count`, `next_retry_at`, `created_at`, `published_at`, `last_error`
 
-#### Scenario: Денормализованные поля для частых фильтров
-- **WHEN** пользователь фильтрует события по error_code, tool_name или approval_status
-- **THEN** система использует денормализованные колонки вместо парсинга JSONB, что обеспечивает эффективность запросов
+#### Scenario: Статусы публикации
+- **WHEN** событие создано request-path
+- **THEN** `status='pending'`
+- **AND WHEN** событие успешно опубликовано
+- **THEN** `status='published'` и `published_at` заполнен
 
-### Requirement: Foreign key relationships с сохранением целостности
-Таблица event_logs ДОЛЖНА иметь foreign key связи с таблицами chat_sessions, users, user_projects и user_agents для обеспечения целостности данных.
+### Requirement: Индексы для outbox processing и аналитики
+Система ДОЛЖНА иметь индексы, оптимизированные для выборки pending событий и пользовательской фильтрации.
 
-#### Scenario: Каскадное удаление при удалении сессии
-- **WHEN** пользователь удаляет chat session
-- **THEN** все связанные события удаляются автоматически (ON DELETE CASCADE)
+#### Scenario: Быстрая выборка pending событий
+- **WHEN** publisher запрашивает pending записи
+- **THEN** используется индекс по `(status, next_retry_at, created_at)`
 
-#### Scenario: SET NULL при удалении агента
-- **WHEN** агент удаляется из проекта
-- **THEN** event_logs.agent_id устанавливается в NULL для событий, которые ссылались на этого агента (ON DELETE SET NULL)
+#### Scenario: Быстрая фильтрация по aggregate/project/user
+- **WHEN** выполняются запросы истории
+- **THEN** используются индексы `(aggregate_id, created_at)`, `(project_id, created_at)`, `(user_id, created_at)`
 
-### Requirement: Миграция БД для создания event_logs таблицы
-Система ДОЛЖНА иметь Alembic миграцию, которая создает таблицу event_logs с правильной схемой, индексами и constraints.
+### Requirement: EventLog как опциональный read-model
+Система МОЖЕТ хранить опубликованные события в таблице `event_logs` для аналитики и аудита.
 
-#### Scenario: Миграция успешно применяется
-- **WHEN** выполнялась команда `alembic upgrade head`
-- **THEN** таблица event_logs создается с правильной схемой и индексами
+#### Scenario: Наполнение event_logs после publish
+- **WHEN** publisher успешно отправил событие
+- **THEN** событие может быть сохранено в `event_logs` как аналитическая проекция
 
-#### Scenario: Обратная миграция удаляет таблицу
-- **WHEN** выполняется откат миграции `alembic downgrade -1`
-- **THEN** таблица event_logs удаляется и все индексы очищаются
+#### Scenario: Источник истины
+- **WHEN** возникает конфликт между `messages` и analytics read-model
+- **THEN** source of truth для чата остается `messages`, а `event_logs` трактуется как проекция
 
-### Requirement: Представление EventLog в ORM
-Модель EventLog доступна в app.models и может быть импортирована как: `from app.models import EventLog`
+### Requirement: Миграции схемы
+Система ДОЛЖНА иметь Alembic миграции для создания `event_outbox` (и опционально `event_logs`) с обратимым downgrade.
 
-#### Scenario: EventLog доступна в __all__
-- **WHEN** код выполняет `from app.models import EventLog`
-- **THEN** экспорт успешен и EventLog доступна как класс ORM модели
+#### Scenario: Upgrade
+- **WHEN** выполняется `alembic upgrade head`
+- **THEN** таблицы и индексы создаются корректно
 
-#### Scenario: EventLog имеет корректные типы полей
-- **WHEN** код создает новый EventLog экземпляр
-- **THEN** все поля имеют правильные типы (UUID, datetime, str, dict, и т.д.) согласно аннотациям типов
+#### Scenario: Downgrade
+- **WHEN** выполняется `alembic downgrade -1`
+- **THEN** новые таблицы и индексы удаляются без нарушения целостности существующих данных
