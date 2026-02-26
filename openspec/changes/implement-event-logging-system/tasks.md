@@ -12,7 +12,7 @@
 
 - [x] 2.1 Добавить repository/service для записи outbox-событий в текущую `AsyncSession`
 - [x] 2.2 Интегрировать запись `message_created` в `app/routes/project_chat.py` в той же транзакции, что `Message`
-- [ ] 2.3 Интегрировать запись `agent_switched` в `app/core/user_worker_space.py` в той же транзакции
+- [x] 2.3 Интегрировать запись `agent_switched` в `app/core/user_worker_space.py` в той же транзакции
 - [ ] 2.4 Запретить отдельные DB-сессии для сохранения chat-domain событий в request-path
 - [x] 2.5 Добавить тесты на atomic commit/rollback (`messages` + `event_outbox`)
 
