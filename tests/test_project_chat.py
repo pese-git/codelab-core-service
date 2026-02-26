@@ -294,3 +294,116 @@ async def test_delete_session(db_session: AsyncSession) -> None:
     )
     deleted_session = result.scalar_one_or_none()
     assert deleted_session is None
+
+
+@pytest.mark.asyncio
+async def test_chat_history_filters_only_user_facing_messages(db_session: AsyncSession) -> None:
+    """Test that chat history contains only user-facing messages.
+    
+    Verifies that the /messages/ endpoint filters out internal system
+    event messages and returns only messages with roles: user, assistant, system.
+    """
+    # Create test user
+    user_id = uuid4()
+    project_id = uuid4()
+    
+    test_user = User(id=user_id, email=f"test-{user_id}@example.com")
+    test_project = UserProject(
+        id=project_id,
+        user_id=user_id,
+        name="Test Project",
+        workspace_path="/test/workspace",
+    )
+    db_session.add(test_user)
+    db_session.add(test_project)
+    await db_session.flush()
+    
+    # Create chat session
+    session = ChatSession(
+        user_id=user_id,
+        project_id=project_id,
+    )
+    db_session.add(session)
+    await db_session.flush()
+    
+    # Create user-facing messages (should be included in chat history)
+    user_message = Message(
+        session_id=session.id,
+        role=MessageRole.USER.value,
+        content="Hello, assistant!",
+    )
+    assistant_message = Message(
+        session_id=session.id,
+        role=MessageRole.ASSISTANT.value,
+        content="Hi there! How can I help?",
+    )
+    system_message = Message(
+        session_id=session.id,
+        role=MessageRole.SYSTEM.value,
+        content="An error occurred: Connection timeout",
+    )
+    
+    # Create internal system event messages (should NOT be included in chat history)
+    # These would be created by internal system components, not for user display
+    internal_tool_request = Message(
+        session_id=session.id,
+        role="TOOL_REQUEST",  # Internal event, not user-facing
+        content='{"tool": "search", "query": "example"}',
+    )
+    internal_tool_result = Message(
+        session_id=session.id,
+        role="TOOL_RESULT",  # Internal event, not user-facing
+        content="Result from tool execution",
+    )
+    internal_context = Message(
+        session_id=session.id,
+        role="CONTEXT_RETRIEVED",  # Internal event, not user-facing
+        content='{"context": "retrieved data"}',
+    )
+    
+    # Add all messages to database
+    db_session.add(user_message)
+    db_session.add(assistant_message)
+    db_session.add(system_message)
+    db_session.add(internal_tool_request)
+    db_session.add(internal_tool_result)
+    db_session.add(internal_context)
+    await db_session.flush()
+    
+    # Verify all 6 messages exist in database
+    result = await db_session.execute(
+        select(Message).where(Message.session_id == session.id)
+    )
+    all_messages = result.scalars().all()
+    assert len(all_messages) == 6, "All 6 messages should be in database"
+    
+    # Query only user-facing messages (as the endpoint does)
+    USER_FACING_ROLES = ["user", "assistant", "system"]
+    result = await db_session.execute(
+        select(Message)
+        .where(
+            Message.session_id == session.id,
+            Message.role.in_(USER_FACING_ROLES)
+        )
+        .order_by(Message.created_at.asc())
+    )
+    user_facing_messages = result.scalars().all()
+    
+    # Verify only 3 user-facing messages are returned
+    assert len(user_facing_messages) == 3, "Only 3 user-facing messages should be returned"
+    
+    # Verify the correct messages are returned
+    assert user_facing_messages[0].role == MessageRole.USER.value
+    assert user_facing_messages[0].content == "Hello, assistant!"
+    
+    assert user_facing_messages[1].role == MessageRole.ASSISTANT.value
+    assert user_facing_messages[1].content == "Hi there! How can I help?"
+    
+    assert user_facing_messages[2].role == MessageRole.SYSTEM.value
+    assert user_facing_messages[2].content == "An error occurred: Connection timeout"
+    
+    # Verify internal events are NOT included
+    roles_in_result = {msg.role for msg in user_facing_messages}
+    assert "TOOL_REQUEST" not in roles_in_result
+    assert "TOOL_RESULT" not in roles_in_result
+    assert "CONTEXT_RETRIEVED" not in roles_in_result

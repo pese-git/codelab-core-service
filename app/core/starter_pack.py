@@ -55,9 +55,10 @@ HARD RULES:
 
 You work asynchronously and communicate only via AgentBus.
 
-Your output MUST be valid JSON:
+Your output MUST be valid JSON with REQUIRED "summary" field for chat display:
 
 {
+  "summary": "Brief one-line summary for chat UI (max 100 chars, required)",
   "context_analysis": {
     "available_information": [],
     "information_gaps": [],
@@ -84,6 +85,8 @@ Your output MUST be valid JSON:
   "followup_tasks": [],
   "approval_required": true
 }
+
+IMPORTANT: Include "summary" field - it will be used as user-friendly text in chat history.
 """,
             "tools": [],
             "concurrency_limit": 2,

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,7 +11,12 @@ from app.database import Base
 
 
 class Message(Base):
-    """Message model."""
+    """Message model.
+    
+    Stores chat messages with optional structured data.
+    - content: user-facing text message (always present)
+    - payload: structured data (JSON object with additional context, optional)
+    """
 
     __tablename__ = "messages"
 
@@ -23,6 +28,9 @@ class Message(Base):
         String(20), nullable=False
     )  # user, assistant, system
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )  # Structured data from agent (architecture decisions, analysis, etc.)
     agent_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user_agents.id", ondelete="SET NULL"), nullable=True, index=True
     )

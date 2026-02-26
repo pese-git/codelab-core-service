@@ -1,5 +1,6 @@
 """Per-project chat endpoints."""
 
+import json
 import logging
 from uuid import UUID
 
@@ -118,7 +119,12 @@ async def get_project_messages(
     limit: int = 50,
     offset: int = 0,
 ) -> MessageListResponse:
-    """Get messages for a session in project."""
+    """Get messages for a session in project.
+    
+    Returns only user-facing messages (user, assistant, system roles).
+    Excludes internal system events (TOOL_REQUEST, TOOL_RESULT, CONTEXT_RETRIEVED, etc.)
+    which are available through the analytics API.
+    """
     user_id = get_current_user_id(request)
     logger.info(f"Getting messages from session: session_id={session_id}, project_id={project_id}")
     
@@ -138,17 +144,26 @@ async def get_project_messages(
             detail="Session not found",
         )
     
-    # Get total count of messages
+    # Define user-facing roles: user, assistant, system (with user-friendly messages)
+    USER_FACING_ROLES = ["user", "assistant", "system"]
+    
+    # Get total count of user-facing messages
     count_result = await db.execute(
         select(func.count(Message.id))
-        .where(Message.session_id == session_id)
+        .where(
+            Message.session_id == session_id,
+            Message.role.in_(USER_FACING_ROLES)
+        )
     )
     total_count = count_result.scalar() or 0
     
-    # Get messages
+    # Get user-facing messages (excluding internal system events)
     result = await db.execute(
         select(Message)
-        .where(Message.session_id == session_id)
+        .where(
+            Message.session_id == session_id,
+            Message.role.in_(USER_FACING_ROLES)
+        )
         .order_by(Message.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -342,11 +357,68 @@ async def send_project_message(
                 detail=f"Agent execution failed: {error_msg}",
             )
         
-        # Save assistant message
+        # Save assistant message with structured data support
+        # Extract user-friendly response text and optional payload from agent response
+        response_text = exec_result.get("response", "")
+        payload_data = None
+        
+        # If response is a JSON string, extract text and store full structure as payload
+        if isinstance(response_text, str) and response_text.strip().startswith("{"):
+            try:
+                response_obj = json.loads(response_text)
+                
+                if isinstance(response_obj, dict):
+                    # Store full structured response as payload
+                    payload_data = response_obj
+                    
+                    # Extract user-friendly text from common fields (priority order)
+                    extracted_text = None
+                    # Priority 1: Explicit summary field (for structured LLM responses)
+                    if "summary" in response_obj and response_obj["summary"]:
+                        extracted_text = response_obj["summary"]
+                    # Priority 2: Description field
+                    elif "description" in response_obj and response_obj["description"]:
+                        extracted_text = response_obj["description"]
+                    # Priority 3: Title (with optional description)
+                    elif "title" in response_obj and response_obj["title"]:
+                        if "description" in response_obj and response_obj["description"]:
+                            extracted_text = f"{response_obj['title']}\n\n{response_obj['description']}"
+                        else:
+                            extracted_text = response_obj["title"]
+                    # Priority 4: Message field
+                    elif "message" in response_obj and response_obj["message"]:
+                        extracted_text = response_obj["message"]
+                    # Priority 5: Response field
+                    elif "response" in response_obj and response_obj["response"]:
+                        extracted_text = response_obj["response"]
+                    
+                    # If we found suitable text, use it; otherwise use compact JSON representation
+                    if extracted_text:
+                        response_text = extracted_text
+                    else:
+                        # Generate summary from available fields
+                        summary_parts = []
+                        for key in ["title", "architecture_decision", "components", "rationale"]:
+                            if key in response_obj and response_obj[key]:
+                                if isinstance(response_obj[key], dict) and "title" in response_obj[key]:
+                                    summary_parts.append(response_obj[key]["title"])
+                                elif isinstance(response_obj[key], str) and len(response_obj[key]) < 200:
+                                    summary_parts.append(response_obj[key])
+                        
+                        if summary_parts:
+                            response_text = "\n".join(summary_parts)
+                        else:
+                            # Last resort: create minimal summary
+                            response_text = f"Architecture decision prepared ({len(response_obj)} fields)"
+            except (json.JSONDecodeError, TypeError):
+                # Not valid JSON, use original response as-is
+                pass
+        
         assistant_message = Message(
             session_id=session_id,
             role=MessageRole.ASSISTANT.value,
-            content=exec_result.get("response"),
+            content=response_text,
+            payload=payload_data,
             agent_id=UUID(str(agent_id)) if agent_id else None,
         )
         db.add(assistant_message)
