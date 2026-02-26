@@ -14,6 +14,7 @@ from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
 from app.config import settings
 from app.core.agent_bus import AgentBus
+from app.core.outbox_repository import OutboxRepository
 from app.logging_config import get_logger
 from app.schemas.agent import AgentConfig
 from app.vectorstore.agent_context_store import AgentContextStore
@@ -841,6 +842,24 @@ class UserWorkerSpace:
             )
             self.db.add(agent_switch_message)
             await self.db.flush()
+
+            # Record agent_switched event in outbox (same transaction as message)
+            await OutboxRepository.record_event(
+                session=self.db,
+                aggregate_type="agent_switch",
+                aggregate_id=selected_agent_id,
+                user_id=self.user_id,
+                project_id=self.project_id,
+                event_type="agent_switched",
+                payload={
+                    "agent_id": str(selected_agent_id),
+                    "agent_name": agent_name,
+                    "agent_role": agent_role,
+                    "session_id": str(session_id),
+                    "routing_score": routing_score,
+                    "confidence": confidence,
+                },
+            )
 
             logger.info(
                 f"Agent switch message saved: session_id={session_id}, "
