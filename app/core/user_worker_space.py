@@ -158,6 +158,29 @@ class UserWorkerSpace:
         self.task_queue: dict[UUID, asyncio.Queue[Any]] = {}
         self.lock = asyncio.Lock()
 
+    def bind_request_dependencies(
+        self,
+        db: AsyncSession,
+        redis: Optional[Redis],
+        qdrant: Optional[AsyncQdrantClient],
+    ) -> None:
+        """Rebind request-scoped dependencies for cached workspace instance.
+
+        WorkerSpaceManager keeps UserWorkerSpace instances in memory across requests,
+        while DB sessions are request-scoped. This method ensures that a cached
+        workspace always uses the current request session.
+        """
+        self.db = db
+        self.redis = redis
+        self.qdrant = qdrant
+        self.agent_cache.redis = redis
+
+        # Keep AgentManager aligned with current request DB session.
+        if self.agent_manager is not None:
+            self.agent_manager.db = db
+            self.agent_manager.redis = redis
+            self.agent_manager.qdrant = qdrant
+
     async def initialize(self) -> None:
         """Initialize worker space.
 
@@ -849,7 +872,7 @@ class UserWorkerSpace:
                 aggregate_type="agent_switch",
                 aggregate_id=selected_agent_id,
                 user_id=self.user_id,
-                project_id=self.project_id,
+                project_id=UUID(self.project_id),
                 event_type="agent_switched",
                 payload={
                     "agent_id": str(selected_agent_id),

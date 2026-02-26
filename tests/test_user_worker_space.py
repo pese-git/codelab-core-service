@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.agent_bus import AgentBus
 from app.core.user_worker_space import UserWorkerSpace, AgentCache
 from app.core.worker_space_manager import WorkerSpaceManager, get_worker_space_manager
+from app.database import AsyncSessionLocal
 from app.models import User, UserAgent
 from app.schemas.agent import AgentConfig
 from app.database import get_db
@@ -230,6 +231,39 @@ async def test_worker_space_manager_get_or_create(db_session: AsyncSession, test
 
     assert space1 is not space3
     assert manager.get_user_project_count(test_user.id) == 2
+
+
+@pytest.mark.asyncio
+async def test_worker_space_manager_rebinds_db_session(
+    db_session: AsyncSession,
+    test_user,
+    test_agents_fixture,
+):
+    """Cached workspace must use current request DB session."""
+    manager = WorkerSpaceManager()
+
+    space1 = await manager.get_or_create(
+        user_id=test_user.id,
+        project_id="project-rebind",
+        db=db_session,
+        redis=None,
+        qdrant=None,
+    )
+    assert space1.db is db_session
+
+    async with AsyncSessionLocal() as second_session:
+        space2 = await manager.get_or_create(
+            user_id=test_user.id,
+            project_id="project-rebind",
+            db=second_session,
+            redis=None,
+            qdrant=None,
+        )
+
+        assert space1 is space2
+        assert space2.db is second_session
+        if space2.agent_manager is not None:
+            assert space2.agent_manager.db is second_session
 
 
 @pytest.mark.asyncio

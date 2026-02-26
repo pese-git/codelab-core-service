@@ -78,13 +78,17 @@ class WorkerSpaceManager:
 
         # Try fast path first
         if key in self.spaces:
-            return self.spaces[key]
+            space = self.spaces[key]
+            space.bind_request_dependencies(db=db, redis=redis, qdrant=qdrant)
+            return space
 
         # Slow path with lock
         async with self._lock:
             # Double-check after acquiring lock
             if key in self.spaces:
-                return self.spaces[key]
+                space = self.spaces[key]
+                space.bind_request_dependencies(db=db, redis=redis, qdrant=qdrant)
+                return space
 
             try:
                 space = UserWorkerSpace(
