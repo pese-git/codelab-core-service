@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = Field(default="codelab-core-service")
-    app_version: str = Field(default="0.1.0")
+    app_version: str = Field(default="0.2.0")
     app_env: str = Field(default="development")
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")

@@ -19,6 +19,11 @@ from app.vectorstore.agent_context_store import AgentContextStore
 logger = get_logger(__name__)
 
 
+def get_current_user(request: Request) -> UUID:
+    """Get current authenticated user ID from request context."""
+    return get_current_user_id(request)
+
+
 async def get_worker_space(
     project_id: UUID,
     request: Request,

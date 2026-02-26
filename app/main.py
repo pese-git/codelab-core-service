@@ -13,7 +13,17 @@ from app.logging_config import configure_logging, get_logger
 from app.middleware.user_isolation import UserIsolationMiddleware
 from app.qdrant_client import close_qdrant
 from app.redis_client import close_redis
-from app.routes import health, streaming, projects, project_agents, project_chat, monitoring, project_plans, approvals
+from app.routes import (
+    approvals,
+    health,
+    monitoring,
+    project_agents,
+    project_chat,
+    project_plans,
+    project_tools,
+    projects,
+    streaming,
+)
 from app.core.stream_manager import close_stream_manager
 from app.core.worker_space_manager import get_worker_space_manager
 
@@ -115,6 +125,7 @@ app.include_router(project_agents.router)
 app.include_router(project_chat.router)
 app.include_router(project_plans.router)
 app.include_router(approvals.router)
+app.include_router(project_tools.router)
 app.include_router(streaming.project_router)
 app.include_router(monitoring.router)
 
