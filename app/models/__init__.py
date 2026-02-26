@@ -2,6 +2,7 @@
 
 from app.models.approval_request import ApprovalRequest
 from app.models.chat_session import ChatSession
+from app.models.event_outbox import EventOutbox
 from app.models.message import Message
 from app.models.task import Task
 from app.models.task_plan import TaskPlan
@@ -20,4 +21,5 @@ __all__ = [
     "TaskPlan",
     "TaskPlanTask",
     "ApprovalRequest",
+    "EventOutbox",
 ]

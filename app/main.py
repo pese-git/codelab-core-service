@@ -8,11 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
-from app.database import close_db, init_db
+from app.database import close_db, init_db, AsyncSessionLocal
 from app.logging_config import configure_logging, get_logger
 from app.middleware.user_isolation import UserIsolationMiddleware
 from app.qdrant_client import close_qdrant
-from app.redis_client import close_redis
+from app.redis_client import close_redis, get_redis
 from app.routes import (
     approvals,
     health,
@@ -24,8 +24,9 @@ from app.routes import (
     projects,
     streaming,
 )
-from app.core.stream_manager import close_stream_manager
+from app.core.stream_manager import close_stream_manager, get_stream_manager
 from app.core.worker_space_manager import get_worker_space_manager
+from app.core.outbox_publisher import OutboxPublisher
 
 # Configure logging
 configure_logging()
@@ -47,12 +48,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     manager = get_worker_space_manager()
     logger.info("worker_space_manager_initialized")
     
+    # Initialize OutboxPublisher for reliable event delivery
+    redis = await get_redis()
+    stream_manager = await get_stream_manager(redis)
+    outbox_publisher = OutboxPublisher(
+        session_factory=AsyncSessionLocal,
+        stream_manager=stream_manager,
+        batch_size=100,
+        max_retries=5,
+        initial_retry_delay_seconds=5,
+        max_retry_delay_seconds=300,
+        poll_interval_seconds=5,
+    )
+    app.state.outbox_publisher = outbox_publisher
+    await outbox_publisher.start()
+    logger.info("outbox_publisher_started")
+    
     logger.info("application_started")
     
     yield
     
     # Shutdown
     logger.info("application_shutting_down")
+    
+    # Stop OutboxPublisher
+    await outbox_publisher.stop()
+    logger.info("outbox_publisher_stopped")
     
     # Graceful shutdown of all worker spaces
     await manager.cleanup_all()
