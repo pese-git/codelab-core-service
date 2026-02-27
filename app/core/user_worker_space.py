@@ -815,79 +815,51 @@ class UserWorkerSpace:
             confidence=confidence,
         )
 
-        # Send SSE event about agent switching
-        if session_id:
-            # SSE delivery is best-effort and does not affect DB consistency.
-            try:
-                stream_manager = await get_stream_manager(self.redis)
-                agent_switched_event = OrchestratorRouter.create_agent_switched_event(
-                    session_id=session_id,
-                    selected_agent_id=selected_agent_id,
-                    agent_name=agent_name,
-                    agent_role=agent_role,
-                    routing_score=routing_score,
-                    required_capabilities=required_capabilities,
-                    matched_capabilities=matched_capabilities,
-                    confidence=confidence,
-                )
-                await stream_manager.broadcast_event(
-                    session_id=session_id,
-                    event=agent_switched_event,
-                    buffer=True,
-                )
-                logger.info(
-                    f"Agent switched event sent: session_id={session_id}, "
-                    f"agent_id={selected_agent_id}"
-                )
-            except Exception as e:
-                logger.warning(
-                    "failed_to_send_agent_switched_event",
-                    error=str(e),
-                    session_id=str(session_id),
-                )
+        # Persist agent switch in the same transaction as the chat request.
+        # If this fails, the whole request must rollback for strict consistency.
+        from app.models.message import Message
 
-            # Persist agent switch in the same transaction as the chat request.
-            # If this fails, the whole request must rollback for strict consistency.
-            from app.models.message import Message
+        agent_switch_message = Message(
+            session_id=session_id,
+            role="system",
+            content=f"Switched to agent: {agent_name}",
+            payload={
+                "event_type": "agent_switched",
+                "agent_id": str(selected_agent_id),
+                "agent_name": agent_name,
+                "agent_role": agent_role,
+                "routing_score": routing_score,
+                "confidence": confidence,
+            },
+        )
+        self.db.add(agent_switch_message)
+        await self.db.flush()
 
-            agent_switch_message = Message(
-                session_id=session_id,
-                role="system",
-                content=f"Switched to agent: {agent_name}",
-                payload={
-                    "event_type": "agent_switched",
-                    "agent_id": str(selected_agent_id),
-                    "agent_name": agent_name,
-                    "agent_role": agent_role,
-                    "routing_score": routing_score,
-                    "confidence": confidence,
-                },
-            )
-            self.db.add(agent_switch_message)
-            await self.db.flush()
+        # Record agent_switched event in outbox (same transaction as message)
+        await OutboxRepository.record_event(
+            session=self.db,
+            aggregate_type="agent_switch",
+            aggregate_id=selected_agent_id,
+            user_id=self.user_id,
+            project_id=UUID(self.project_id),
+            event_type="agent_switched",
+            payload={
+                "agent_id": str(selected_agent_id),
+                "agent_name": agent_name,
+                "agent_role": agent_role,
+                "session_id": str(session_id),
+                "routing_score": routing_score,
+                "confidence": confidence,
+            },
+        )
+        
+        # Commit the transaction atomically (agent_switch_message + event_outbox record)
+        await self.db.commit()
 
-            # Record agent_switched event in outbox (same transaction as message)
-            await OutboxRepository.record_event(
-                session=self.db,
-                aggregate_type="agent_switch",
-                aggregate_id=selected_agent_id,
-                user_id=self.user_id,
-                project_id=UUID(self.project_id),
-                event_type="agent_switched",
-                payload={
-                    "agent_id": str(selected_agent_id),
-                    "agent_name": agent_name,
-                    "agent_role": agent_role,
-                    "session_id": str(session_id),
-                    "routing_score": routing_score,
-                    "confidence": confidence,
-                },
-            )
-
-            logger.info(
-                f"Agent switch message saved: session_id={session_id}, "
-                f"agent_id={selected_agent_id}, agent_name={agent_name}"
-            )
+        logger.info(
+            f"Agent switch message saved: session_id={session_id}, "
+            f"agent_id={selected_agent_id}, agent_name={agent_name}"
+        )
 
         # Execute through direct execution
         start_time = time.time()

@@ -239,6 +239,7 @@ async def send_project_message(
     await db.flush()
     
     # Record event in outbox (same transaction as message)
+    # Domain events will be published through OutboxPublisher, not directly
     await OutboxRepository.record_event(
         session=db,
         aggregate_type="chat_message",
@@ -253,22 +254,6 @@ async def send_project_message(
             "content": user_message.content,
             "timestamp": user_message.created_at.isoformat(),
         },
-    )
-    
-    # Send SSE event: user message created (not awaited to avoid blocking)
-    # Note: Actual delivery will be handled by OutboxPublisher background task
-    await stream_manager.broadcast_event(
-        session_id=session_id,
-        event=StreamEvent(
-            event_type=StreamEventType.MESSAGE_CREATED,
-            payload={
-                "message_id": str(user_message.id),
-                "role": MessageRole.USER.value,
-                "content": user_message.content,
-                "timestamp": user_message.created_at.isoformat(),
-            },
-            session_id=session_id,
-        ),
     )
     
     # Get session history for workspace execution
@@ -465,27 +450,10 @@ async def send_project_message(
             },
         )
         
-        # Send SSE event: message created
-        await stream_manager.broadcast_event(
-            session_id=session_id,
-            event=StreamEvent(
-                event_type=StreamEventType.MESSAGE_CREATED,
-                payload={
-                    "message_id": str(assistant_message.id),
-                    "role": MessageRole.ASSISTANT.value,
-                    "content": assistant_message.content,
-                    "agent_id": str(agent_id) if agent_id else None,
-                    "agent_name": agent_response.name if agent_response else "System",
-                    "timestamp": assistant_message.created_at.isoformat(),
-                    "context_used": exec_result.get("context_used", 0),
-                    "tokens_used": exec_result.get("tokens_used", 0),
-                    "execution_time_ms": exec_result.get("execution_time_ms", 0),
-                },
-                session_id=session_id,
-            ),
-        )
+        # Domain events (message_created) are published only through OutboxPublisher
+        # No direct stream_manager.broadcast_event for domain events
         
-        # Send SSE event: task completed
+        # Send SSE event: task completed (technical event, not domain event)
         await stream_manager.broadcast_event(
             session_id=session_id,
             event=StreamEvent(
