@@ -45,6 +45,7 @@ graph TB
         ApprovalManager["Approval Manager"]
         StreamManager["Stream Manager"]
         ContextAgent["Contextual Agent"]
+        OutboxPublisher["Outbox Publisher"]
     end
 
     subgraph Agent_System["🤖 Agent System"]
@@ -58,6 +59,7 @@ graph TB
         PostgreSQL["PostgreSQL Database"]
         Models["SQLAlchemy Models"]
         Migrations["Alembic Migrations"]
+        EventOutbox["Event Outbox Table"]
     end
 
     subgraph Cache_Layer["⚡ Cache Layer"]
@@ -93,6 +95,9 @@ graph TB
 
     Core_System -->|Manage Tasks| Core_Bus
     Core_System -->|Send Messages| Core_Bus
+    Core_System -->|Record Domain Events| Storage_Layer
+    OutboxPublisher -->|Polling| Storage_Layer
+    OutboxPublisher -->|Publish| Streaming
     Core_Bus -->|Event Stream| Streaming
 
     Agent_System -->|Execute Tasks| LLM_Layer
@@ -318,6 +323,33 @@ graph LR
    - Ведет event stream для SSE
    - Координирует параллельное выполнение
 
+### 7. **Event Outbox + Publisher (Event Logging System)**
+   - **Event Outbox**: Таблица для дурабельного хранения доменных событий
+     - Записывает message_created, agent_switched и другие доменные события атомарно с изменением состояния
+     - Использует JSONB для гибкого payload, индексы на (status, next_retry_at), (user_id), (project_id)
+     - Гарантирует: нет потери событий, все-или-ничего при коммите
+   
+   - **Outbox Publisher**: Background сервис для надежной доставки
+     - Периодически выбирает pending события с блокировкой FOR UPDATE SKIP LOCKED
+     - Публикует в StreamManager через broadcast_event()
+     - Exponential backoff retry (5s→10s→20s→40s→80s→300s)
+     - Обновляет статус: pending → published/failed
+     - Metrics: pending_count, published_total, failed_total, latency
+   
+   - **Analytics API**: Read-model на основе event_outbox
+     - GET /my/projects/{project_id}/events (фильтры, пагинация)
+     - GET /my/projects/{project_id}/analytics/sessions/{session_id}/events
+     - GET /my/projects/{project_id}/analytics (агрегированные метрики)
+     - User/Project изоляция через verify_project_access()
+
+### 8. **Идемпотентность и надежность**
+   - **Event ID**: outbox.id используется как event_id, стабилен при ретраях
+   - **Consumer Deduplication**: Клиенты дедуплицируют по event_id в payload
+   - **Exactly-Once Semantics**: At-least-once доставка + client-side deduplication
+   - **Архитектурное разделение**:
+     - Доменные события (message_created, agent_switched) → outbox-only
+     - Технические события (DIRECT_AGENT_CALL, TASK_STARTED) → direct streaming + optional outbox
+
 ## Переходы статусов
 
 ```mermaid
@@ -347,6 +379,14 @@ CREATE INDEX ix_task_plans_status_created_at ON task_plans(status, created_at);
 CREATE INDEX ix_task_plan_tasks_plan_id ON task_plan_tasks(plan_id);
 CREATE INDEX ix_task_plan_tasks_agent_id ON task_plan_tasks(agent_id);
 CREATE INDEX ix_task_plan_tasks_status ON task_plan_tasks(status);
+
+-- таблица event_outbox (Event Logging System)
+CREATE INDEX ix_event_outbox_status_next_retry ON event_outbox(status, next_retry_at, created_at);
+CREATE INDEX ix_event_outbox_aggregate_id_created ON event_outbox(aggregate_id, created_at);
+CREATE INDEX ix_event_outbox_project_id_created ON event_outbox(project_id, created_at);
+CREATE INDEX ix_event_outbox_user_id_created ON event_outbox(user_id, created_at);
+-- GIN индекс для JSONB поля payload (опционально для полнотекстового поиска)
+CREATE INDEX ix_event_outbox_payload_gin ON event_outbox USING GIN (payload);
 ```
 
 ## Точки интеграции

@@ -1,6 +1,6 @@
 # REST API Спецификация
 ## Personal Multi-Agent AI Platform v0.2.0
-**Документация обновлена:** 18 февраля 2026  
+**Документация обновлена:** 28 февраля 2026 (Event Logging System добавлена)
 **Base URL:** `/my/` (пользовательское API с полной изоляцией)
 
 ---
@@ -11,6 +11,7 @@
 - [Projects API](#projects-api)
 - [Agents API](#agents-api)
 - [Chat API](#chat-api)
+- [Analytics API](#analytics-api)
 - [Health API](#health-api)
 - [Коды ошибок](#коды-ошибок)
 
@@ -543,6 +544,138 @@ data: {"type": "agent_status_changed", "agent_id": "coder", "status": "ready", "
 Удалить сессию со всеми сообщениями.
 
 **Response: 204 No Content**
+
+---
+
+## 📊 Analytics API
+
+### Получить события проекта
+
+**GET** `/my/projects/{project_id}/events`
+
+Получить список событий проекта с поддержкой фильтрации и пагинации.
+
+**Query Parameters:**
+- `event_type` (optional) - фильтр по типу события (message_created, agent_switched, etc.)
+- `aggregate_type` (optional) - фильтр по типу агрегата (chat_session, task_plan, etc.)
+- `status` (optional) - фильтр по статусу события (pending, published, failed)
+- `limit` (optional, default=50) - количество результатов (1-100)
+- `offset` (optional, default=0) - смещение для пагинации
+
+**Response: 200 OK**
+```json
+{
+  "events": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "event_type": "message_created",
+      "aggregate_type": "chat_session",
+      "aggregate_id": "550e8400-e29b-41d4-a716-446655440001",
+      "payload": {
+        "content": "Hello assistant",
+        "role": "user",
+        "event_id": "550e8400-e29b-41d4-a716-446655440000"
+      },
+      "status": "published",
+      "created_at": "2026-02-28T07:30:00Z",
+      "published_at": "2026-02-28T07:30:02Z"
+    }
+  ],
+  "total": 150,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+---
+
+### Получить события сессии
+
+**GET** `/my/projects/{project_id}/analytics/sessions/{session_id}/events`
+
+Получить все события для конкретной сессии чата.
+
+**Query Parameters:**
+- `event_type` (optional) - фильтр по типу события
+- `limit` (optional, default=50) - количество результатов
+- `offset` (optional, default=0) - смещение для пагинации
+
+**Response: 200 OK**
+```json
+{
+  "session_id": "550e8400-e29b-41d4-a716-446655440001",
+  "events": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "event_type": "message_created",
+      "timestamp": "2026-02-28T07:30:00Z",
+      "payload": {
+        "content": "Hello",
+        "role": "user"
+      }
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "event_type": "agent_switched",
+      "timestamp": "2026-02-28T07:30:01Z",
+      "payload": {
+        "from_agent": "orchestrator",
+        "to_agent": "coder",
+        "routing_score": 0.95
+      }
+    }
+  ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+---
+
+### Получить аналитику проекта
+
+**GET** `/my/projects/{project_id}/analytics`
+
+Получить агрегированные метрики события проекта.
+
+**Response: 200 OK**
+```json
+{
+  "period": {
+    "start": "2026-02-27T00:00:00Z",
+    "end": "2026-02-28T23:59:59Z"
+  },
+  "events_by_type": {
+    "message_created": 245,
+    "agent_switched": 87,
+    "agent_started": 92,
+    "agent_completed": 89
+  },
+  "events_by_status": {
+    "published": 510,
+    "pending": 2,
+    "failed": 0
+  },
+  "latency_stats": {
+    "avg_latency_ms": 125,
+    "max_latency_ms": 3450,
+    "min_latency_ms": 15,
+    "p95_latency_ms": 890
+  },
+  "retention": {
+    "total_events": 512,
+    "oldest_event_age_days": 15,
+    "estimated_retention_days": 30
+  }
+}
+```
+
+**Description:**
+- `events_by_type` - количество событий по типам
+- `events_by_status` - распределение по статусам (pending, published, failed)
+- `latency_stats` - статистика по времени доставки событий
+- `retention` - информация о хранении событий в outbox
 
 ---
 
