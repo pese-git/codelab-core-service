@@ -14,6 +14,7 @@ from app.middleware.user_isolation import UserIsolationMiddleware
 from app.qdrant_client import close_qdrant
 from app.redis_client import close_redis, get_redis
 from app.routes import (
+    analytics,
     approvals,
     health,
     monitoring,
@@ -147,6 +148,7 @@ app.include_router(project_chat.router)
 app.include_router(project_plans.router)
 app.include_router(approvals.router)
 app.include_router(project_tools.router)
+app.include_router(analytics.router)
 app.include_router(streaming.project_router)
 app.include_router(monitoring.router)
 

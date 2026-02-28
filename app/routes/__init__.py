@@ -1,6 +1,7 @@
 """API routes."""
 
 from app.routes import (
+    analytics,
     approvals,
     health,
     monitoring,
@@ -13,6 +14,7 @@ from app.routes import (
 )
 
 __all__ = [
+    "analytics",
     "approvals",
     "health",
     "monitoring",
