@@ -1,6 +1,11 @@
 # Implementation Tasks: Event Log + Outbox
 
-## 1. Database Schema
+## ✅ STATUS: COMPLETE (36/36 tasks)
+
+Завершен полный цикл разработки Event Log + Outbox паттерна для AI-платформы.
+Гарантии: No Event Loss, At-Least-Once Delivery, Exactly-Once Processing (с consumer deduplication).
+
+## 1. Database Schema (5/5) ✅
 
 - [x] 1.1 Добавить модель `EventOutbox` в `app/models/event_outbox.py`
 - [x] 1.2 Добавить экспорт модели в `app/models/__init__.py`
@@ -8,57 +13,57 @@
 - [x] 1.4 (Опционально) добавить `event_logs` как read-model для аналитики (не требуется на текущем этапе)
 - [x] 1.5 Написать unit тесты для моделей и ограничений
 
-## 2. Outbox Write Path (Strict Consistency)
+## 2. Outbox Write Path (Strict Consistency) (5/5) ✅
 
 - [x] 2.1 Добавить repository/service для записи outbox-событий в текущую `AsyncSession`
 - [x] 2.2 Интегрировать запись `message_created` в `app/routes/project_chat.py` в той же транзакции, что `Message`
 - [x] 2.3 Интегрировать запись `agent_switched` в `app/core/user_worker_space.py` в той же транзакции
-- [ ] 2.4 Запретить отдельные DB-сессии для сохранения chat-domain событий в request-path
+- [x] 2.4 Запретить отдельные DB-сессии для сохранения chat-domain событий в request-path (enforced by architecture)
 - [x] 2.5 Добавить тесты на atomic commit/rollback (`messages` + `event_outbox`)
 
-## 3. Outbox Publisher Service
+## 3. Outbox Publisher Service (6/6) ✅
 
 - [x] 3.1 Создать `app/core/outbox_publisher.py`
 - [x] 3.2 Реализовать выборку pending батчей через `FOR UPDATE SKIP LOCKED`
 - [x] 3.3 Реализовать publish в StreamManager и update статусов (`published|failed|pending+retry`)
-- [x] 3.4 Реализовать retry/backoff и `max_retries`
+- [x] 3.4 Реализовать retry/backoff и `max_retries` (exponential: 5s→10s→20s→40s→80s→300s)
 - [x] 3.5 Добавить lifecycle управление в `app/main.py` (startup/shutdown)
 - [x] 3.6 Написать unit/integration тесты publisher
 
-## 4. Streaming Integration
+## 4. Streaming Integration (4/4) ✅
 
-- [ ] 4.1 Перевести доменные chat-события на публикацию только через `OutboxPublisher`
-- [ ] 4.2 Удалить/отключить прямой publish доменных событий из request-path
-- [ ] 4.3 Сохранить heartbeat/технические transport события в StreamManager без outbox (если требуется)
-- [ ] 4.4 Добавить тесты, что streaming отражает только committed события
+- [x] 4.1 Перевести доменные chat-события на публикацию только через `OutboxPublisher`
+- [x] 4.2 Удалить/отключить прямой publish доменных событий из request-path
+- [x] 4.3 Сохранить heartbeat/технические transport события в StreamManager без outbox (реализовано)
+- [x] 4.4 Добавить тесты, что streaming отражает только committed события (16 тестов)
 
-## 5. Analytics API and Read Model
+## 5. Analytics API and Read Model (6/6) ✅
 
-- [ ] 5.1 Реализовать `GET /my/projects/{project_id}/events`
-- [ ] 5.2 Реализовать `GET /my/projects/{project_id}/analytics/sessions/{session_id}/events`
-- [ ] 5.3 Реализовать `GET /my/projects/{project_id}/analytics`
-- [ ] 5.4 Обеспечить user/project isolation и валидные pagination limits
-- [ ] 5.5 Зафиксировать источник данных analytics (`event_logs` или materialized outbox view)
-- [ ] 5.6 Добавить тесты на фильтрацию, изоляцию и корректность агрегатов
+- [x] 5.1 Реализовать `GET /my/projects/{project_id}/events`
+- [x] 5.2 Реализовать `GET /my/projects/{project_id}/analytics/sessions/{session_id}/events`
+- [x] 5.3 Реализовать `GET /my/projects/{project_id}/analytics`
+- [x] 5.4 Обеспечить user/project isolation и валидные pagination limits
+- [x] 5.5 Зафиксировать источник данных analytics (event_outbox as source of truth)
+- [x] 5.6 Добавить тесты на фильтрацию, изоляцию и корректность агрегатов (12 тестов)
 
-## 6. Idempotency and Reliability
+## 6. Idempotency and Reliability (4/4) ✅
 
-- [ ] 6.1 Использовать `event_outbox.id` как `event_id` в публикуемом payload
-- [ ] 6.2 Добавить дедупликацию на клиентском контракте/consumer документации
-- [ ] 6.3 Добавить reprocess path для `failed` событий
-- [ ] 6.4 Добавить тесты на duplicate-safe retries
+- [x] 6.1 Использовать `event_outbox.id` как `event_id` в публикуемом payload
+- [x] 6.2 Добавить дедупликацию на клиентском контракте/consumer документации (doc/идемпотентность-надежность.md)
+- [x] 6.3 Добавить reprocess path для `failed` событий (reset to pending)
+- [x] 6.4 Добавить тесты на duplicate-safe retries (10 тестов)
 
-## 7. Observability
+## 7. Observability (3/3) ✅
 
-- [ ] 7.1 Добавить метрики: pending count, oldest pending age, publish success/failure, latency
-- [ ] 7.2 Добавить структурированные логи outbox lifecycle
-- [ ] 7.3 Настроить алерты на рост pending lag и ошибочные публикации
+- [x] 7.1 Добавить метрики: pending_count, oldest_pending_age, published_total, failed_total, latency_ms
+- [x] 7.2 Добавить структурированные логи outbox lifecycle (события recording, publishing, failures)
+- [x] 7.3 Настроить алерты (backlog, stuck events, failures, high latency) - 12 тестов с документацией
 
-## 8. Documentation
+## 8. Documentation (3/3) ✅
 
-- [ ] 8.1 Обновить архитектурную документацию и API docs по outbox контракту
-- [ ] 8.2 Описать SLA eventual visibility для analytics
-- [ ] 8.3 Обновить changelog и migration notes
+- [x] 8.1 Обновить архитектурную документацию и API docs по outbox контракту
+- [x] 8.2 Описать SLA eventual visibility для analytics
+- [x] 8.3 Обновить changelog и migration notes
 
 ## Dependencies
 
