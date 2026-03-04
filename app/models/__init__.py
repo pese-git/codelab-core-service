@@ -7,6 +7,7 @@ from app.models.message import Message
 from app.models.task import Task
 from app.models.task_plan import TaskPlan
 from app.models.task_plan_task import TaskPlanTask
+from app.models.tool_execution import ToolExecution
 from app.models.user import User
 from app.models.user_agent import UserAgent
 from app.models.user_project import UserProject
@@ -20,6 +21,7 @@ __all__ = [
     "Task",
     "TaskPlan",
     "TaskPlanTask",
+    "ToolExecution",
     "ApprovalRequest",
     "EventOutbox",
 ]

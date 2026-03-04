@@ -1,12 +1,25 @@
 """REST API endpoints for Tool execution - Project Tools API"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime
 from uuid import UUID
-from typing import List
 
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.outbox_repository import OutboxRepository
 from app.dependencies import get_worker_space, get_current_user
-from app.schemas.tool import ToolExecutionRequest, ToolExecutionResponse
+from app.database import get_db
 from app.logging_config import get_logger
+from app.middleware.project_validation import get_project_with_validation
+from app.models.tool_execution import ToolExecution
+from app.models.user_project import UserProject
+from app.schemas.event import StreamEventType
+from app.schemas.tool import (
+    ToolExecutionRequest,
+    ToolExecutionResponse,
+    ToolExecutionResultRequest,
+)
 
 logger = get_logger(__name__)
 
@@ -19,6 +32,8 @@ async def execute_tool(
     request: ToolExecutionRequest,
     worker_space=Depends(get_worker_space),
     user_id: UUID = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    project: UserProject = Depends(get_project_with_validation),
 ) -> ToolExecutionResponse:
     """Execute a tool with full validation and approval workflow
     
@@ -63,6 +78,12 @@ async def execute_tool(
             user_id=str(user_id),
         )
 
+        if worker_space.executor is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Workspace root is not configured for tool execution",
+            )
+
         # Execute tool through worker_space executor
         result = await worker_space.executor.execute_tool(
             tool_name=request.tool_name,
@@ -100,12 +121,14 @@ async def execute_tool(
         raise HTTPException(status_code=500, detail=f"Tool execution error: {str(e)}")
 
 
-@router.get("/{project_id}/tools/{tool_id}")
+@router.get("/{project_id}/tools/{tool_id}", response_model=ToolExecutionResponse)
 async def get_tool_execution_status(
     project_id: UUID,
-    tool_id: str,
+    tool_id: UUID,
+    db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user),
-) -> dict:
+    project: UserProject = Depends(get_project_with_validation),
+) -> ToolExecutionResponse:
     """Get execution status of a tool
     
     Args:
@@ -127,11 +150,30 @@ async def get_tool_execution_status(
             user_id=str(user_id),
         )
 
-        # TODO: Implement tool execution status tracking
-        # This would query ToolExecution model for status
-        raise HTTPException(
-            status_code=501,
-            detail="Tool status tracking not yet implemented"
+        result = await db.execute(
+            select(ToolExecution).where(
+                ToolExecution.id == tool_id,
+                ToolExecution.user_id == user_id,
+                ToolExecution.project_id == project_id,
+            )
+        )
+        execution = result.scalar_one_or_none()
+        if not execution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tool execution not found",
+            )
+
+        return ToolExecutionResponse(
+            tool_id=str(execution.id),
+            tool_name=execution.tool_name,
+            status=execution.status,
+            approval_id=execution.approval_id,
+            requires_approval=execution.approval_id is not None,
+            result=execution.result,
+            error=execution.error,
+            created_at=execution.created_at.isoformat(),
+            completed_at=execution.completed_at.isoformat() if execution.completed_at else None,
         )
 
     except HTTPException:
@@ -150,7 +192,9 @@ async def list_tool_executions(
     project_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user),
+    project: UserProject = Depends(get_project_with_validation),
 ) -> dict:
     """List tool execution history
     
@@ -166,30 +210,121 @@ async def list_tool_executions(
     Raises:
         HTTPException: 500 if query fails
     """
-    try:
-        logger.info(
-            "list_tool_executions_request",
-            project_id=str(project_id),
-            limit=limit,
-            offset=offset,
-        )
+    logger.info(
+        "list_tool_executions_request",
+        project_id=str(project_id),
+        limit=limit,
+        offset=offset,
+    )
 
-        # TODO: Implement tool execution history listing
-        # This would query ToolExecution model with pagination
+    count_result = await db.execute(
+        select(func.count(ToolExecution.id)).where(
+            ToolExecution.user_id == user_id,
+            ToolExecution.project_id == project_id,
+        )
+    )
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(ToolExecution)
+        .where(
+            ToolExecution.user_id == user_id,
+            ToolExecution.project_id == project_id,
+        )
+        .order_by(ToolExecution.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    executions = result.scalars().all()
+
+    return {
+        "items": [
+            ToolExecutionResponse(
+                tool_id=str(execution.id),
+                tool_name=execution.tool_name,
+                status=execution.status,
+                approval_id=execution.approval_id,
+                requires_approval=execution.approval_id is not None,
+                result=execution.result,
+                error=execution.error,
+                created_at=execution.created_at.isoformat(),
+                completed_at=execution.completed_at.isoformat() if execution.completed_at else None,
+            )
+            for execution in executions
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.post(
+    "/{project_id}/tools/{tool_id}/result",
+    response_model=ToolExecutionResponse,
+)
+async def submit_tool_execution_result(
+    project_id: UUID,
+    tool_id: UUID,
+    result_request: ToolExecutionResultRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user),
+    project: UserProject = Depends(get_project_with_validation),
+) -> ToolExecutionResponse:
+    """Submit tool execution result from client."""
+    result = await db.execute(
+        select(ToolExecution).where(
+            ToolExecution.id == tool_id,
+            ToolExecution.user_id == user_id,
+            ToolExecution.project_id == project_id,
+        )
+    )
+    execution = result.scalar_one_or_none()
+    if not execution:
         raise HTTPException(
-            status_code=501,
-            detail="Tool history listing not yet implemented"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tool execution not found",
         )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            "list_tool_executions_error",
-            project_id=str(project_id),
-            error=str(e),
-        )
-        raise HTTPException(status_code=500, detail="Failed to list tool executions")
+    execution.status = result_request.status
+    execution.result = result_request.result
+    execution.error = result_request.error
+    execution.completed_at = result_request.completed_at or datetime.utcnow()
+    await db.flush()
+
+    # Record outbox event for tool result
+    await OutboxRepository.record_event(
+        session=db,
+        aggregate_type="tool_execution",
+        aggregate_id=execution.id,
+        user_id=user_id,
+        project_id=project_id,
+        event_type=(
+            StreamEventType.TOOL_RESULT.value
+            if result_request.status == "completed"
+            else StreamEventType.TOOL_ERROR.value
+        ),
+        payload={
+            "tool_id": str(execution.id),
+            "tool_name": execution.tool_name,
+            "status": execution.status,
+            "result": execution.result,
+            "error": execution.error,
+            "session_id": str(execution.session_id) if execution.session_id else None,
+            "timestamp": execution.completed_at.isoformat(),
+        },
+    )
+
+    return ToolExecutionResponse(
+        tool_id=str(execution.id),
+        tool_name=execution.tool_name,
+        status=execution.status,
+        approval_id=execution.approval_id,
+        requires_approval=execution.approval_id is not None,
+        result=execution.result,
+        error=execution.error,
+        created_at=execution.created_at.isoformat(),
+        completed_at=execution.completed_at.isoformat() if execution.completed_at else None,
+    )
 
 
 @router.get("/{project_id}/tools/available")

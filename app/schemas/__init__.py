@@ -9,6 +9,7 @@ from app.schemas.task import TaskPlan, TaskStatus
 from app.schemas.tool import (
     ToolExecutionRequest,
     ToolExecutionResponse,
+    ToolExecutionResultRequest,
     ToolReadFileRequest,
     ToolReadFileResponse,
     ToolWriteFileRequest,
@@ -44,6 +45,7 @@ __all__ = [
     # Tool execution schemas
     "ToolExecutionRequest",
     "ToolExecutionResponse",
+    "ToolExecutionResultRequest",
     "ToolReadFileRequest",
     "ToolReadFileResponse",
     "ToolWriteFileRequest",

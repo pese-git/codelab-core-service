@@ -174,3 +174,19 @@ class ToolExecutionResponse(BaseModel):
                 "completed_at": "2026-02-21T05:51:44.100Z"
             }
         }
+
+
+class ToolExecutionResultRequest(BaseModel):
+    """Client tool execution result payload."""
+    status: Literal["completed", "failed"] = Field(
+        ..., description="Final execution status"
+    )
+    result: Optional[dict] = Field(
+        None, description="Tool-specific result payload"
+    )
+    error: Optional[str] = Field(
+        None, description="Error message if execution failed"
+    )
+    completed_at: Optional[datetime] = Field(
+        None, description="Completion timestamp (ISO 8601)"
+    )

@@ -8,14 +8,19 @@ from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
 from app.config import settings
 from app.core.agent_bus import AgentBus
+from app.core.approval_manager import ApprovalManager
 from app.core.outbox_repository import OutboxRepository
+from app.core.stream_manager import StreamManager
+from app.core.tools.executor import ToolExecutor
 from app.logging_config import get_logger
+from app.models.user_project import UserProject
 from app.schemas.agent import AgentConfig
 from app.vectorstore.agent_context_store import AgentContextStore
 
@@ -152,6 +157,9 @@ class UserWorkerSpace:
 
         self.agent_cache = AgentCache(redis=redis)
         self.agent_manager: Optional[AgentManager] = None
+        self.workspace_root: Optional[str] = None
+        self.stream_manager: Optional[StreamManager] = None
+        self.executor: Optional[ToolExecutor] = None
         self.initialized = False
         self.initialization_time: Optional[datetime] = None
         self.active_agents: dict[UUID, ContextualAgent] = {}
@@ -181,6 +189,35 @@ class UserWorkerSpace:
             self.agent_manager.redis = redis
             self.agent_manager.qdrant = qdrant
 
+    def set_workspace_root(self, workspace_root: Optional[str]) -> None:
+        """Set workspace root path for tool validation."""
+        self.workspace_root = workspace_root
+
+    def set_stream_manager(self, stream_manager: Optional[StreamManager]) -> None:
+        """Attach stream manager for SSE/tool events."""
+        self.stream_manager = stream_manager
+
+    def configure_executor(self) -> None:
+        """Create or refresh ToolExecutor for current request scope."""
+        if not self.workspace_root:
+            self.executor = None
+            return
+
+        approval_manager = ApprovalManager(
+            user_id=self.user_id,
+            project_id=UUID(self.project_id),
+            db=self.db,
+            stream_manager=self.stream_manager,
+        )
+        self.executor = ToolExecutor(
+            user_id=self.user_id,
+            project_id=UUID(self.project_id),
+            workspace_root=self.workspace_root,
+            db=self.db,
+            approval_manager=approval_manager,
+            stream_manager=self.stream_manager,
+        )
+
     async def initialize(self) -> None:
         """Initialize worker space.
 
@@ -199,6 +236,18 @@ class UserWorkerSpace:
                 return
 
             try:
+                # Fetch project workspace root if not already set
+                if self.workspace_root is None:
+                    result = await self.db.execute(
+                        select(UserProject).where(
+                            UserProject.id == UUID(self.project_id),
+                            UserProject.user_id == self.user_id,
+                        )
+                    )
+                    project = result.scalar_one_or_none()
+                    if project:
+                        self.workspace_root = project.workspace_path
+
                 self.agent_manager = AgentManager(
                     db=self.db,
                     redis=self.redis,

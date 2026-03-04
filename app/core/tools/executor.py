@@ -14,9 +14,11 @@ from app.core.tools.size_limiter import SizeLimiter
 from app.core.tools.risk_assessor import RiskAssessor, RiskLevel
 from app.core.approval_manager import ApprovalManager
 from app.core.stream_manager import StreamManager
+from app.core.outbox_repository import OutboxRepository
 from app.schemas.tool import ToolExecutionResponse
-from app.schemas.event import StreamEvent, StreamEventType
+from app.schemas.event import StreamEventType
 from app.logging_config import get_logger
+from app.models.tool_execution import ToolExecution
 
 logger = get_logger(__name__)
 
@@ -84,8 +86,10 @@ class ToolExecutor:
         Returns:
             ToolExecutionResponse with status and result
         """
-        tool_id = str(uuid4())
+        tool_id = uuid4()
         created_at = datetime.utcnow().isoformat()
+
+        execution: ToolExecution | None = None
 
         try:
             self.logger.info(
@@ -107,7 +111,7 @@ class ToolExecutor:
                     error=error,
                 )
                 return ToolExecutionResponse(
-                    tool_id=tool_id,
+                    tool_id=str(tool_id),
                     tool_name=tool_name,
                     status="failed",
                     error=error,
@@ -120,9 +124,18 @@ class ToolExecutor:
             risk_level = self.risk_assessor.assess_tool_risk(tool_name, tool_params)
             self.logger.debug(
                 "tool_risk_assessed",
-                tool_id=tool_id,
+                tool_id=str(tool_id),
                 tool_name=tool_name,
                 risk_level=risk_level.value,
+            )
+
+            # Create execution record
+            execution = await self._create_tool_execution(
+                tool_id=tool_id,
+                tool_name=tool_name,
+                tool_params=tool_params,
+                risk_level=risk_level.value,
+                session_id=session_id,
             )
 
             # ====================================================================
@@ -134,17 +147,18 @@ class ToolExecutor:
             if await self.approval_manager.auto_approve_tool_if_low_risk(risk_level.value):
                 self.logger.info(
                     "tool_auto_approved",
-                    tool_id=tool_id,
+                    tool_id=str(tool_id),
                     tool_name=tool_name,
                     risk_level=risk_level.value,
                 )
+                execution.status = "approved"
             else:
                 # Request approval for MEDIUM/HIGH risk
                 timeout_seconds = self.risk_assessor.get_timeout_for_risk_level(risk_level)
 
                 self.logger.info(
                     "requesting_tool_approval",
-                    tool_id=tool_id,
+                    tool_id=str(tool_id),
                     tool_name=tool_name,
                     risk_level=risk_level.value,
                     timeout=timeout_seconds,
@@ -158,6 +172,7 @@ class ToolExecutor:
                     session_id=session_id,
                 )
                 approval_id = approval.id
+                execution.approval_id = approval_id
 
                 # Wait for approval decision
                 approved, reason = await self.approval_manager.wait_for_tool_approval(
@@ -168,13 +183,17 @@ class ToolExecutor:
                 if not approved:
                     self.logger.warning(
                         "tool_execution_rejected",
-                        tool_id=tool_id,
+                        tool_id=str(tool_id),
                         tool_name=tool_name,
                         approval_id=str(approval_id),
                         reason=reason,
                     )
+                    execution.status = "rejected"
+                    execution.error = f"Tool execution rejected: {reason}"
+                    execution.completed_at = datetime.utcnow()
+                    await self.db.flush()
                     return ToolExecutionResponse(
-                        tool_id=tool_id,
+                        tool_id=str(tool_id),
                         tool_name=tool_name,
                         status="rejected",
                         approval_id=approval_id,
@@ -182,54 +201,55 @@ class ToolExecutor:
                         created_at=created_at,
                     )
 
+                execution.status = "approved"
+
+            await self.db.flush()
+
             # ====================================================================
             # STEP 4: Send tool execution request to client
             # ====================================================================
             self.logger.info(
                 "sending_tool_to_client",
-                tool_id=tool_id,
+                tool_id=str(tool_id),
                 tool_name=tool_name,
                 approval_id=str(approval_id) if approval_id else None,
             )
 
-            result = await self._send_tool_execution_request(
-                tool_id=tool_id,
+            await self._send_tool_execution_request(
+                tool_id=str(tool_id),
                 tool_name=tool_name,
                 tool_params=tool_params,
                 session_id=session_id,
+                execution_id=execution.id,
             )
 
             # ====================================================================
-            # STEP 5: Return successful response
+            # STEP 5: Return pending response (client executes tool)
             # ====================================================================
-            self.logger.info(
-                "tool_execution_completed",
-                tool_id=tool_id,
-                tool_name=tool_name,
-                status="completed",
-            )
-
             return ToolExecutionResponse(
-                tool_id=tool_id,
+                tool_id=str(tool_id),
                 tool_name=tool_name,
-                status="completed",
+                status=execution.status,
                 approval_id=approval_id,
                 requires_approval=risk_level != RiskLevel.LOW,
-                result=result,
                 created_at=created_at,
-                completed_at=datetime.utcnow().isoformat(),
             )
 
         except Exception as e:
             self.logger.error(
                 "tool_execution_error",
-                tool_id=tool_id,
+                tool_id=str(tool_id),
                 tool_name=tool_name,
                 error=str(e),
                 exc_info=True,
             )
+            if execution is not None:
+                execution.status = "failed"
+                execution.error = str(e)
+                execution.completed_at = datetime.utcnow()
+                await self.db.flush()
             return ToolExecutionResponse(
-                tool_id=tool_id,
+                tool_id=str(tool_id),
                 tool_name=tool_name,
                 status="failed",
                 error=f"Tool execution error: {str(e)}",
@@ -356,32 +376,21 @@ class ToolExecutor:
         tool_name: str,
         tool_params: dict,
         session_id: Optional[UUID] = None,
+        execution_id: Optional[UUID] = None,
     ) -> Optional[dict]:
-        """Send tool execution request to client via StreamManager
-        
-        Broadcasts TOOL_EXECUTION_REQUEST event to client (typically VS Code Extension)
-        The client receives this and executes the tool locally, then sends back result
-        
-        Args:
-            tool_id: Unique ID for this execution
-            tool_name: Name of the tool
-            tool_params: Tool parameters
-            session_id: Optional session ID for routing
-            
-        Returns:
-            Tool result (placeholder for now, actual result comes from client)
-        """
+        """Record tool execution request via outbox and notify client."""
         try:
-            if not self.stream_manager:
-                self.logger.warning(
-                    "stream_manager_not_available",
-                    tool_id=tool_id,
-                )
-                return None
+            # Record outbox event for tool execution request
+            if execution_id is None:
+                execution_id = UUID(tool_id)
 
-            # Create and broadcast tool execution request
-            event = StreamEvent(
-                event_type=StreamEventType.TOOL_EXECUTION_REQUEST,
+            await OutboxRepository.record_event(
+                session=self.db,
+                aggregate_type="tool_execution",
+                aggregate_id=execution_id,
+                user_id=self.user_id,
+                project_id=self.project_id,
+                event_type=StreamEventType.TOOL_EXECUTION_REQUEST.value,
                 payload={
                     "tool_id": tool_id,
                     "tool_name": tool_name,
@@ -391,25 +400,12 @@ class ToolExecutor:
                 },
             )
 
-            sent_count = await self.stream_manager.broadcast_to_user(
-                self.user_id,
-                event,
-                buffer=True,
-            )
-
             self.logger.info(
-                "tool_execution_request_sent",
+                "tool_execution_request_recorded",
                 tool_id=tool_id,
                 tool_name=tool_name,
-                sent_to_connections=sent_count,
             )
-
-            # In a real implementation, would wait for client response here
-            # For now, return placeholder
-            return {
-                "success": True,
-                "message": "Tool execution request sent to client",
-            }
+            return None
 
         except Exception as e:
             self.logger.error(
@@ -419,3 +415,26 @@ class ToolExecutor:
                 exc_info=True,
             )
             return None
+
+    async def _create_tool_execution(
+        self,
+        tool_id: UUID,
+        tool_name: str,
+        tool_params: dict,
+        risk_level: str,
+        session_id: Optional[UUID],
+    ) -> ToolExecution:
+        """Create tool execution record."""
+        execution = ToolExecution(
+            id=tool_id,
+            user_id=self.user_id,
+            project_id=self.project_id,
+            session_id=session_id,
+            tool_name=tool_name,
+            tool_params=tool_params,
+            risk_level=risk_level,
+            status="pending",
+        )
+        self.db.add(execution)
+        await self.db.flush()
+        return execution

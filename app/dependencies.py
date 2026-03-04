@@ -5,13 +5,16 @@ from uuid import UUID
 from fastapi import Depends, Request
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.user_worker_space import UserWorkerSpace
 from app.core.worker_space_manager import get_worker_space_manager, WorkerSpaceManager
+from app.core.stream_manager import get_stream_manager
 from app.database import get_db
 from app.logging_config import get_logger
 from app.middleware.user_isolation import get_current_user_id
+from app.models.user_project import UserProject
 from app.qdrant_client import get_qdrant
 from app.redis_client import get_redis
 from app.vectorstore.agent_context_store import AgentContextStore
@@ -63,6 +66,21 @@ async def get_worker_space(
         redis=redis,
         qdrant=qdrant,
     )
+
+    # Attach project workspace root and stream manager for this request.
+    project_result = await db.execute(
+        select(UserProject).where(
+            UserProject.id == project_id,
+            UserProject.user_id == user_id,
+        )
+    )
+    project = project_result.scalar_one_or_none()
+    if project:
+        space.set_workspace_root(project.workspace_path)
+
+    stream_manager = await get_stream_manager(redis)
+    space.set_stream_manager(stream_manager)
+    space.configure_executor()
 
     logger.debug(
         "workspace_obtained",
