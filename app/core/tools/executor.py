@@ -283,16 +283,9 @@ class ToolExecutor:
                 if not is_valid:
                     return False, msg
 
-                # Check file size
-                if msg:  # msg contains resolved path
-                    import os
-                    try:
-                        file_size = os.path.getsize(msg)
-                        is_valid, size_error = self.size_limiter.validate_read_size(file_size)
-                        if not is_valid:
-                            return False, size_error
-                    except OSError as e:
-                        return False, f"Error checking file size: {str(e)}"
+                # NOTE: File size validation happens on CLIENT side
+                # Server cannot check file size on client filesystem
+                # PathValidator ensures path is safe, client handles FS checks
 
                 return True, None
 
