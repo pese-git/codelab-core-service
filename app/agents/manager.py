@@ -1,6 +1,6 @@
 """Agent manager for CRUD operations."""
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
@@ -12,6 +12,9 @@ from app.agents.contextual_agent import ContextualAgent
 from app.logging_config import get_logger
 from app.models.user_agent import UserAgent
 from app.schemas.agent import AgentConfig, AgentResponse, AgentStatus
+
+if TYPE_CHECKING:
+    from app.core.tools.executor import ToolExecutor
 
 logger = get_logger(__name__)
 
@@ -25,6 +28,7 @@ class AgentManager:
         redis: Redis,
         qdrant: AsyncQdrantClient | None,
         user_id: UUID,
+        tool_executor: 'ToolExecutor | None' = None,
     ):
         """Initialize agent manager.
         
@@ -33,11 +37,13 @@ class AgentManager:
             redis: Redis client instance
             qdrant: Qdrant client instance, or None if Qdrant is disabled
             user_id: User ID
+            tool_executor: ToolExecutor instance for tool support, or None if disabled
         """
         self.db = db
         self.redis = redis
         self.qdrant = qdrant
         self.user_id = user_id
+        self.tool_executor = tool_executor
 
     async def create_agent(self, name: str, config: AgentConfig) -> AgentResponse:
         """Create new agent."""
@@ -59,6 +65,7 @@ class AgentManager:
             agent_name=name,
             config=config,
             qdrant_client=self.qdrant,
+            tool_executor=self.tool_executor,
         )
         await contextual_agent.initialize()
 
@@ -187,6 +194,7 @@ class AgentManager:
             agent_name=name,
             config=config,
             qdrant_client=self.qdrant,
+            tool_executor=self.tool_executor,
         )
         await contextual_agent.initialize()
 

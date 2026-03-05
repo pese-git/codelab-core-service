@@ -80,7 +80,15 @@ async def get_worker_space(
 
     stream_manager = await get_stream_manager(redis)
     space.set_stream_manager(stream_manager)
+    
+    # IMPORTANT: Configure executor BEFORE initializing agents
+    # so that tool_executor is available when agents are loaded
     space.configure_executor()
+    
+    # Initialize agents AFTER executor is configured
+    # This ensures tool_executor is passed to ContextualAgent
+    if not space.initialized:
+        await space.initialize()
 
     logger.debug(
         "workspace_obtained",

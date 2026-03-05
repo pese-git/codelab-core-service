@@ -292,7 +292,13 @@ async def send_project_message(
         )
         
         # Get agent info for SSE events
-        agent_manager = AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
+        agent_manager = AgentManager(
+            db=db,
+            redis=redis,
+            qdrant=qdrant,
+            user_id=user_id,
+            tool_executor=workspace.executor,
+        )
         agent_id = target_agent_id or exec_result.get("selected_agent_id")
         
         if agent_id:

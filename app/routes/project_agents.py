@@ -26,10 +26,17 @@ async def get_agent_manager(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     qdrant: AsyncQdrantClient | None = Depends(get_qdrant),
+    workspace: UserWorkerSpace = Depends(get_worker_space),
 ) -> AgentManager:
     """Get agent manager dependency."""
     user_id = get_current_user_id(request)
-    return AgentManager(db=db, redis=redis, qdrant=qdrant, user_id=user_id)
+    return AgentManager(
+        db=db,
+        redis=redis,
+        qdrant=qdrant,
+        user_id=user_id,
+        tool_executor=workspace.executor,
+    )
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=AgentResponse)

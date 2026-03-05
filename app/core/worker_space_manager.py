@@ -100,11 +100,12 @@ class WorkerSpaceManager:
                     agent_bus=self.agent_bus,
                 )
 
-                # Initialize the space
-                await space.initialize()
-
-                # Store in manager
+                # Store in manager BEFORE initializing
+                # so that initialize() can be called later with executor configured
                 self.spaces[key] = space
+                
+                # Note: initialize() is called later in get_worker_space dependency
+                # after configure_executor() is called
 
                 logger.info(
                     "worker_space_created",

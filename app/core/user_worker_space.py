@@ -253,6 +253,7 @@ class UserWorkerSpace:
                     redis=self.redis,
                     qdrant=self.qdrant,
                     user_id=self.user_id,
+                    tool_executor=self.executor,
                 )
 
                 # Load all agents for this project
@@ -294,12 +295,21 @@ class UserWorkerSpace:
                 agent_config = config_dict
 
             # Create ContextualAgent
+            logger.debug(
+                "creating_contextual_agent",
+                agent_id=str(agent_db_model.id),
+                agent_name=agent_db_model.name,
+                has_executor=self.executor is not None,
+                executor_type=type(self.executor).__name__ if self.executor else None,
+            )
+            
             agent = ContextualAgent(
                 agent_id=agent_db_model.id,
                 user_id=self.user_id,
                 agent_name=agent_db_model.name,
                 config=agent_config,
                 qdrant_client=self.qdrant,
+                tool_executor=self.executor,
             )
 
             # Cache agent
