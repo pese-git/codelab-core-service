@@ -13,6 +13,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.dialects.sqlite import base as sqlite_base
+from sqlalchemy.dialects.postgresql import JSON as PGJSON
 
 from app.config import settings
 from app.database import Base, get_db
@@ -27,6 +29,9 @@ from app.qdrant_client import get_qdrant
 
 # Test database URL (in-memory SQLite)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# Fix SQLite JSONB support - SQLite doesn't have JSONB, map it to JSON
+sqlite_base.SQLiteTypeCompiler.visit_JSONB = sqlite_base.SQLiteTypeCompiler.visit_JSON
 
 
 @pytest.fixture(scope="session")
