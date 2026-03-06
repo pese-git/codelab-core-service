@@ -537,13 +537,22 @@ class ContextualAgent:
         
         Args:
             tool_calls: List of tool calls from LLM (ChatCompletionMessageFunctionToolCall objects)
-            session_id: Chat session ID
+            session_id: Chat session ID (required for proper event streaming)
             
         Returns:
             Dictionary mapping tool_call_id to execution response
         """
         if not self.tool_executor:
             return {}
+        
+        # Validate session_id for proper event streaming
+        if not session_id:
+            logger.warning(
+                "tool_execution_without_session_id",
+                agent_id=str(self.agent_id),
+                tool_calls_count=len(tool_calls),
+                note="session_id is required for proper tool execution event streaming"
+            )
         
         results = {}
         
@@ -563,6 +572,7 @@ class ContextualAgent:
                     agent_id=str(self.agent_id),
                     tool_call_id=tool_call_id,
                     tool_name=tool_name,
+                    session_id=session_id,
                 )
                 
                 # Execute tool via ToolExecutor

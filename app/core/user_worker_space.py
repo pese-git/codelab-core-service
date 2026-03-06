@@ -695,6 +695,7 @@ class UserWorkerSpace:
         session_history: Optional[list[dict[str, str]]] = None,
         task_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        session_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """Execute task directly through a specific agent.
 
@@ -758,6 +759,7 @@ class UserWorkerSpace:
                 user_message=user_message,
                 session_history=session_history,
                 task_id=task_id,
+                session_id=session_id,
             )
             execution_time = (time.time() - start_time) * 1000  # ms
 
@@ -928,6 +930,7 @@ class UserWorkerSpace:
             session_history=session_history,
             task_id=task_id,
             metadata=metadata,
+            session_id=session_id,
         )
         execution_time = (time.time() - start_time) * 1000
 

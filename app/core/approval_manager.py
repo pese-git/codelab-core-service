@@ -906,6 +906,7 @@ class ApprovalManager:
                     tool_name=tool_name,
                     risk_level=risk_level,
                     timeout=timeout_seconds,
+                    session_id=session_id,
                 )
 
             return approval
@@ -1051,6 +1052,7 @@ class ApprovalManager:
         tool_name: str,
         risk_level: str,
         timeout: int,
+        session_id: Optional[UUID] = None,
     ) -> None:
         """Send SSE notification for tool approval request
 
@@ -1071,25 +1073,34 @@ class ApprovalManager:
                 "risk_level": risk_level,
                 "timeout": timeout,
                 "payload": approval.payload,
+                "session_id": str(session_id) if session_id else None,
                 "timestamp": time.time(),
             }
 
             event = StreamEvent(
                 event_type=StreamEventType.APPROVAL_REQUIRED,
                 payload=payload,
+                session_id=session_id,
             )
 
-            # Broadcast to user
-            sent_count = await self.stream_manager.broadcast_to_user(
-                self.user_id,
-                event,
-                buffer=True,
-            )
+            # Broadcast to user: use session_id if available, otherwise use user_id
+            if session_id:
+                sent_count = await self.stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=event,
+                )
+            else:
+                # Fallback: broadcast to all user sessions
+                sent_count = await self.stream_manager.broadcast_to_user(
+                    user_id=self.user_id,
+                    event=event,
+                )
 
             self.logger.info(
                 "tool_approval_notification_sent",
                 approval_id=str(approval.id),
                 tool_name=tool_name,
+                session_id=str(session_id) if session_id else "all_user_sessions",
                 sent_to_connections=sent_count,
             )
 
@@ -1098,4 +1109,121 @@ class ApprovalManager:
                 "tool_approval_notification_failed",
                 error=str(e),
                 approval_id=str(approval.id),
+            )
+
+    async def send_tool_execution_signal(
+        self,
+        tool_id: str,
+        tool_name: str,
+        tool_params: dict,
+        session_id: Optional[UUID] = None,
+    ) -> None:
+        """Send SSE signal to client to execute tool locally
+        
+        Args:
+            tool_id: ID of the tool execution
+            tool_name: Name of the tool
+            tool_params: Parameters for the tool
+            session_id: Optional chat session ID
+        """
+        try:
+            if not self.stream_manager:
+                return
+
+            payload = {
+                "tool_id": tool_id,
+                "tool_name": tool_name,
+                "tool_params": tool_params,
+                "timestamp": time.time(),
+            }
+
+            event = StreamEvent(
+                event_type=StreamEventType.TOOL_EXECUTION_SIGNAL,
+                payload=payload,
+                session_id=session_id,
+            )
+
+            # Broadcast to user: use session_id if available, otherwise use user_id
+            if session_id:
+                sent_count = await self.stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=event,
+                )
+            else:
+                # Fallback: broadcast to all user sessions
+                sent_count = await self.stream_manager.broadcast_to_user(
+                    user_id=self.user_id,
+                    event=event,
+                )
+
+            self.logger.info(
+                "tool_execution_signal_sent",
+                tool_id=tool_id,
+                tool_name=tool_name,
+                session_id=str(session_id) if session_id else "all_user_sessions",
+                sent_to_connections=sent_count,
+            )
+
+        except Exception as e:
+            self.logger.error(
+                "tool_execution_signal_failed",
+                error=str(e),
+                tool_id=tool_id,
+            )
+
+    async def send_tool_result_ack(
+        self,
+        tool_id: str,
+        status: str = "received",
+        session_id: Optional[UUID] = None,
+    ) -> None:
+        """Send ACK to client after receiving tool result
+        
+        Args:
+            tool_id: ID of the tool execution
+            status: Status (received, error)
+            session_id: Optional chat session ID
+        """
+        try:
+            if not self.stream_manager:
+                return
+
+            payload = {
+                "tool_id": tool_id,
+                "status": status,
+                "timestamp": time.time(),
+            }
+
+            event = StreamEvent(
+                event_type=StreamEventType.TOOL_RESULT_ACK,
+                payload=payload,
+                session_id=session_id,
+            )
+
+            # Broadcast to user: use session_id if available, otherwise use user_id
+            if session_id:
+                sent_count = await self.stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=event,
+                )
+            else:
+                # Fallback: broadcast to all user sessions
+                sent_count = await self.stream_manager.broadcast_to_user(
+                    user_id=self.user_id,
+                    event=event,
+                )
+
+            self.logger.info(
+                "tool_result_ack_sent",
+                tool_id=tool_id,
+                status=status,
+                session_id=str(session_id) if session_id else "all_user_sessions",
+                sent_to_connections=sent_count,
+            )
+
+        except Exception as e:
+            self.logger.error(
+                "tool_result_ack_failed",
+                error=str(e),
+                tool_id=tool_id,
             )

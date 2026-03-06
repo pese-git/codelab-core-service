@@ -71,11 +71,20 @@ async def execute_tool(
         }
     """
     try:
+        # Extract and validate session_id
+        session_id = request.session_id or request.chat_session_id
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="session_id is required. Include it in the request as 'session_id' or 'chat_session_id' field",
+            )
+
         logger.info(
             "tool_execution_request_received",
             project_id=str(project_id),
             tool_name=request.tool_name,
             user_id=str(user_id),
+            session_id=str(session_id),
         )
 
         if worker_space.executor is None:
@@ -88,7 +97,7 @@ async def execute_tool(
         result = await worker_space.executor.execute_tool(
             tool_name=request.tool_name,
             tool_params=request.tool_params,
-            session_id=request.session_id or request.chat_session_id,
+            session_id=session_id,
         )
 
         logger.info(
