@@ -81,6 +81,23 @@ services:
     depends_on:
       - prometheus
 
+  # Jaeger Tracing (OpenTelemetry)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: codelab-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI (http://localhost:16686)
+      - "14268:14268"  # OTLP HTTP collector (for OpenTelemetry)
+      - "6831:6831/udp"  # Jaeger agent (thrift compact)
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:16686/api/services"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  
   # Core Service (Development)
   app:
     build:
@@ -95,6 +112,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/codelab
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
+      OTLP_EXPORTER_URL: http://jaeger:4318
       PYTHONUNBUFFERED: 1
     env_file:
       - .env
