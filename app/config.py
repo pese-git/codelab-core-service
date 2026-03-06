@@ -95,6 +95,16 @@ class Settings(BaseSettings):
     prometheus_enabled: bool = Field(default=True)
     prometheus_port: int = Field(default=9090)
 
+    # OpenTelemetry / Tracing (Phase 1)
+    enable_tracing: bool = Field(default=True)
+    jaeger_host: str = Field(default="localhost")
+    jaeger_port: int = Field(default=6831)
+    otlp_exporter_url: str = Field(default="http://localhost:4318")
+
+    # Optional (Phase 2)
+    enable_trace_db_persistence: bool = Field(default=False)
+    trace_retention_days: int = Field(default=30)
+
     # CORS
     cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8080"]

@@ -20,8 +20,10 @@ from app.models.user_project import UserProject
 from app.redis_client import get_redis
 from app.core.stream_manager import get_stream_manager, StreamManager
 from app.schemas.event import StreamEvent
+from app.tracing import get_tracer
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer(__name__)
 
 project_router = APIRouter(prefix="/my/projects", tags=["project-streaming"])
 
@@ -51,6 +53,15 @@ async def event_stream_generator(
 
                 # Handle StreamEvent
                 if isinstance(event, StreamEvent):
+                    # Trace stream event with content details
+                    with tracer.start_as_current_span("stream_event_sent") as span:
+                        span.set_attribute("session.id", str(session_id))
+                        span.set_attribute("user.id", str(user_id))
+                        span.set_attribute("event.type", event.event_type)
+                        span.set_attribute("payload.keys", ",".join(event.payload.keys()) if event.payload else "empty")
+                        span.add_event("event_serialized", {
+                            "ndjson_length": len(event.to_ndjson())
+                        })
                     yield event.to_ndjson()
                     continue
 
@@ -159,43 +170,56 @@ async def subscribe_to_project_events(
     # Get user_id from request
     user_id = get_current_user_id(request)
     
-    logger.info(f"Verifying session access: project_id={project_id}, session_id={session_id}, user_id={user_id}")
+    # Create tracing span for subscription lifecycle
+    with tracer.start_as_current_span("stream_subscription") as span:
+        span.set_attribute("session.id", str(session_id))
+        span.set_attribute("project.id", str(project_id))
+        span.set_attribute("user.id", str(user_id))
+        span.set_attribute("since", str(since) if since else "none")
+        
+        logger.info(f"Verifying session access: project_id={project_id}, session_id={session_id}, user_id={user_id}")
 
-    # Verify session exists and belongs to user and project
-    result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.id == session_id,
-            ChatSession.user_id == user_id,
-            ChatSession.project_id == project_id,
+        # Verify session exists and belongs to user and project
+        result = await db.execute(
+            select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == user_id,
+                ChatSession.project_id == project_id,
+            )
         )
-    )
-    session = result.scalar_one_or_none()
+        session = result.scalar_one_or_none()
 
-    if not session:
-        logger.warning(f"Session not found: project_id={project_id}, session_id={session_id}, user_id={user_id}")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Chat session {session_id} not found in project {project_id}",
+        if not session:
+            logger.warning(f"Session not found: project_id={project_id}, session_id={session_id}, user_id={user_id}")
+            span.set_attribute("status", "session_not_found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chat session {session_id} not found in project {project_id}",
+            )
+
+        # Get Stream manager
+        redis = await get_redis()
+        stream_manager = await get_stream_manager(redis)
+
+        # Register connection and get queue (with optional 'since' filter)
+        queue = await stream_manager.register_connection(session_id, user_id, since)
+
+        logger.info(
+            f"Streaming connection established: user={user_id}, project={project_id}, session={session_id}, since={since}"
         )
+        
+        span.set_attribute("status", "connected")
+        span.add_event("connection_established", {
+            "queue_size": queue.qsize()
+        })
 
-    # Get Stream manager
-    redis = await get_redis()
-    stream_manager = await get_stream_manager(redis)
-
-    # Register connection and get queue (with optional 'since' filter)
-    queue = await stream_manager.register_connection(session_id, user_id, since)
-
-    logger.info(
-        f"Streaming connection established: user={user_id}, project={project_id}, session={session_id}, since={since}"
-    )
-
-    # Create streaming response
-    return StreamingResponse(
-        event_stream_generator(session_id, user_id, stream_manager, queue),
-        media_type="application/x-ndjson",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
-        },
-    )
+        # Create streaming response
+        return StreamingResponse(
+            event_stream_generator(session_id, user_id, stream_manager, queue),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            },
+        )

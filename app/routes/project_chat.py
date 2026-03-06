@@ -5,6 +5,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from opentelemetry import trace
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy import func, select
@@ -33,8 +34,10 @@ from app.schemas.chat import (
 )
 from app.schemas.error import LLMProviderError
 from app.schemas.event import StreamEvent, StreamEventType
+from app.tracing import get_tracer
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer(__name__)
 
 router = APIRouter(prefix="/my/projects/{project_id}/chat", tags=["project-chat"])
 
@@ -228,6 +231,16 @@ async def send_project_message(
     
     # Get SSE manager
     stream_manager = await get_stream_manager(redis)
+    
+    # Start message processing span with context manager
+    with tracer.start_as_current_span("message_processing") as span:
+        span.set_attribute("session.id", str(session_id))
+        span.set_attribute("project.id", str(project_id))
+        span.set_attribute("user.id", str(user_id))
+        span.set_attribute("message.type", "user_message")
+        span.add_event("message_received", {
+            "content_length": len(message_request.content)
+        })
     
     # Save user message
     user_message = Message(
@@ -480,6 +493,11 @@ async def send_project_message(
             f"agent_id={agent_id}, execution_time_ms={exec_result.get('execution_time_ms')}, "
             f"project_id={project_id}"
         )
+        
+        span.set_attribute("status", "success")
+        span.add_event("response_generated", {
+            "response_length": len(assistant_message.content),
+        })
         
         return MessageResponse(
             id=assistant_message.id,

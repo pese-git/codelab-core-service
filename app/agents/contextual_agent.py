@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID
 
 import openai
+from opentelemetry import trace
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy import select
 
@@ -15,12 +16,14 @@ from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
+from app.tracing import get_tracer
 from app.vectorstore.agent_context_store import AgentContextStore
 
 if TYPE_CHECKING:
     from app.core.tools.executor import ToolExecutor
 
 logger = get_logger(__name__)
+tracer = get_tracer(__name__)
 
 
 class ContextualAgent:
@@ -91,341 +94,393 @@ class ContextualAgent:
         Returns:
             Dictionary with execution result
         """
-        try:
-            # Debug: Log executor status
-            logger.debug(
-                "execute_started",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                has_tool_executor=self.tool_executor is not None,
-                task_id=task_id,
-            )
+        with tracer.start_as_current_span("agent_execution") as span:
+            span.set_attribute("agent.id", str(self.agent_id))
+            span.set_attribute("agent.name", self.agent_name)
+            span.set_attribute("model", self.config.model)
+            if session_id:
+                span.set_attribute("session.id", str(session_id))
+            if task_id:
+                span.set_attribute("task.id", task_id)
             
-            # Retrieve relevant context
-            context_results = await self.context_store.search(
-                query=user_message,
-                limit=settings.context_search_limit,
-                filter_success=True,
-            )
-
-            # Build context string
-            context_str = ""
-            if context_results:
-                context_str = "\n\n## Relevant Context:\n"
-                for i, result in enumerate(context_results, 1):
-                    context_str += f"\n{i}. {result['content']}\n"
-
-            # Build messages
-            messages = [
-                {"role": "system", "content": self.config.system_prompt + context_str}
-            ]
-
-            # Add session history
-            if session_history:
-                messages.extend(session_history[-10:])  # Last 10 messages
-
-            # Add user message
-            messages.append({"role": "user", "content": user_message})
-
-            # Prepare LLM call arguments
-            llm_kwargs = {
-                "model": self.config.model,
-                "messages": messages,
-                "temperature": self.config.temperature,
-                "max_tokens": self.config.max_tokens,
-            }
-            
-            # Add tools if available
-            tools = self._get_available_tools()
-            if tools:
+            try:
+                # Debug: Log executor status
                 logger.debug(
-                    "tools_added_to_llm_request",
+                    "execute_started",
                     agent_id=str(self.agent_id),
-                    tools_count=len(tools),
-                    task_id=task_id,
-                )
-                llm_kwargs["tools"] = tools
-                # Allow model to decide whether to use tools
-                llm_kwargs["tool_choice"] = "auto"
-
-            # Call LLM (may request tool calls)
-            response = await self.openai_client.chat.completions.create(**llm_kwargs)
-            
-            assistant_message = response.choices[0].message.content or ""
-            total_tokens = response.usage.total_tokens if response.usage else 0
-            
-            # Handle tool calls if present
-            tool_calls = response.choices[0].message.tool_calls
-            if tool_calls and self.tool_executor:
-                logger.info(
-                    "processing_tool_calls",
-                    agent_id=str(self.agent_id),
-                    tool_calls_count=len(tool_calls),
+                    agent_name=self.agent_name,
+                    has_tool_executor=self.tool_executor is not None,
                     task_id=task_id,
                 )
                 
-                # Execute tools
-                tool_execution_results = await self._execute_tools(
-                    tool_calls=tool_calls,
-                    session_id=session_id,
-                )
-                
-                # Wait for tool results
-                tool_results = await self._wait_for_tool_results(
-                    tool_execution_ids=tool_execution_results,
-                    timeout_seconds=600,
-                    poll_interval=1.0,
-                )
-                
-                # Format tool results for LLM
-                tool_results_formatted = []
-                for tool_call_id, tool_result in tool_results.items():
-                    # Find tool call to get tool name
-                    # tool_calls are ChatCompletionMessageFunctionToolCall objects
-                    tool_call = next(
-                        (tc for tc in tool_calls if tc.id == tool_call_id),
-                        None
-                    )
-                    tool_name = tool_call.function.name if tool_call else "unknown"
-                    
-                    formatted = self._format_tool_result(
-                        tool_call_id=tool_call_id,
-                        tool_name=tool_name,
-                        tool_result=tool_result,
-                    )
-                    tool_results_formatted.append(formatted)
-                
-                # Add assistant's initial response (may be empty if tool was called)
-                if assistant_message:
-                    messages.append({"role": "assistant", "content": assistant_message})
-                else:
-                    # Add tool calls info
-                    messages.append({
-                        "role": "assistant",
-                        "content": "Executing tools...",
-                    })
-                
-                # Add tool results to messages
-                for tool_result in tool_results_formatted:
-                    messages.append({
-                        "role": "user",
-                        "content": tool_result.get("content", ""),
-                    })
-                
-                # Get final response from LLM with tool results
-                final_response = await self.openai_client.chat.completions.create(
-                    model=self.config.model,
-                    messages=messages,
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                )
-                
-                assistant_message = final_response.choices[0].message.content or ""
-                total_tokens += final_response.usage.total_tokens if final_response.usage else 0
-                
-                logger.info(
-                    "tool_calls_processed",
-                    agent_id=str(self.agent_id),
-                    tool_calls_count=len(tool_calls),
-                    final_response_received=True,
-                    task_id=task_id,
+                # Retrieve relevant context
+                context_results = await self.context_store.search(
+                    query=user_message,
+                    limit=settings.context_search_limit,
+                    filter_success=True,
                 )
 
-            # Store interaction in context
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nAssistant: {assistant_message}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=True,
-                metadata={
+                # Build context string
+                context_str = ""
+                if context_results:
+                    context_str = "\n\n## Relevant Context:\n"
+                    for i, result in enumerate(context_results, 1):
+                        context_str += f"\n{i}. {result['content']}\n"
+
+                # Build messages
+                messages = [
+                    {"role": "system", "content": self.config.system_prompt + context_str}
+                ]
+
+                # Add session history
+                if session_history:
+                    messages.extend(session_history[-10:])  # Last 10 messages
+
+                # Add user message
+                messages.append({"role": "user", "content": user_message})
+
+                # Prepare LLM call arguments
+                llm_kwargs = {
                     "model": self.config.model,
-                    "tokens": total_tokens,
+                    "messages": messages,
+                    "temperature": self.config.temperature,
+                    "max_tokens": self.config.max_tokens,
+                }
+                
+                # Add tools if available
+                tools = self._get_available_tools()
+                if tools:
+                    logger.debug(
+                        "tools_added_to_llm_request",
+                        agent_id=str(self.agent_id),
+                        tools_count=len(tools),
+                        task_id=task_id,
+                    )
+                    llm_kwargs["tools"] = tools
+                    # Allow model to decide whether to use tools
+                    llm_kwargs["tool_choice"] = "auto"
+
+                # Call LLM with tracing
+                with tracer.start_as_current_span("llm_call") as llm_span:
+                    llm_span.set_attribute("model", self.config.model)
+                    llm_span.set_attribute("temperature", self.config.temperature)
+                    llm_span.set_attribute("provider", settings.openai_base_url or "openai")
+                    
+                    start_time = time.time()
+                    response = await self.openai_client.chat.completions.create(**llm_kwargs)
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    
+                    if response.usage:
+                        llm_span.set_attribute("latency_ms", latency_ms)
+                        llm_span.set_attribute("tokens_prompt", response.usage.prompt_tokens)
+                        llm_span.set_attribute("tokens_completion", response.usage.completion_tokens)
+                        llm_span.set_attribute("tokens_total", response.usage.total_tokens)
+                    
+                    llm_span.add_event("llm_response_received", {
+                        "model": self.config.model,
+                        "tokens": response.usage.total_tokens if response.usage else 0,
+                    })
+                
+                assistant_message = response.choices[0].message.content or ""
+                total_tokens = response.usage.total_tokens if response.usage else 0
+                
+                # Handle tool calls if present
+                tool_calls = response.choices[0].message.tool_calls
+                if tool_calls and self.tool_executor:
+                    span.add_event("tool_calls_detected", {"count": len(tool_calls)})
+                    
+                    logger.info(
+                        "processing_tool_calls",
+                        agent_id=str(self.agent_id),
+                        tool_calls_count=len(tool_calls),
+                        task_id=task_id,
+                    )
+                    
+                    # Execute tools
+                    tool_execution_results = await self._execute_tools(
+                        tool_calls=tool_calls,
+                        session_id=session_id,
+                    )
+                    
+                    # Wait for tool results
+                    tool_results = await self._wait_for_tool_results(
+                        tool_execution_ids=tool_execution_results,
+                        timeout_seconds=600,
+                        poll_interval=1.0,
+                    )
+                    
+                    # Format tool results for LLM
+                    tool_results_formatted = []
+                    for tool_call_id, tool_result in tool_results.items():
+                        # Find tool call to get tool name
+                        # tool_calls are ChatCompletionMessageFunctionToolCall objects
+                        tool_call = next(
+                            (tc for tc in tool_calls if tc.id == tool_call_id),
+                            None
+                        )
+                        tool_name = tool_call.function.name if tool_call else "unknown"
+                        
+                        formatted = self._format_tool_result(
+                            tool_call_id=tool_call_id,
+                            tool_name=tool_name,
+                            tool_result=tool_result,
+                        )
+                        tool_results_formatted.append(formatted)
+                    
+                    # Add assistant's initial response (may be empty if tool was called)
+                    if assistant_message:
+                        messages.append({"role": "assistant", "content": assistant_message})
+                    else:
+                        # Add tool calls info
+                        messages.append({
+                            "role": "assistant",
+                            "content": "Executing tools...",
+                        })
+                    
+                    # Add tool results to messages
+                    for tool_result in tool_results_formatted:
+                        messages.append({
+                            "role": "user",
+                            "content": tool_result.get("content", ""),
+                        })
+                    
+                    # Get final response from LLM with tool results
+                    final_response = await self.openai_client.chat.completions.create(
+                        model=self.config.model,
+                        messages=messages,
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                    )
+                    
+                    assistant_message = final_response.choices[0].message.content or ""
+                    total_tokens += final_response.usage.total_tokens if final_response.usage else 0
+                    
+                    logger.info(
+                        "tool_calls_processed",
+                        agent_id=str(self.agent_id),
+                        tool_calls_count=len(tool_calls),
+                        final_response_received=True,
+                        task_id=task_id,
+                    )
+
+                # Store interaction in context
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nAssistant: {assistant_message}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=True,
+                    metadata={
+                        "model": self.config.model,
+                        "tokens": total_tokens,
+                        "tools_used": len(tool_calls) if tool_calls else 0,
+                    },
+                )
+
+                logger.info(
+                    "agent_executed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    task_id=task_id,
+                    context_used=len(context_results),
+                    tools_used=len(tool_calls) if tool_calls else 0,
+                )
+
+                span.set_attribute("status", "success")
+                span.add_event("response_generated", {
+                    "response_length": len(assistant_message),
+                })
+
+                return {
+                    "success": True,
+                    "response": assistant_message,
+                    "context_used": len(context_results),
+                    "tokens_used": total_tokens,
                     "tools_used": len(tool_calls) if tool_calls else 0,
-                },
-            )
+                }
 
-            logger.info(
-                "agent_executed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                task_id=task_id,
-                context_used=len(context_results),
-                tools_used=len(tool_calls) if tool_calls else 0,
-            )
+            except openai.APITimeoutError as e:
+                error_msg = f"LLM request timeout: model '{self.config.model}' did not respond in time"
+                logger.error(
+                    "agent_execution_failed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    error=error_msg,
+                    error_type="timeout",
+                    model=self.config.model,
+                    provider=settings.openai_base_url or "openai",
+                )
 
-            return {
-                "success": True,
-                "response": assistant_message,
-                "context_used": len(context_results),
-                "tokens_used": total_tokens,
-                "tools_used": len(tool_calls) if tool_calls else 0,
-            }
+                span.record_exception(e)
+                span.set_attribute("status", "error")
 
-        except openai.APITimeoutError as e:
-            error_msg = f"LLM request timeout: model '{self.config.model}' did not respond in time"
-            logger.error(
-                "agent_execution_failed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                error=error_msg,
-                error_type="timeout",
-                model=self.config.model,
-                provider=settings.openai_base_url or "openai",
-            )
+                # Store failed interaction
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nError: {error_msg}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=False,
+                )
 
-            # Store failed interaction
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {error_msg}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=False,
-            )
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "error_type": "timeout",
+                    "provider": settings.openai_base_url or "openai",
+                    "model": self.config.model,
+                }
 
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_type": "timeout",
-                "provider": settings.openai_base_url or "openai",
-                "model": self.config.model,
-            }
+            except openai.APIConnectionError as e:
+                error_msg = f"Failed to connect to LLM provider: {str(e)}"
+                logger.error(
+                    "agent_execution_failed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    error=error_msg,
+                    error_type="connection",
+                    model=self.config.model,
+                    provider=settings.openai_base_url or "openai",
+                )
 
-        except openai.APIConnectionError as e:
-            error_msg = f"Failed to connect to LLM provider: {str(e)}"
-            logger.error(
-                "agent_execution_failed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                error=error_msg,
-                error_type="connection",
-                model=self.config.model,
-                provider=settings.openai_base_url or "openai",
-            )
+                span.record_exception(e)
+                span.set_attribute("status", "error")
 
-            # Store failed interaction
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {error_msg}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=False,
-            )
+                # Store failed interaction
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nError: {error_msg}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=False,
+                )
 
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_type": "connection",
-                "provider": settings.openai_base_url or "openai",
-                "model": self.config.model,
-            }
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "error_type": "connection",
+                    "provider": settings.openai_base_url or "openai",
+                    "model": self.config.model,
+                }
 
-        except openai.RateLimitError as e:
-            error_msg = f"LLM provider rate limit exceeded for model '{self.config.model}'"
-            logger.error(
-                "agent_execution_failed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                error=error_msg,
-                error_type="rate_limit",
-                model=self.config.model,
-                provider=settings.openai_base_url or "openai",
-            )
+            except openai.RateLimitError as e:
+                error_msg = f"LLM provider rate limit exceeded for model '{self.config.model}'"
+                logger.error(
+                    "agent_execution_failed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    error=error_msg,
+                    error_type="rate_limit",
+                    model=self.config.model,
+                    provider=settings.openai_base_url or "openai",
+                )
 
-            # Store failed interaction
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {error_msg}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=False,
-            )
+                span.record_exception(e)
+                span.set_attribute("status", "error")
 
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_type": "rate_limit",
-                "provider": settings.openai_base_url or "openai",
-                "model": self.config.model,
-            }
+                # Store failed interaction
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nError: {error_msg}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=False,
+                )
 
-        except openai.AuthenticationError as e:
-            error_msg = f"LLM provider authentication failed: invalid API key"
-            logger.error(
-                "agent_execution_failed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                error=error_msg,
-                error_type="authentication",
-                model=self.config.model,
-                provider=settings.openai_base_url or "openai",
-            )
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "error_type": "rate_limit",
+                    "provider": settings.openai_base_url or "openai",
+                    "model": self.config.model,
+                }
 
-            # Store failed interaction
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {error_msg}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=False,
-            )
+            except openai.AuthenticationError as e:
+                error_msg = f"LLM provider authentication failed: invalid API key"
+                logger.error(
+                    "agent_execution_failed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    error=error_msg,
+                    error_type="authentication",
+                    model=self.config.model,
+                    provider=settings.openai_base_url or "openai",
+                )
 
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_type": "authentication",
-                "provider": settings.openai_base_url or "openai",
-                "model": self.config.model,
-            }
+                span.record_exception(e)
+                span.set_attribute("status", "error")
 
-        except openai.BadRequestError as e:
-            error_msg = f"Invalid request to LLM provider: {str(e)}"
-            logger.error(
-                "agent_execution_failed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                error=error_msg,
-                error_type="bad_request",
-                model=self.config.model,
-                provider=settings.openai_base_url or "openai",
-            )
+                # Store failed interaction
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nError: {error_msg}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=False,
+                )
 
-            # Store failed interaction
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {error_msg}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=False,
-            )
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "error_type": "authentication",
+                    "provider": settings.openai_base_url or "openai",
+                    "model": self.config.model,
+                }
 
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_type": "bad_request",
-                "provider": settings.openai_base_url or "openai",
-                "model": self.config.model,
-            }
+            except openai.BadRequestError as e:
+                error_msg = f"Invalid request to LLM provider: {str(e)}"
+                logger.error(
+                    "agent_execution_failed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    error=error_msg,
+                    error_type="bad_request",
+                    model=self.config.model,
+                    provider=settings.openai_base_url or "openai",
+                )
 
-        except Exception as e:
-            error_msg = f"Unexpected error during LLM execution: {str(e)}"
-            logger.error(
-                "agent_execution_failed",
-                agent_id=str(self.agent_id),
-                agent_name=self.agent_name,
-                error=error_msg,
-                error_type="unknown",
-                model=self.config.model,
-            )
+                span.record_exception(e)
+                span.set_attribute("status", "error")
 
-            # Store failed interaction
-            await self.context_store.add_interaction(
-                content=f"User: {user_message}\nError: {error_msg}",
-                interaction_type="chat",
-                task_id=task_id,
-                success=False,
-            )
+                # Store failed interaction
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nError: {error_msg}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=False,
+                )
 
-            return {
-                "success": False,
-                "error": error_msg,
-                "error_type": "unknown",
-                "model": self.config.model,
-            }
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "error_type": "bad_request",
+                    "provider": settings.openai_base_url or "openai",
+                    "model": self.config.model,
+                }
+
+            except Exception as e:
+                error_msg = f"Unexpected error during LLM execution: {str(e)}"
+                logger.error(
+                    "agent_execution_failed",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    error=error_msg,
+                    error_type="unknown",
+                    model=self.config.model,
+                )
+
+                span.record_exception(e)
+                span.set_attribute("status", "error")
+
+                # Store failed interaction
+                await self.context_store.add_interaction(
+                    content=f"User: {user_message}\nError: {error_msg}",
+                    interaction_type="chat",
+                    task_id=task_id,
+                    success=False,
+                )
+
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "error_type": "unknown",
+                    "model": self.config.model,
+                }
 
     def _get_available_tools(self) -> list[dict[str, Any]]:
         """Get available tools in OpenAI Function Calling format.

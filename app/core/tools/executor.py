@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from uuid import UUID, uuid4
 
+from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tools.definitions import ToolName, AVAILABLE_TOOLS
@@ -19,8 +20,10 @@ from app.schemas.tool import ToolExecutionResponse
 from app.schemas.event import StreamEventType
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
+from app.tracing import get_tracer
 
 logger = get_logger(__name__)
+tracer = get_tracer(__name__)
 
 
 class ToolExecutor:
@@ -91,170 +94,197 @@ class ToolExecutor:
 
         execution: ToolExecution | None = None
 
-        try:
-            self.logger.info(
-                "tool_execution_started",
-                tool_id=tool_id,
-                tool_name=tool_name,
-                user_id=str(self.user_id),
-            )
-
-            # ====================================================================
-            # STEP 1: Validate tool parameters
-            # ====================================================================
-            is_valid, error = await self._validate_tool_params(tool_name, tool_params)
-            if not is_valid:
-                self.logger.warning(
-                    "tool_validation_failed",
+        with tracer.start_as_current_span("tool_execution") as span:
+            span.set_attribute("tool.name", tool_name)
+            if session_id:
+                span.set_attribute("session.id", str(session_id))
+            
+            try:
+                self.logger.info(
+                    "tool_execution_started",
                     tool_id=tool_id,
                     tool_name=tool_name,
-                    error=error,
+                    user_id=str(self.user_id),
                 )
+
+                # ====================================================================
+                # STEP 1: Validate tool parameters
+                # ====================================================================
+                with tracer.start_as_current_span("tool_validation") as val_span:
+                    is_valid, error = await self._validate_tool_params(tool_name, tool_params)
+                    val_span.set_attribute("validation_status", "passed" if is_valid else "failed")
+                    
+                    if not is_valid:
+                        self.logger.warning(
+                            "tool_validation_failed",
+                            tool_id=tool_id,
+                            tool_name=tool_name,
+                            error=error,
+                        )
+                        val_span.add_event("validation_error", {"error": error})
+                        span.set_attribute("status", "failed")
+                        return ToolExecutionResponse(
+                            tool_id=str(tool_id),
+                            tool_name=tool_name,
+                            status="failed",
+                            error=error,
+                            created_at=created_at,
+                        )
+
+                # ====================================================================
+                # STEP 2: Assess risk level
+                # ====================================================================
+                with tracer.start_as_current_span("risk_assessment") as risk_span:
+                    risk_level = self.risk_assessor.assess_tool_risk(tool_name, tool_params)
+                    risk_span.set_attribute("risk_level", risk_level.value)
+                    
+                    self.logger.debug(
+                        "tool_risk_assessed",
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        risk_level=risk_level.value,
+                    )
+
+                # Create execution record
+                execution = await self._create_tool_execution(
+                    tool_id=tool_id,
+                    tool_name=tool_name,
+                    tool_params=tool_params,
+                    risk_level=risk_level.value,
+                    session_id=session_id,
+                )
+                span.set_attribute("execution_record_id", str(execution.id))
+
+                # ====================================================================
+                # STEP 3: Handle approval workflow
+                # ====================================================================
+                approval_id = None
+
+                # Check if LOW risk (auto-approve)
+                if await self.approval_manager.auto_approve_tool_if_low_risk(risk_level.value):
+                    self.logger.info(
+                        "tool_auto_approved",
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        risk_level=risk_level.value,
+                    )
+                    span.add_event("auto_approved", {"risk_level": risk_level.value})
+                    execution.status = "approved"
+                else:
+                    # Request approval for MEDIUM/HIGH risk
+                    timeout_seconds = self.risk_assessor.get_timeout_for_risk_level(risk_level)
+
+                    self.logger.info(
+                        "requesting_tool_approval",
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        risk_level=risk_level.value,
+                        timeout=timeout_seconds,
+                    )
+
+                    with tracer.start_as_current_span("approval_workflow") as approval_span:
+                        approval = await self.approval_manager.request_tool_execution_approval(
+                            tool_name=tool_name,
+                            tool_params=tool_params,
+                            risk_level=risk_level.value,
+                            timeout_seconds=timeout_seconds,
+                            session_id=session_id,
+                        )
+                        approval_id = approval.id
+                        approval_span.set_attribute("approval_id", str(approval_id))
+                        approval_span.set_attribute("timeout_seconds", timeout_seconds)
+                        execution.approval_id = approval_id
+
+                        # Wait for approval decision
+                        approved, reason = await self.approval_manager.wait_for_tool_approval(
+                            approval_id=approval_id,
+                            timeout_seconds=timeout_seconds,
+                        )
+
+                        if not approved:
+                            self.logger.warning(
+                                "tool_execution_rejected",
+                                tool_id=str(tool_id),
+                                tool_name=tool_name,
+                                approval_id=str(approval_id),
+                                reason=reason,
+                            )
+                            approval_span.set_attribute("approval_status", "rejected")
+                            execution.status = "rejected"
+                            execution.error = f"Tool execution rejected: {reason}"
+                            execution.completed_at = datetime.utcnow()
+                            await self.db.flush()
+                            span.set_attribute("status", "rejected")
+                            return ToolExecutionResponse(
+                                tool_id=str(tool_id),
+                                tool_name=tool_name,
+                                status="rejected",
+                                approval_id=approval_id,
+                                error=f"Tool execution rejected: {reason}",
+                                created_at=created_at,
+                            )
+
+                        approval_span.set_attribute("approval_status", "approved")
+                        execution.status = "approved"
+
+                await self.db.flush()
+
+                # ====================================================================
+                # STEP 4: Send tool execution request to client
+                # ====================================================================
+                self.logger.info(
+                    "sending_tool_to_client",
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                    approval_id=str(approval_id) if approval_id else None,
+                )
+
+                with tracer.start_as_current_span("client_execution") as client_span:
+                    await self._send_tool_execution_request(
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        tool_params=tool_params,
+                        session_id=session_id,
+                        execution_id=execution.id,
+                    )
+                    client_span.set_attribute("request_sent", True)
+
+                # ====================================================================
+                # STEP 5: Return pending response (client executes tool)
+                # ====================================================================
+                span.set_attribute("status", "pending")
+                return ToolExecutionResponse(
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                    status=execution.status,
+                    approval_id=approval_id,
+                    requires_approval=risk_level != RiskLevel.LOW,
+                    created_at=created_at,
+                )
+
+            except Exception as e:
+                self.logger.error(
+                    "tool_execution_error",
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                    error=str(e),
+                    exc_info=True,
+                )
+                span.record_exception(e)
+                span.set_attribute("status", "error")
+                
+                if execution is not None:
+                    execution.status = "failed"
+                    execution.error = str(e)
+                    execution.completed_at = datetime.utcnow()
+                    await self.db.flush()
                 return ToolExecutionResponse(
                     tool_id=str(tool_id),
                     tool_name=tool_name,
                     status="failed",
-                    error=error,
+                    error=f"Tool execution error: {str(e)}",
                     created_at=created_at,
                 )
-
-            # ====================================================================
-            # STEP 2: Assess risk level
-            # ====================================================================
-            risk_level = self.risk_assessor.assess_tool_risk(tool_name, tool_params)
-            self.logger.debug(
-                "tool_risk_assessed",
-                tool_id=str(tool_id),
-                tool_name=tool_name,
-                risk_level=risk_level.value,
-            )
-
-            # Create execution record
-            execution = await self._create_tool_execution(
-                tool_id=tool_id,
-                tool_name=tool_name,
-                tool_params=tool_params,
-                risk_level=risk_level.value,
-                session_id=session_id,
-            )
-
-            # ====================================================================
-            # STEP 3: Handle approval workflow
-            # ====================================================================
-            approval_id = None
-
-            # Check if LOW risk (auto-approve)
-            if await self.approval_manager.auto_approve_tool_if_low_risk(risk_level.value):
-                self.logger.info(
-                    "tool_auto_approved",
-                    tool_id=str(tool_id),
-                    tool_name=tool_name,
-                    risk_level=risk_level.value,
-                )
-                execution.status = "approved"
-            else:
-                # Request approval for MEDIUM/HIGH risk
-                timeout_seconds = self.risk_assessor.get_timeout_for_risk_level(risk_level)
-
-                self.logger.info(
-                    "requesting_tool_approval",
-                    tool_id=str(tool_id),
-                    tool_name=tool_name,
-                    risk_level=risk_level.value,
-                    timeout=timeout_seconds,
-                )
-
-                approval = await self.approval_manager.request_tool_execution_approval(
-                    tool_name=tool_name,
-                    tool_params=tool_params,
-                    risk_level=risk_level.value,
-                    timeout_seconds=timeout_seconds,
-                    session_id=session_id,
-                )
-                approval_id = approval.id
-                execution.approval_id = approval_id
-
-                # Wait for approval decision
-                approved, reason = await self.approval_manager.wait_for_tool_approval(
-                    approval_id=approval_id,
-                    timeout_seconds=timeout_seconds,
-                )
-
-                if not approved:
-                    self.logger.warning(
-                        "tool_execution_rejected",
-                        tool_id=str(tool_id),
-                        tool_name=tool_name,
-                        approval_id=str(approval_id),
-                        reason=reason,
-                    )
-                    execution.status = "rejected"
-                    execution.error = f"Tool execution rejected: {reason}"
-                    execution.completed_at = datetime.utcnow()
-                    await self.db.flush()
-                    return ToolExecutionResponse(
-                        tool_id=str(tool_id),
-                        tool_name=tool_name,
-                        status="rejected",
-                        approval_id=approval_id,
-                        error=f"Tool execution rejected: {reason}",
-                        created_at=created_at,
-                    )
-
-                execution.status = "approved"
-
-            await self.db.flush()
-
-            # ====================================================================
-            # STEP 4: Send tool execution request to client
-            # ====================================================================
-            self.logger.info(
-                "sending_tool_to_client",
-                tool_id=str(tool_id),
-                tool_name=tool_name,
-                approval_id=str(approval_id) if approval_id else None,
-            )
-
-            await self._send_tool_execution_request(
-                tool_id=str(tool_id),
-                tool_name=tool_name,
-                tool_params=tool_params,
-                session_id=session_id,
-                execution_id=execution.id,
-            )
-
-            # ====================================================================
-            # STEP 5: Return pending response (client executes tool)
-            # ====================================================================
-            return ToolExecutionResponse(
-                tool_id=str(tool_id),
-                tool_name=tool_name,
-                status=execution.status,
-                approval_id=approval_id,
-                requires_approval=risk_level != RiskLevel.LOW,
-                created_at=created_at,
-            )
-
-        except Exception as e:
-            self.logger.error(
-                "tool_execution_error",
-                tool_id=str(tool_id),
-                tool_name=tool_name,
-                error=str(e),
-                exc_info=True,
-            )
-            if execution is not None:
-                execution.status = "failed"
-                execution.error = str(e)
-                execution.completed_at = datetime.utcnow()
-                await self.db.flush()
-            return ToolExecutionResponse(
-                tool_id=str(tool_id),
-                tool_name=tool_name,
-                status="failed",
-                error=f"Tool execution error: {str(e)}",
-                created_at=created_at,
-            )
 
     async def _validate_tool_params(
         self,

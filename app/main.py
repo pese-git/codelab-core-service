@@ -28,6 +28,7 @@ from app.routes import (
 from app.core.stream_manager import close_stream_manager, get_stream_manager
 from app.core.worker_space_manager import get_worker_space_manager
 from app.core.outbox_publisher import OutboxPublisher
+from app.tracing import initialize_tracing
 
 # Configure logging
 configure_logging()
@@ -96,6 +97,9 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+# Initialize OpenTelemetry tracing
+initialize_tracing(app)
 
 
 def custom_openapi():
