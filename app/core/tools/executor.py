@@ -230,33 +230,72 @@ class ToolExecutor:
                 await self.db.flush()
 
                 # ====================================================================
-                # STEP 4: Send tool execution request to client
+                # STEP 4: Send execution signal to client
                 # ====================================================================
                 self.logger.info(
-                    "sending_tool_to_client",
+                    "sending_execution_signal_to_client",
                     tool_id=str(tool_id),
                     tool_name=tool_name,
                     approval_id=str(approval_id) if approval_id else None,
                 )
 
                 with tracer.start_as_current_span("client_execution") as client_span:
-                    await self._send_tool_execution_request(
+                    # Send execution signal via SSE
+                    await self.approval_manager.send_tool_execution_signal(
                         tool_id=str(tool_id),
                         tool_name=tool_name,
                         tool_params=tool_params,
                         session_id=session_id,
-                        execution_id=execution.id,
                     )
-                    client_span.set_attribute("request_sent", True)
+                    client_span.set_attribute("execution_signal_sent", True)
 
                 # ====================================================================
-                # STEP 5: Return pending response (client executes tool)
+                # STEP 5: Wait for tool result from client
                 # ====================================================================
-                span.set_attribute("status", "pending")
+                self.logger.info(
+                    "waiting_for_tool_result",
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                )
+
+                tool_result, tool_error = await self._wait_for_tool_result(
+                    tool_id=tool_id,
+                    execution_id=execution.id,
+                    timeout_seconds=300,
+                )
+                
+                # Update execution with result
+                if tool_error:
+                    execution.status = "failed"
+                    execution.error = tool_error
+                    span.set_attribute("status", "failed")
+                else:
+                    execution.status = "completed"
+                    execution.result = tool_result
+                    span.set_attribute("status", "completed")
+                
+                execution.completed_at = datetime.utcnow()
+                await self.db.flush()
+
+                # ====================================================================
+                # STEP 6: Send result acknowledgment to client
+                # ====================================================================
+                await self.approval_manager.send_tool_result_ack(
+                    tool_id=str(tool_id),
+                    status="received" if not tool_error else "error",
+                    session_id=session_id,
+                )
+
+                # ====================================================================
+                # STEP 7: Return result response
+                # ====================================================================
+                span.set_attribute("status", execution.status)
                 return ToolExecutionResponse(
                     tool_id=str(tool_id),
                     tool_name=tool_name,
                     status=execution.status,
+                    result=tool_result,
+                    error=tool_error,
                     approval_id=approval_id,
                     requires_approval=risk_level != RiskLevel.LOW,
                     created_at=created_at,
@@ -438,6 +477,84 @@ class ToolExecutor:
                 exc_info=True,
             )
             return None
+
+    async def _wait_for_tool_result(
+        self,
+        tool_id: str,
+        execution_id: UUID,
+        timeout_seconds: int = 300,
+    ) -> tuple[Optional[dict], Optional[str]]:
+        """Wait for tool execution result from client
+        
+        Polls tool execution status until result is received or timeout occurs.
+        
+        Args:
+            tool_id: ID of the tool execution
+            execution_id: ID of the execution record
+            timeout_seconds: Timeout in seconds
+            
+        Returns:
+            Tuple of (result, error)
+            - result: Result dict if successful
+            - error: Error message if failed
+        """
+        import time as time_module
+        
+        start_time = time_module.time()
+        
+        self.logger.info(
+            "wait_for_tool_result_started",
+            tool_id=tool_id,
+            execution_id=str(execution_id),
+            timeout=timeout_seconds,
+        )
+        
+        while time_module.time() - start_time < timeout_seconds:
+            # Check execution status in database
+            from sqlalchemy.future import select
+            
+            result = await self.db.execute(
+                select(ToolExecution).where(ToolExecution.id == execution_id)
+            )
+            execution = result.scalar_one_or_none()
+            
+            if not execution:
+                error = "Tool execution record not found"
+                self.logger.error(error, tool_id=tool_id, execution_id=str(execution_id))
+                return None, error
+            
+            # Check if result is available
+            if execution.status == "completed":
+                self.logger.info(
+                    "tool_result_received",
+                    tool_id=tool_id,
+                    execution_id=str(execution_id),
+                )
+                return execution.result, None
+            
+            # Check if execution failed
+            if execution.status in ["failed", "rejected"]:
+                error = execution.error or "Tool execution failed"
+                self.logger.warning(
+                    "tool_execution_failed",
+                    tool_id=tool_id,
+                    execution_id=str(execution_id),
+                    error=error,
+                )
+                return None, error
+            
+            # Wait before checking again (poll every 0.5 seconds)
+            await asyncio.sleep(0.5)
+        
+        # Timeout occurred
+        error = f"Tool execution timeout after {timeout_seconds}s"
+        self.logger.warning(
+            "tool_result_timeout",
+            tool_id=tool_id,
+            execution_id=str(execution_id),
+            timeout=timeout_seconds,
+        )
+        return None, error
 
     async def _create_tool_execution(
         self,

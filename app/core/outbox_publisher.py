@@ -162,6 +162,15 @@ class OutboxPublisher:
             event: EventOutbox record to publish
         """
         try:
+            # Extract session_id from payload and convert to UUID
+            session_id_str = event.payload.get("session_id")
+            session_id = None
+            if session_id_str:
+                try:
+                    session_id = UUID(session_id_str) if isinstance(session_id_str, str) else session_id_str
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"Failed to convert session_id to UUID: {session_id_str}, error: {e}")
+            
             # Create StreamEvent from outbox event
             stream_event = StreamEvent(
                 event_type=StreamEventType(event.event_type),
@@ -171,7 +180,15 @@ class OutboxPublisher:
                     "aggregate_type": event.aggregate_type,
                     "aggregate_id": str(event.aggregate_id),
                 },
-                session_id=event.payload.get("session_id"),
+                session_id=session_id,
+            )
+            
+            # Log event details for debugging
+            logger.debug(
+                f"Publishing event: event_id={event.id}, "
+                f"event_type={event.event_type}, "
+                f"session_id={session_id}, "
+                f"session_id_type={type(session_id).__name__}"
             )
             
             # Publish to stream

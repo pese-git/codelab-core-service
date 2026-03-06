@@ -190,3 +190,7 @@ class ToolExecutionResultRequest(BaseModel):
     completed_at: Optional[datetime] = Field(
         None, description="Completion timestamp (ISO 8601)"
     )
+
+
+# Alias for backward compatibility
+ToolResultRequest = ToolExecutionResultRequest
