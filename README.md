@@ -112,8 +112,10 @@ docker-compose logs -f app
 - **PostgreSQL**: localhost:5432
 - **Redis**: localhost:6379
 - **Qdrant**: http://localhost:6333
+- **LiteLLM Proxy**: http://localhost:4000 (для управления LLM провайдерами)
 - **Prometheus**: http://localhost:9090 (только в полном стеке)
 - **Grafana**: http://localhost:3000 (только в полном стеке, admin/admin)
+- **Jaeger**: http://localhost:16686 (только в полном стеке)
 
 ### Вариант 2: Локальная разработка
 
@@ -242,6 +244,7 @@ docker-compose down -v
 
 - [📖 Руководство по настройке и запуску](doc/setup-guide.md) - Полная инструкция по установке, настройке и решению проблем
 - [🔌 Интеграция с LiteLLM](doc/litellm-integration.md) - Использование собственного LLM прокси вместо OpenAI API
+- [🔐 Управление LLM провайдерами](doc/litellm-providers-management.md) - Добавление и управление провайдерами через REST API (OpenAI, Claude, Azure, Cohere и др.)
 - [🎨 Gradio UI клиент](scripts/GRADIO_CLIENT.md) - Веб-интерфейс для тестирования API
 - [🔧 REST API спецификация](doc/rest-api.md) - Детальное описание всех endpoints
 - [📡 SSE Event Streaming](doc/sse-event-streaming.md) - Работа с событиями в реальном времени

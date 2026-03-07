@@ -97,7 +97,44 @@ services:
       timeout: 10s
       retries: 3
 
-  
+  # LiteLLM Proxy для управления LLM провайдерами
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: codelab-litellm
+    ports:
+      - "4000:4000"
+    environment:
+      # Мастер ключ для управления провайдерами через API (REST запросы)
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-super-secret-key-change-in-production}
+      
+      # Redis для кэширования
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 1
+      REDIS_URL: redis://redis:6379/1
+      
+      # Логирование
+      LITELLM_LOG: INFO
+      
+      # Отключаем функции, требующие БД
+      DISABLE_ADMIN_UI_AUTH: "true"
+      
+      # Настройки кэширования
+      CACHE: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -s http://localhost:4000/health/readiness | grep -q healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+    restart: unless-stopped
+    command: >
+      --port 4000
+      --telemetry false
+
   # Core Service (Development)
   app:
     build:
@@ -113,6 +150,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       OTLP_EXPORTER_URL: http://jaeger:4318
+      LITELLM_URL: http://litellm:4000
       PYTHONUNBUFFERED: 1
     env_file:
       - .env
@@ -123,6 +161,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      litellm:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
