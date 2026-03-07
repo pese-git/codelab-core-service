@@ -73,6 +73,21 @@ curl -X POST http://localhost:4000/model/new \
   }'
 ```
 
+**Пример: Добавление OpenRouter**
+
+```bash
+curl -X POST http://localhost:4000/model/new \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer super-secret-key-change-in-production" \
+  -d '{
+    "model_name": "openrouter-gpt4",
+    "litellm_params": {
+      "model": "openrouter/openai/gpt-4-turbo",
+      "api_key": "sk-or-v1-your-openrouter-api-key"
+    }
+  }'
+```
+
 **Пример: Добавление Cohere**
 
 ```bash

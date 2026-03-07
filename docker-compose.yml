@@ -104,8 +104,14 @@ services:
     ports:
       - "4000:4000"
     environment:
-      # Мастер ключ для управления провайдерами через API (REST запросы)
+      # Мастер ключ для управления провайдерами через API
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-super-secret-key-change-in-production}
+      
+      # PostgreSQL подключение для управления моделями и ключами
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/litellm
+      
+      # Сохранение моделей в БД (для динамического добавления)
+      STORE_MODEL_IN_DB: "True"
       
       # Redis для кэширования
       REDIS_HOST: redis
@@ -116,12 +122,11 @@ services:
       # Логирование
       LITELLM_LOG: INFO
       
-      # Отключаем функции, требующие БД
-      DISABLE_ADMIN_UI_AUTH: "true"
-      
       # Настройки кэширования
       CACHE: "true"
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
