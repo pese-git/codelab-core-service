@@ -8,12 +8,12 @@
 ## SECTION: OpenTelemetry Instrumentation
 
 ### Requirement: Инициализация OpenTelemetry в приложении
-Приложение ДОЛЖНО инициализировать OpenTelemetry с JaegerExporter при старте.
+Приложение ДОЛЖНО инициализировать OpenTelemetry с OTLPSpanExporter при старте.
 
 #### Scenario: Трассировка включена при старте
 - **WHEN** приложение запускается с `enable_tracing=true`
 - **THEN** создается `TracerProvider` с сервисом `codelab-core-service`
-- **AND** добавляется `BatchSpanProcessor` с `JaegerExporter`
+- **AND** добавляется `BatchSpanProcessor` с `OTLPSpanExporter`
 - **AND** автоматически инструментируются FastAPI и SQLAlchemy
 
 #### Scenario: Трассировка может быть отключена
@@ -21,10 +21,10 @@
 - **THEN** инициализация пропускается
 - **AND** no-op трейсер используется
 
-#### Scenario: Jaeger доступен на конфигурируемом адресе
-- **WHEN** настроены `jaeger_host` и `jaeger_port`
-- **THEN** `JaegerExporter` подключается к этому адресу
-- **AND** spans отправляются на этот адрес
+#### Scenario: OTLP эксортер доступен на конфигурируемом адресе
+- **WHEN** настроена `OTLP_EXPORTER_URL` (по умолчанию `http://localhost:4318`)
+- **THEN** `OTLPSpanExporter` подключается к этому адресу
+- **AND** spans отправляются на этот адрес через HTTP protocol
 
 ### Requirement: Основные span операции
 Система ДОЛЖНА создавать spans для основных операций message processing и tool execution.
@@ -115,20 +115,21 @@ Spans ДОЛЖНЫ поддерживать иерархию parent-child для
 
 ---
 
-## SECTION: Jaeger UI Integration
+## SECTION: OTLP Collector и UI Integration
 
-### Requirement: Jaeger UI должен быть доступен локально
-Jaeger UI ДОЛЖЕН быть доступен на `http://localhost:16686` для разработки.
+### Requirement: OTLP Collector должен быть доступен локально
+OTLP Collector (с Jaeger UI опционально) ДОЛЖЕН быть доступен на `http://localhost:4318` для разработки.
 
-#### Scenario: Docker Compose для Jaeger
-- **WHEN** запускается `docker-compose -f docker-compose-dev.yml up -d jaeger`
-- **THEN** Jaeger контейнер поднимается
-- **AND** UI доступен на http://localhost:16686
-- **AND** agent слушает на UDP port 6831
+#### Scenario: Docker Compose для OTLP Collector
+- **WHEN** запускается `docker-compose -f docker-compose-dev.yml up -d otel-collector`
+- **THEN** OTLP Collector контейнер поднимается
+- **AND** OTLP receiver слушает на HTTP port 4318 (`/v1/traces` endpoint)
+- **AND** Jaeger backend поднимается как часть compose setup
+- **AND** Jaeger UI доступен на http://localhost:16686
 
-#### Scenario: Jaeger health check
+#### Scenario: OTLP Collector health check
 - **WHEN** контейнер поднимается
-- **THEN** health check проверяет `/api/services`
+- **THEN** health check проверяет `/status` endpoint
 - **AND** контейнер помечается как healthy
 
 ### Requirement: Поиск и фильтрация трейсов в Jaeger
@@ -170,15 +171,14 @@ Jaeger ДОЛЖЕН позволять искать трейсы по опера
 #### Scenario: Параметры OpenTelemetry
 - **REQUIRED**:
   - `ENABLE_TRACING` (bool, default=true)
-  - `JAEGER_HOST` (str, default=localhost)
-  - `JAEGER_PORT` (int, default=6831)
+  - `OTLP_EXPORTER_URL` (str, default=http://localhost:4318)
 
 #### Scenario: Парамы для Phase 2 (приготовлены)
 - **OPTIONAL** (для будущего use):
   - `ENABLE_TRACE_DB_PERSISTENCE` (bool, default=false)
   - `TRACE_RETENTION_DAYS` (int, default=30)
-  - `ENABLE_OTLP_EXPORT` (bool, default=false)
-  - `OTLP_ENDPOINT` (str)
+  - `TRACE_SAMPLING_RATE` (float, default=1.0)
+  - `TRACE_BATCH_SIZE` (int, default=512)
 
 #### Scenario: Загрузка из .env
 - **WHEN** приложение стартует

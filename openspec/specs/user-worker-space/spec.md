@@ -663,6 +663,123 @@ User Worker Space компонента backend ДОЛЖНА управлять b
 
 ---
 
+## 7. Реализованные Методы UserWorkerSpace
+
+### 7.1 Управление Инициализацией
+
+#### Method: `async initialize_project()`
+Инициализирует все backend ресурсы для проекта пользователя при первом обращении.
+
+**Что инициализирует:**
+- Agent Manager для управления агентами
+- Starter Pack с 4 default агентами
+- Qdrant collections для RAG контекста каждого агента
+- Agent Bus для inter-agent communication
+
+#### Method: `bind_request_dependencies(db, redis, qdrant)`
+Привязывает request-scoped зависимости к cached UserWorkerSpace инстансу.
+
+**Обоснование:** WorkerSpaceManager кэширует UserWorkerSpace для долгоживущих соединений, но DB сессии request-scoped. Этот метод синхронизирует зависимости.
+
+### 7.2 Управление Агентами
+
+#### Method: `async get_agent(agent_id: UUID) -> ContextualAgent`
+Получает агента с автоматическим кэшированием.
+
+**Логика:**
+1. Проверяет local cache
+2. Если нет, загружает из Redis (distributed cache)
+3. Если нет, загружает из DB через AgentManager
+4. Сохраняет в cache с TTL
+
+#### Method: `async execute_agent(agent_id: UUID, message: str, session_history: list) -> dict`
+Выполняет агента с поддержкой RAG и tool execution.
+
+**Параметры:**
+- `agent_id`: UUID агента
+- `message`: Пользовательское сообщение
+- `session_history`: История чата для контекста
+- `session_id` (optional): ID чат-сессии для трассировки
+- `task_id` (optional): ID задачи
+
+**Возвращает:**
+- `status`: success/error
+- `content`: Текст ответа агента
+- `tool_calls` (optional): Список calls инструментов
+- `execution_time`: Время выполнения в ms
+
+#### Method: `async switch_agent(from_agent_id: UUID, to_agent_id: UUID, session_id: UUID, reason: str) -> Message`
+Переключает агента в чат-сессии с логированием события.
+
+**Логика:**
+1. Проверяет оба агента существуют
+2. Создает системное сообщение о переключении
+3. Записывает событие `agent_switched` в event_outbox
+4. Коммитит транзакцию
+
+### 7.3 Управление Кэшем
+
+#### Method: `get_agent_cache() -> AgentCache`
+Возвращает instance AgentCache для доступа к cached агентам.
+
+**Методы AgentCache:**
+- `async get(agent_id: UUID) -> ContextualAgent`: Получить агента
+- `async set(agent_id: UUID, agent: ContextualAgent)`: Сохранить агента
+- `async invalidate(agent_id: UUID)`: Инвалидировать cache
+- `async clear()`: Очистить весь cache
+- `get_size() -> int`: Размер cache
+
+### 7.4 Lifecycle Управление
+
+#### Method: `async cleanup()`
+Очищает все ресурсы и закрывает connections при завершении workspace.
+
+**Очищает:**
+- Agent cache
+- Active agents
+- Task queues
+- Database сессию
+- Qdrant connection
+
+#### Property: `initialized: bool`
+Флаг инициализации для проверки готовности workspace.
+
+#### Property: `initialization_time: datetime`
+Время инициализации для мониторинга и отладки.
+
+---
+
+## 8. Interaction Patterns
+
+### Pattern: Agent Caching and Request Binding
+
+```
+Request 1 (user1)
+    ↓
+UserWorkerSpaceManager.get_workspace(user1, project1)
+    ├─ Found cached workspace
+    └─ Call bind_request_dependencies(new_db_session, new_redis, new_qdrant)
+    
+Request 2 (user1)
+    ↓
+UserWorkerSpaceManager.get_workspace(user1, project1)
+    └─ Reuse cached workspace with updated dependencies
+```
+
+### Pattern: Agent Execution with RAG
+
+```
+execute_agent(agent_id, message, session_history)
+    ├─ get_agent(agent_id) → cached ContextualAgent
+    ├─ ContextualAgent retrieves RAG context from Qdrant
+    ├─ Calls LLM with message + context
+    ├─ LLM detects tool calls
+    ├─ ToolExecutor executes tools
+    └─ Returns result with tool_calls array
+```
+
+---
+
 ## 5. Граничные условия безопасности
 
 ### 5.1 Что агент НЕ может делать
