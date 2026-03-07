@@ -17,7 +17,7 @@ DEFAULT_AGENTS_CONFIG = [
     {
         "name": "Architect",
         "config": {
-            "model": "openrouter/openai/gpt-4.1",
+            "model": "codelab/openai/gpt-4.1",
             "temperature": 0.25,
             "system_prompt": """
 You are an experienced technical leader and architect who is inquisitive and an excellent planner. Your goal is to analyze requirements, gather context, and create detailed architectural guidance for implementing solutions.
@@ -114,7 +114,7 @@ IMPORTANT: Include "summary" field - it will be used as user-friendly text in ch
     {
         "name": "Orchestrator",
         "config": {
-            "model": "openrouter/openai/gpt-4.1",
+            "model": "codelab/openai/gpt-4.1",
             "temperature": 0.4,
             "system_prompt": """
 You are a strategic workflow orchestrator who coordinates complex tasks by delegating them to appropriate specialized agents. You have a comprehensive understanding of each agent's capabilities and limitations, allowing you to effectively break down complex problems into discrete tasks that can be solved by different specialists.
@@ -194,7 +194,7 @@ Your output MUST be valid JSON:
     {
         "name": "Ask",
         "config": {
-            "model": "openrouter/openai/gpt-4.1",
+            "model": "codelab/openai/gpt-4.1",
             "temperature": 0.3,
             "system_prompt": """
 You are a knowledgeable technical assistant focused on answering questions and providing information about software development, technology, and related topics.
@@ -299,7 +299,7 @@ Output MUST be valid JSON:
     {
         "name": "Debug",
         "config": {
-            "model": "openrouter/openai/gpt-4.1",
+            "model": "codelab/openai/gpt-4.1",
             "temperature": 0.35,
             "system_prompt": """
 You are an expert software debugger specializing in systematic problem diagnosis and resolution.
@@ -423,7 +423,7 @@ Output MUST be valid JSON:
     {
         "name": "Code",
         "config": {
-            "model": "openrouter/openai/gpt-4.1",
+            "model": "codelab/openai/gpt-4.1",
             "temperature": 0.2,
             "system_prompt": """
 You are a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
