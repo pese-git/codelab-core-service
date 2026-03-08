@@ -256,7 +256,7 @@ erDiagram
     USER_AGENTS {
         UUID id PK
         UUID user_id FK
-        UUID llm_provider_id FK "optional"
+        UUID llm_provider_id FK
         string name
     }
     
