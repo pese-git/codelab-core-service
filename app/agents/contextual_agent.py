@@ -114,6 +114,8 @@ class ContextualAgent:
                     agent_name=self.agent_name,
                     has_tool_executor=self.tool_executor is not None,
                     task_id=task_id,
+                    llm_provider_id=str(self.llm_provider.id) if self.llm_provider else None,
+                    llm_provider_type=self.llm_provider.provider_type if self.llm_provider else None,
                 )
                 
                 # Retrieve relevant context
@@ -142,9 +144,20 @@ class ContextualAgent:
                 # Add user message
                 messages.append({"role": "user", "content": user_message})
 
+                # Determine which model to use: provider's model or config's model
+                model_to_use = self.config.model
+                if self.llm_provider and self.llm_provider.litellm_model_name:
+                    model_to_use = self.llm_provider.litellm_model_name
+                    logger.debug(
+                        "using_provider_model",
+                        agent_id=str(self.agent_id),
+                        provider_model=model_to_use,
+                        config_model=self.config.model,
+                    )
+                
                 # Prepare LLM call arguments
                 llm_kwargs = {
-                    "model": self.config.model,
+                    "model": model_to_use,
                     "messages": messages,
                     "temperature": self.config.temperature,
                     "max_tokens": self.config.max_tokens,
