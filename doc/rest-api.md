@@ -11,6 +11,7 @@
 - [Projects API](#projects-api)
 - [Agents API](#agents-api)
 - [Chat API](#chat-api)
+- [LLM Providers API](#llm-providers-api)
 - [Analytics API](#analytics-api)
 - [Health API](#health-api)
 - [Коды ошибок](#коды-ошибок)

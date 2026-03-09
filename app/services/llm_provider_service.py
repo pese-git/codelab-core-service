@@ -17,12 +17,21 @@ logger = logging.getLogger(__name__)
 
 
 class LLMProviderNotFoundError(Exception):
-    """Raised when LLM provider is not found."""
+    """
+    Исключение, выбрасываемое когда провайдер не найден.
+    
+    Raised when LLM provider is not found.
+    """
     pass
 
 
 class LLMProviderInUseError(Exception):
-    """Raised when trying to delete a provider that is in use by agents."""
+    """
+    Исключение, выбрасываемое при попытке удалить провайдер,
+    который используется агентами.
+    
+    Raised when trying to delete a provider that is in use by agents.
+    """
     pass
 
 
