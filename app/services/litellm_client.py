@@ -132,15 +132,15 @@ class LiteLLMClient:
         try:
             import time
             start_time = time.time()
-            
+
             response = await self._http_request(
                 method="POST",
                 endpoint="/completions",
                 payload=payload,
             )
-            
+
             latency_ms = (time.time() - start_time) * 1000
-            
+
             # Extract the response text from LiteLLM format
             response_text = response.get("choices", [{}])[0].get("message", {}).get("content", "")
 

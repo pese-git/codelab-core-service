@@ -19,9 +19,9 @@ from app.schemas.llm_provider import (
     get_provider_types,
 )
 from app.services.llm_provider_service import (
-    LLMProviderService,
     LLMProviderInUseError,
     LLMProviderNotFoundError,
+    LLMProviderService,
 )
 
 private_router = APIRouter(prefix="/my/llm-providers", tags=["llm-providers"])
@@ -387,11 +387,11 @@ async def get_provider_types_list() -> list[LLMProviderTypeInfo]:
 
 @private_router.get("/audit", response_model=LLMProviderAuditLogListResponse)
 async def get_provider_audit_log(
+    request: Request,
     provider_id: UUID | None = None,
     action: str | None = None,
     skip: int = 0,
     limit: int = 100,
-    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ) -> LLMProviderAuditLogListResponse:
     """

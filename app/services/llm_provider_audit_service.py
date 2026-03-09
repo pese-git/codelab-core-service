@@ -1,7 +1,6 @@
 """Service for auditing LLM provider operations."""
 
 import logging
-from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -128,7 +127,7 @@ class LLMProviderAuditService:
         # Добавить фильтры
         if provider_id is not None:
             query = query.where(LLMProviderAuditLog.provider_id == provider_id)
-        
+
         if action is not None:
             if action not in self.VALID_ACTIONS:
                 logger.warning(f"Invalid action filter: {action}")
@@ -148,7 +147,7 @@ class LLMProviderAuditService:
 
         # Сортировка по времени (новые сверху)
         query = query.order_by(LLMProviderAuditLog.created_at.desc())
-        
+
         # Пагинация
         query = query.limit(limit).offset(offset)
 
@@ -177,7 +176,7 @@ class LLMProviderAuditService:
             limit=10000,
         )
 
-        summary = {action: 0 for action in self.VALID_ACTIONS}
+        summary = dict.fromkeys(self.VALID_ACTIONS, 0)
         for log in logs:
             summary[log.action] += 1
 

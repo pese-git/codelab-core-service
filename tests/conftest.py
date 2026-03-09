@@ -27,6 +27,7 @@ from app.models.llm_provider_audit_log import LLMProviderAuditLog
 from app.models.chat_session import ChatSession
 from app.redis_client import get_redis
 from app.qdrant_client import get_qdrant
+from app.services.litellm_client import LiteLLMClient
 
 
 # Test database URL (in-memory SQLite)
@@ -296,6 +297,45 @@ async def client_with_mocks(
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis] = override_get_redis
     app.dependency_overrides[get_qdrant] = override_get_qdrant
+    
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test"
+    ) as ac:
+        yield ac
+    
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def mock_litellm_client(monkeypatch) -> AsyncMock:
+    """Create mock LiteLLMClient."""
+    mock_client = AsyncMock(spec=LiteLLMClient)
+    mock_client.add_model = AsyncMock(return_value="user550e8400_openai_abc12345")
+    mock_client.delete_model = AsyncMock(return_value=None)
+    mock_client.test_model = AsyncMock(return_value={"status": "ok"})
+    
+    # Patch LiteLLMClient in llm_provider_service module
+    monkeypatch.setattr(
+        "app.services.llm_provider_service.LiteLLMClient",
+        lambda: mock_client
+    )
+    
+    return mock_client
+
+
+@pytest_asyncio.fixture
+async def client_with_llm_mocks(
+    db_session: AsyncSession,
+    mock_litellm_client: AsyncMock,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Create test client with LLM client mocked."""
+    from httpx import ASGITransport
+    
+    async def override_get_db():
+        yield db_session
+    
+    app.dependency_overrides[get_db] = override_get_db
     
     async with AsyncClient(
         transport=ASGITransport(app=app),

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 # Available LLM provider types
 class LLMProviderType(str, Enum):
     """Supported LLM provider types."""
-    
+
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
@@ -23,13 +23,13 @@ class LLMProviderType(str, Enum):
 
 class LLMProviderTypeInfo(BaseModel):
     """Information about an LLM provider type."""
-    
+
     type: LLMProviderType = Field(..., description="Provider type identifier")
     display_name: str = Field(..., description="Human-readable provider name")
     description: str = Field(..., description="Provider description")
     requires_api_key: bool = Field(default=True, description="Whether API key is required")
     requires_base_url: bool = Field(default=False, description="Whether base URL is required")
-    
+
     model_config = {"json_schema_extra": {
         "example": {
             "type": "openai",
@@ -43,7 +43,7 @@ class LLMProviderTypeInfo(BaseModel):
 
 class LLMProviderCreate(BaseModel):
     """Schema for creating a new LLM provider."""
-    
+
     provider_type: LLMProviderType = Field(..., description="Type of LLM provider")
     display_name: str = Field(..., min_length=1, max_length=255, description="User-friendly name for the provider")
     api_key: str = Field(..., description="API key for the provider (sent separately to LiteLLM)")
@@ -51,7 +51,7 @@ class LLMProviderCreate(BaseModel):
         default_factory=dict,
         description="Additional provider configuration (e.g., model name, base URL, etc.)"
     )
-    
+
     model_config = {"json_schema_extra": {
         "example": {
             "provider_type": "openai",
@@ -64,10 +64,10 @@ class LLMProviderCreate(BaseModel):
 
 class LLMProviderUpdate(BaseModel):
     """Schema for updating an LLM provider."""
-    
+
     display_name: str = Field(None, min_length=1, max_length=255, description="Updated provider name")
     config: dict[str, Any] = Field(None, description="Updated provider configuration")
-    
+
     model_config = {"json_schema_extra": {
         "example": {
             "display_name": "My OpenAI Account - Updated",
@@ -78,7 +78,7 @@ class LLMProviderUpdate(BaseModel):
 
 class LLMProviderResponse(BaseModel):
     """Schema for returning LLM provider data."""
-    
+
     id: UUID = Field(..., description="Provider UUID")
     user_id: UUID = Field(..., description="User ID who owns this provider")
     provider_type: LLMProviderType = Field(..., description="Provider type")
@@ -89,19 +89,19 @@ class LLMProviderResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
     last_used_at: datetime | None = Field(None, description="Last usage timestamp")
     use_count: int = Field(..., description="Number of times this provider was used")
-    
+
     model_config = {"from_attributes": True}
 
 
 class LLMProviderListResponse(BaseModel):
     """Schema for returning a list of LLM providers with pagination."""
-    
+
     providers: list[LLMProviderResponse] = Field(..., description="List of LLM providers")
     total: int = Field(..., description="Total number of providers for this user")
     page: int = Field(..., ge=1, description="Current page number")
     page_size: int = Field(..., ge=1, le=100, description="Items per page")
     total_pages: int = Field(..., description="Total number of pages")
-    
+
     model_config = {"json_schema_extra": {
         "example": {
             "providers": [
@@ -128,7 +128,7 @@ class LLMProviderListResponse(BaseModel):
 
 class LLMProviderTestRequest(BaseModel):
     """Schema for testing LLM provider connection."""
-    
+
     test_prompt: str = Field(
         default="Hello, how are you?",
         description="Test prompt to send to the LLM provider"
@@ -139,7 +139,7 @@ class LLMProviderTestRequest(BaseModel):
         le=4096,
         description="Max tokens for test response"
     )
-    
+
     model_config = {"json_schema_extra": {
         "example": {
             "test_prompt": "Write a haiku about coding",
@@ -150,13 +150,13 @@ class LLMProviderTestRequest(BaseModel):
 
 class LLMProviderTestResponse(BaseModel):
     """Schema for LLM provider test result."""
-    
+
     success: bool = Field(..., description="Whether the test was successful")
     message: str = Field(..., description="Test result message")
     response: str | None = Field(None, description="LLM response if successful")
     error: str | None = Field(None, description="Error message if test failed")
     latency_ms: float | None = Field(None, description="Response latency in milliseconds")
-    
+
     model_config = {"json_schema_extra": {
         "example": {
             "success": True,
@@ -170,7 +170,7 @@ class LLMProviderTestResponse(BaseModel):
 
 class LLMProviderAuditLogEntry(BaseModel):
     """Schema for audit log entry of LLM provider operations."""
-    
+
     id: UUID = Field(..., description="Audit log entry UUID")
     user_id: UUID = Field(..., description="User ID who performed the action")
     provider_id: UUID | None = Field(None, description="Provider ID (if applicable)")
@@ -185,7 +185,7 @@ class LLMProviderAuditLogEntry(BaseModel):
     ip_address: str | None = Field(None, description="IP address of the requester")
     user_agent: str | None = Field(None, description="User agent of the requester")
     created_at: datetime = Field(..., description="Timestamp of the action")
-    
+
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {
@@ -211,7 +211,7 @@ class LLMProviderAuditLogEntry(BaseModel):
 
 class LLMProviderAuditLogListResponse(BaseModel):
     """Schema for returning a list of audit log entries."""
-    
+
     entries: list[LLMProviderAuditLogEntry] = Field(..., description="Audit log entries")
     total: int = Field(..., description="Total number of entries")
     page: int = Field(..., ge=1, description="Current page number")
