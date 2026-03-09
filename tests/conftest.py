@@ -22,6 +22,8 @@ from app.main import app
 from app.models.user import User
 from app.models.user_project import UserProject
 from app.models.user_agent import UserAgent
+from app.models.user_llm_provider import UserLLMProvider
+from app.models.llm_provider_audit_log import LLMProviderAuditLog
 from app.models.chat_session import ChatSession
 from app.redis_client import get_redis
 from app.qdrant_client import get_qdrant
@@ -120,6 +122,43 @@ async def test_agent(db_session: AsyncSession, test_user: User, test_project: Us
     await db_session.commit()
     await db_session.refresh(agent)
     return agent
+
+
+@pytest_asyncio.fixture
+async def test_llm_provider(db_session: AsyncSession, test_user: User) -> UserLLMProvider:
+    """Create test LLM provider."""
+    provider = UserLLMProvider(
+        user_id=test_user.id,
+        provider_type="openai",
+        display_name="My OpenAI Provider",
+        litellm_model_name="user550e8400_openai_abc12345",
+        config={"model": "gpt-4o", "max_tokens": 2048},
+        use_count=0,
+    )
+    db_session.add(provider)
+    await db_session.commit()
+    await db_session.refresh(provider)
+    return provider
+
+
+@pytest_asyncio.fixture
+async def test_llm_provider_audit_log(
+    db_session: AsyncSession, test_user: User, test_llm_provider: UserLLMProvider
+) -> LLMProviderAuditLog:
+    """Create test LLM provider audit log entry."""
+    audit_log = LLMProviderAuditLog(
+        user_id=test_user.id,
+        provider_id=test_llm_provider.id,
+        action="create",
+        new_values={"display_name": "My OpenAI Provider", "provider_type": "openai"},
+        success=True,
+        ip_address="127.0.0.1",
+        user_agent="test-client",
+    )
+    db_session.add(audit_log)
+    await db_session.commit()
+    await db_session.refresh(audit_log)
+    return audit_log
 
 
 @pytest_asyncio.fixture

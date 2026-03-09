@@ -17,6 +17,7 @@ from app.routes import (
     analytics,
     approvals,
     health,
+    llm_providers,
     monitoring,
     project_agents,
     project_chat,
@@ -155,6 +156,8 @@ app.include_router(project_tools.router)
 app.include_router(analytics.router)
 app.include_router(streaming.project_router)
 app.include_router(monitoring.router)
+app.include_router(llm_providers.private_router)
+app.include_router(llm_providers.public_router)
 
 
 @app.get("/")

@@ -3,6 +3,7 @@
 from app.models.approval_request import ApprovalRequest
 from app.models.chat_session import ChatSession
 from app.models.event_outbox import EventOutbox
+from app.models.llm_provider_audit_log import LLMProviderAuditLog
 from app.models.message import Message
 from app.models.task import Task
 from app.models.task_plan import TaskPlan
@@ -10,12 +11,15 @@ from app.models.task_plan_task import TaskPlanTask
 from app.models.tool_execution import ToolExecution
 from app.models.user import User
 from app.models.user_agent import UserAgent
+from app.models.user_llm_provider import UserLLMProvider
 from app.models.user_project import UserProject
 
 __all__ = [
     "User",
     "UserProject",
     "UserAgent",
+    "UserLLMProvider",
+    "LLMProviderAuditLog",
     "ChatSession",
     "Message",
     "Task",

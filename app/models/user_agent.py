@@ -22,6 +22,9 @@ class UserAgent(Base):
     project_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user_projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    llm_provider_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user_llm_providers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     config: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -34,6 +37,7 @@ class UserAgent(Base):
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="agents")
     project: Mapped["UserProject"] = relationship("UserProject", back_populates="agents")
+    llm_provider: Mapped["UserLLMProvider | None"] = relationship("UserLLMProvider", back_populates="agents")
     messages: Mapped[list["Message"]] = relationship(
         "Message", back_populates="agent", cascade="all, delete-orphan"
     )

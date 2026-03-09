@@ -27,6 +27,9 @@ class User(Base):
     agents: Mapped[list["UserAgent"]] = relationship(
         "UserAgent", back_populates="user", cascade="all, delete-orphan"
     )
+    llm_providers: Mapped[list["UserLLMProvider"]] = relationship(
+        "UserLLMProvider", back_populates="user", cascade="all, delete-orphan"
+    )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user", cascade="all, delete-orphan"
     )
