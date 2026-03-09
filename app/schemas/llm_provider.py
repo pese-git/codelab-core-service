@@ -19,6 +19,7 @@ class LLMProviderType(str, Enum):
     TOGETHER = "together"
     OLLAMA = "ollama"
     AZURE_OPENAI = "azure_openai"
+    OPENROUTER = "openrouter"
 
 
 class LLMProviderTypeInfo(BaseModel):

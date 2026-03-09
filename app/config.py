@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     litellm_url: str = Field(default="http://localhost:4000")
     litellm_master_key: str = Field(default="")
 
+    # Default LLM Provider (for starter pack initialization)
+    llm_default_model: str = Field(default="gpt-4-turbo-preview")
+    llm_default_embedding_model: str = Field(default="text-embedding-3-small")
+    llm_default_base_url: str = Field(default="https://openrouter.com/api/v1")
+    llm_default_api_key: str = Field(default="sk-you-openrouter-api-key-change-in-production")
+
     # CORS
     cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8080"]

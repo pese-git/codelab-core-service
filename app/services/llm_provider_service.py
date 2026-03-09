@@ -1,6 +1,5 @@
 """Service for managing user LLM providers."""
 
-import logging
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -8,12 +7,13 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.logging_config import get_logger
 from app.models.user_agent import UserAgent
 from app.models.user_llm_provider import UserLLMProvider
 from app.services.litellm_client import LiteLLMClient
 from app.services.llm_provider_audit_service import LLMProviderAuditService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LLMProviderNotFoundError(Exception):
@@ -124,7 +124,10 @@ class LLMProviderService:
             )
 
             logger.info(
-                f"LLM provider created: user={user_id}, provider={provider.id}, type={provider_type}"
+                "llm_provider_created",
+                user_id=str(user_id),
+                provider_id=str(provider.id),
+                provider_type=provider_type,
             )
 
             return provider
@@ -140,7 +143,11 @@ class LLMProviderService:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
-            logger.error(f"Failed to create LLM provider: {str(e)}")
+            logger.error(
+                "failed_to_create_llm_provider",
+                user_id=str(user_id),
+                error=str(e),
+            )
             raise
 
     async def get_user_provider(

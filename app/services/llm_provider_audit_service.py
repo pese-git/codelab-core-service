@@ -1,15 +1,15 @@
 """Service for auditing LLM provider operations."""
 
-import logging
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.logging_config import get_logger
 from app.models.llm_provider_audit_log import LLMProviderAuditLog
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LLMProviderAuditService:

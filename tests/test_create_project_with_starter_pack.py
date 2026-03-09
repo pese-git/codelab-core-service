@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
 from app.models import User, UserProject, UserAgent
@@ -29,10 +28,10 @@ async def test_create_project_with_starter_pack():
             name="Test Project",
             workspace_path="/test/workspace"
         )
-        
+
         # Create project directly using the same logic as endpoint
         from app.core.starter_pack import initialize_starter_pack
-        
+
         project = UserProject(
             user_id=user_id,
             name=project_data.name,
@@ -64,11 +63,12 @@ async def test_create_project_with_starter_pack():
         assert "DataAnalyst" in agent_names
         assert "DocumentWriter" in agent_names
 
-        # Verify all agents belong to the project
+        # Verify all agents belong to the project and have llm_provider_id set
         for agent in agents:
             assert agent.user_id == user_id
             assert agent.project_id == project.id
             assert agent.status == "ready"
+            assert agent.llm_provider_id is not None, "Agent must have llm_provider_id set"
 
         # Verify agents can be queried from database
         result = await db.execute(
@@ -77,18 +77,22 @@ async def test_create_project_with_starter_pack():
         db_agents = result.scalars().all()
         assert len(db_agents) == 5
 
+        # Verify all agents have the same provider
+        provider_ids = {agent.llm_provider_id for agent in db_agents}
+        assert len(provider_ids) == 1, "All agents should use the same provider"
+
 
 @pytest.mark.asyncio
 async def test_starter_pack_configuration():
     """Test that starter pack configuration is correct."""
-    from app.core.starter_pack import get_starter_pack_config, DEFAULT_AGENTS_CONFIG
+    from app.core.starter_pack import get_starter_pack_config
 
     config = get_starter_pack_config()
-    
+
     assert config["name"] == "Default Starter Pack"
     assert config["agents_count"] == 5
     assert len(config["agents"]) == 5
-    
+
     # Verify each agent has required fields
     for agent_config in config["agents"]:
         assert "name" in agent_config

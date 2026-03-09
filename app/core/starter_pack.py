@@ -3,9 +3,14 @@
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.logging_config import get_logger
 from app.models.user_agent import UserAgent
+from app.models.user_llm_provider import UserLLMProvider
+
+logger = get_logger(__name__)
 
 
 # Default agents configuration for new projects
@@ -528,27 +533,126 @@ Output MUST be valid JSON:
 ]
 
 
+async def get_or_create_user_default_provider(
+    db: AsyncSession,
+    user_id: UUID,
+) -> UUID:
+    """Получить или создать default LLM провайдер для пользователя.
+
+    Логика:
+    1. Если у пользователя есть провайдеры - вернуть первый (по дате создания)
+    2. Если нет - создать default провайдер с конфигом из environment
+
+    Args:
+        db: Database session
+        user_id: ID пользователя
+
+    Returns:
+        UUID существующего или созданного провайдера
+
+    Raises:
+        ValueError: Если не удалось создать default провайдер
+    """
+    # 1. Проверить, есть ли уже провайдеры у пользователя
+    result = await db.execute(
+        select(UserLLMProvider.id)
+        .where(UserLLMProvider.user_id == user_id)
+        .order_by(UserLLMProvider.created_at)
+        .limit(1)
+    )
+    provider_id = result.scalars().first()
+
+    if provider_id:
+        logger.info(
+            "using_existing_provider",
+            user_id=str(user_id),
+            provider_id=str(provider_id),
+        )
+        return provider_id
+
+    # 2. Если провайдеров нет, создать default провайдер
+    logger.info(
+        "creating_default_provider",
+        user_id=str(user_id),
+    )
+
+    from app.config import settings
+    from app.services.llm_provider_service import LLMProviderService
+
+    service = LLMProviderService(db)
+
+    try:
+        # Создаём default провайдер с конфигом из environment
+        default_provider = await service.create_user_provider(
+            user_id=user_id,
+            provider_type="openrouter",
+            display_name="Default OpenRouter Provider",
+            api_key=settings.llm_default_api_key,
+            config={
+                "model": settings.llm_default_model,
+                "base_url": settings.llm_default_base_url,
+                "embedding_model": settings.llm_default_embedding_model,
+                "is_default": True,
+            },
+        )
+
+        logger.info(
+            "default_provider_created",
+            user_id=str(user_id),
+            provider_id=str(default_provider.id),
+            provider_type="openrouter",
+        )
+
+        return default_provider.id
+
+    except Exception as e:
+        logger.error(
+            "failed_to_create_default_provider",
+            user_id=str(user_id),
+            error=str(e),
+        )
+        raise ValueError(
+            f"Failed to create default LLM provider for user {user_id}: {str(e)}"
+        )
+
+
 async def initialize_starter_pack(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
+    llm_provider_id: UUID | None = None,
 ) -> list[UserAgent]:
     """Initialize default agents for a new project.
 
     Creates the Default Starter Pack with pre-configured agents when a new project is created.
+    If llm_provider_id is not provided, gets or creates a default provider.
 
     Args:
         db: Database session
         user_id: ID of the user who owns the project
         project_id: ID of the project to initialize
+        llm_provider_id: Optional ID of LLM provider. If not provided, gets or creates default.
 
     Returns:
         List of created UserAgent instances
 
+    Raises:
+        ValueError: If failed to get or create LLM provider
+
     Example:
         agents = await initialize_starter_pack(db, user_id, project_id)
-        # agents is now a list of 3 UserAgent objects
+        # agents is now a list of 3 UserAgent objects with default provider
     """
+    # If llm_provider_id not provided, get or create default provider
+    if llm_provider_id is None:
+        llm_provider_id = await get_or_create_user_default_provider(db, user_id)
+        logger.info(
+            "initialized_with_provider",
+            user_id=str(user_id),
+            project_id=str(project_id),
+            provider_id=str(llm_provider_id),
+        )
+
     created_agents = []
 
     for agent_config in DEFAULT_AGENTS_CONFIG:
@@ -558,6 +662,7 @@ async def initialize_starter_pack(
             name=agent_config["name"],
             config=agent_config["config"],
             status="ready",
+            llm_provider_id=llm_provider_id,
         )
         db.add(agent)
         created_agents.append(agent)

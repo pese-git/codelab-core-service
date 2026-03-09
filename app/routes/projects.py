@@ -47,7 +47,7 @@ async def create_project(
     """
     from app.logging_config import get_logger
     logger = get_logger(__name__)
-    
+
     user_id = get_current_user_id(request)
 
     # Check if project with same name already exists for this user
@@ -57,7 +57,7 @@ async def create_project(
         )
     )
     existing_project = result.scalar_one_or_none()
-    
+
     if existing_project:
         logger.info(
             "project_already_exists",
@@ -78,6 +78,7 @@ async def create_project(
 
     # Initialize Default Starter Pack agents for the project
     try:
+        # initialize_starter_pack will automatically get or create a default provider
         agents = await initialize_starter_pack(db, user_id, project.id)
         logger.info(
             "starter_pack_initialized",
