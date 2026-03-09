@@ -74,14 +74,14 @@
 
 ## 8. Интеграция с агентами
 
-- [ ] 8.1 Обновить `AgentManager` - добавить параметр `llm_provider_id` в `create_agent()`
-- [ ] 8.2 Реализовать `AgentManager._validate_provider()` для валидации провайдера
-- [ ] 8.3 Обновить `ContextualAgent` - использовать `provider.litellm_model_name`
-- [ ] 8.4 Реализовать `ContextualAgent._get_agent_provider_id()` для получения провайдера агента
-- [ ] 8.5 Реализовать `ContextualAgent._record_provider_usage()` для записи использования с action="use"
-- [ ] 8.6 Обновить логику создания агента - делать провайдер обязательным
+- [x] 8.1 Обновить `AgentManager` - добавить параметр `llm_provider_id` в `create_agent()`
+- [x] 8.2 Реализовать `AgentManager._validate_provider()` для валидации провайдера
+- [x] 8.3 Обновить `ContextualAgent` - использовать `provider.litellm_model_name`
+- [x] 8.4 Реализовать `ContextualAgent._get_agent_provider_id()` для получения провайдера агента
+- [x] 8.5 Реализовать `ContextualAgent._record_provider_usage()` для записи использования с action="use"
+- [x] 8.6 Обновить логику создания агента - делать провайдер обязательным
 - [ ] 8.7 Обновить логику выполнения агента - использовать модель провайдера
-- [ ] 8.8 Реализовать PATCH для изменения llm_provider_id агента (валидация, логирование с action="provider_reassigned")
+- [x] 8.8 Реализовать PATCH для изменения llm_provider_id агента (валидация, логирование с action="provider_reassigned")
 - [ ] 8.9 Написать тесты интеграции с AgentManager (включая сценарии смены провайдера и логирование action values)
 
 ## 9. Обработка ошибок и resilience

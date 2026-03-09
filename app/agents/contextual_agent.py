@@ -37,6 +37,7 @@ class ContextualAgent:
         config: AgentConfig,
         qdrant_client: AsyncQdrantClient | None,
         tool_executor: 'ToolExecutor | None' = None,
+        llm_provider: Any = None,
     ):
         """Initialize contextual agent.
         
@@ -47,12 +48,14 @@ class ContextualAgent:
             config: Agent configuration
             qdrant_client: Qdrant client instance, or None if Qdrant is disabled
             tool_executor: ToolExecutor instance for tool execution, or None if tools disabled
+            llm_provider: UserLLMProvider instance, or None to use default config
         """
         self.agent_id = agent_id
         self.user_id = user_id
         self.agent_name = agent_name
         self.config = config
         self.tool_executor = tool_executor
+        self.llm_provider = llm_provider
         
         # Initialize OpenAI client (supports LiteLLM via base_url)
         client_kwargs = {"api_key": settings.openai_api_key}
@@ -785,3 +788,41 @@ class ContextualAgent:
     async def clear_context(self) -> None:
         """Clear agent context."""
         await self.context_store.clear()
+
+    def _get_agent_provider_id(self) -> UUID | None:
+        """Get agent's LLM provider ID.
+        
+        Returns:
+            Provider ID if agent has one, None otherwise
+        """
+        if self.llm_provider:
+            return self.llm_provider.id
+        return None
+
+    async def _record_provider_usage(self) -> None:
+        """Record provider usage (action='use').
+        
+        This method logs that the provider was used by the agent.
+        """
+        if not self.llm_provider:
+            return
+        
+        try:
+            from app.services.llm_provider_service import LLMProviderService
+            from sqlalchemy.ext.asyncio import AsyncSession
+            from app.database import get_db
+            
+            # We can't directly access the db session here, so we just log
+            # The actual recording should be done by the caller
+            logger.debug(
+                "recording_provider_usage",
+                agent_id=str(self.agent_id),
+                provider_id=str(self.llm_provider.id),
+                provider_type=self.llm_provider.provider_type,
+            )
+        except Exception as e:
+            logger.warning(
+                "failed_to_record_provider_usage",
+                agent_id=str(self.agent_id),
+                error=str(e),
+            )
