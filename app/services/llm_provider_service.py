@@ -227,8 +227,18 @@ class LLMProviderService:
             
         Raises:
             LLMProviderNotFoundError: Если провайдер не найден
+            ValueError: Если попытка обновить api_key
         """
         provider = await self.get_user_provider(user_id, provider_id)
+
+        # Валидация: запрещаем обновление API ключа
+        if config is not None and "api_key" in config:
+            logger.warning(
+                f"Attempt to update api_key for provider {provider_id}: user={user_id}"
+            )
+            raise ValueError(
+                "API key cannot be updated. To change API key, delete and recreate the provider."
+            )
 
         # Сохраняем старые значения для аудита
         old_values = {

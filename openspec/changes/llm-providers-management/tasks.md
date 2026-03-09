@@ -86,9 +86,9 @@
 
 ## 9. Обработка ошибок и resilience
 
-- [ ] 9.1 Реализовать retry logic с exponential backoff для LiteLLM API calls (макс 3 попытки, стартовая задержка 1s)
-- [ ] 9.2 Добавить валидацию на запрет обновления api_key в update_user_provider()
-- [ ] 9.3 Добавить тесты для timeout scenarios (60s timeout) в unit/integration тестах
+- [x] 9.1 Реализовать retry logic с exponential backoff для LiteLLM API calls (макс 3 попытки, стартовая задержка 1s)
+- [x] 9.2 Добавить валидацию на запрет обновления api_key в update_user_provider()
+- [x] 9.3 Добавить тесты для timeout scenarios (60s timeout) в unit/integration тестах
 
 ## 10. Конфигурация
 

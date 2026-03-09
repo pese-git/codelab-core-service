@@ -328,3 +328,84 @@ async def test_create_provider_failure_logs_audit(
         failed_audit = result.scalar()
         assert failed_audit is not None
         assert failed_audit.error_message is not None
+
+
+@pytest.mark.asyncio
+async def test_test_provider_timeout(
+    llm_provider_service: LLMProviderService,
+    test_user,
+    test_llm_provider,
+):
+    """Test provider testing with timeout (60s timeout)."""
+    import httpx
+    
+    with patch.object(llm_provider_service.litellm_client, "test_model") as mock_test:
+        # Simulate timeout
+        mock_test.return_value = {
+            "success": False,
+            "response": None,
+            "latency_ms": None,
+            "error": "Request timeout after 60 seconds",
+        }
+
+        result = await llm_provider_service.test_provider(
+            user_id=test_user.id,
+            provider_id=test_llm_provider.id,
+        )
+
+        assert result["success"] is False
+        assert "timeout" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_create_provider_timeout(
+    db_session: AsyncSession,
+    llm_provider_service: LLMProviderService,
+    test_user,
+):
+    """Test provider creation with timeout scenario."""
+    import httpx
+    
+    with patch.object(llm_provider_service.litellm_client, "add_model") as mock_add:
+        mock_add.side_effect = httpx.TimeoutException("Request timeout")
+
+        with pytest.raises(httpx.TimeoutException):
+            await llm_provider_service.create_user_provider(
+                user_id=test_user.id,
+                provider_type="openai",
+                display_name="Timeout Test",
+                api_key="sk-test",
+            )
+
+
+@pytest.mark.asyncio
+async def test_update_provider_forbidden_api_key_update(
+    llm_provider_service: LLMProviderService,
+    test_user,
+    test_llm_provider,
+):
+    """Test that updating api_key raises ValueError."""
+    with pytest.raises(ValueError, match="API key cannot be updated"):
+        await llm_provider_service.update_user_provider(
+            user_id=test_user.id,
+            provider_id=test_llm_provider.id,
+            config={"api_key": "sk-new-key"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_provider_allowed_without_api_key(
+    db_session: AsyncSession,
+    llm_provider_service: LLMProviderService,
+    test_user,
+    test_llm_provider,
+):
+    """Test that updating config without api_key is allowed."""
+    updated = await llm_provider_service.update_user_provider(
+        user_id=test_user.id,
+        provider_id=test_llm_provider.id,
+        config={"model": "gpt-4-turbo", "max_tokens": 4096},
+    )
+
+    assert updated.config["model"] == "gpt-4-turbo"
+    assert updated.config["max_tokens"] == 4096
