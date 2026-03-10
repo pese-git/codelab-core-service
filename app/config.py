@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     enable_trace_db_persistence: bool = Field(default=False)
     trace_retention_days: int = Field(default=30)
 
+    # Langfuse Integration (LLM Observability)
+    langfuse_enabled: bool = Field(default=False)
+    langfuse_host: str = Field(default="http://localhost:3000")
+    langfuse_public_key: str = Field(default="")
+    langfuse_secret_key: str = Field(default="")
+    langfuse_retention_days: int = Field(default=30)
+
     # LiteLLM
     litellm_url: str = Field(default="http://localhost:4000")
     litellm_master_key: str = Field(default="")

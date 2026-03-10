@@ -5,15 +5,15 @@
 - [x] 1.1 Создать `docker-compose.langfuse.yml` с сервисами PostgreSQL, Langfuse и Redis
 - [x] 1.2 Добавить сервисы Langfuse в основной `docker-compose.yml` с правильной сетью
 - [x] 1.3 Добавить LANGFUSE_* переменные окружения в `.env.example` и `.env` (локальная разработка)
-- [ ] 1.4 Проверить что Docker Compose stack запускается и Langfuse доступен на http://localhost:3000
-- [ ] 1.5 Протестировать health check Langfuse и начальную настройку
+- [x] 1.4 Проверить что Docker Compose stack запускается и Langfuse доступен на http://localhost:3000
+- [x] 1.5 Протестировать health check Langfuse и начальную настройку
 
 ## 2. Конфигурация и зависимости (Фаза 1-2)
 
-- [ ] 2.1 Добавить пакет `langfuse` в `pyproject.toml` зависимости (последняя версия)
-- [ ] 2.2 Обновить `app/config.py` с LANGFUSE_ENABLED, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_RETENTION_DAYS
+- [x] 2.1 Добавить пакет `langfuse` в `pyproject.toml` зависимости (последняя версия)
+- [x] 2.2 Обновить `app/config.py` с LANGFUSE_ENABLED, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_RETENTION_DAYS
 - [ ] 2.3 Сконфигурировать `litellm_config.yaml` с Langfuse callbacks (success_callback, failure_callback, flush_interval=30)
-- [ ] 2.4 Создать `.env.example` с шаблонными LANGFUSE_* переменными
+- [x] 2.4 Создать `.env.example` с шаблонными LANGFUSE_* переменными
 - [ ] 2.5 Протестировать загрузку конфига и валидацию (с LANGFUSE_ENABLED=true и false)
 
 ## 3. Основной сервис: LangfuseIntegration (Фаза 2)
