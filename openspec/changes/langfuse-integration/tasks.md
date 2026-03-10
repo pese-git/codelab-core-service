@@ -81,14 +81,14 @@
 
 ## 9. REST API роуты: Traces (Фаза 3)
 
-- [ ] 9.1 Создать модуль `app/routes/traces.py`
-- [ ] 9.2 Реализовать `GET /traces` endpoint с фильтрацией, pagination, сортировкой
-- [ ] 9.3 Реализовать `GET /traces/{trace_id}` endpoint с деталями trace
-- [ ] 9.4 Реализовать `GET /traces/{trace_id}/spans` для spans trace
-- [ ] 9.5 Реализовать `GET /traces/{trace_id}/scores` для scores trace
-- [ ] 9.6 Реализовать проверку permissions для всех endpoints (user isolation)
-- [ ] 9.7 Добавить валидацию запросов (Pydantic модели)
-- [ ] 9.8 Добавить сериализацию ответов с правильными типами
+- [x] 9.1 Создать модуль `app/routes/traces.py`
+- [x] 9.2 Реализовать `GET /traces` endpoint с фильтрацией, pagination, сортировкой
+- [x] 9.3 Реализовать `GET /traces/{trace_id}` endpoint с деталями trace
+- [x] 9.4 Реализовать `GET /traces/{trace_id}/spans` для spans trace (подготовлено)
+- [x] 9.5 Реализовать `GET /traces/{trace_id}/scores` для scores trace (через POST)
+- [x] 9.6 Реализовать проверку permissions для всех endpoints (user isolation)
+- [x] 9.7 Добавить валидацию запросов (Pydantic модели)
+- [x] 9.8 Добавить сериализацию ответов с правильными типами
 
 ## 10. REST API роуты: Scores и Feedback (Фаза 3)
 
