@@ -16,6 +16,7 @@ from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
+from app.services.langfuse_integration import get_langfuse
 from app.tracing import get_tracer
 from app.vectorstore.agent_context_store import AgentContextStore
 
@@ -79,6 +80,9 @@ class ContextualAgent:
             llm_provider=llm_provider,
             embedding_llm_provider=embedding_llm_provider,
         )
+        
+        # Initialize Langfuse integration for LLM observability
+        self.langfuse = get_langfuse()
     
     def _get_provider_name(self) -> str:
         """Get provider name for logging purposes.

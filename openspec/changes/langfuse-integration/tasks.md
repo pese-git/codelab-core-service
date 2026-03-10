@@ -12,9 +12,9 @@
 
 - [x] 2.1 Добавить пакет `langfuse` в `pyproject.toml` зависимости (последняя версия)
 - [x] 2.2 Обновить `app/config.py` с LANGFUSE_ENABLED, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST, LANGFUSE_RETENTION_DAYS
-- [ ] 2.3 Сконфигурировать `litellm_config.yaml` с Langfuse callbacks (success_callback, failure_callback, flush_interval=30)
+- [x] 2.3 Сконфигурировать `litellm_config.yaml` с Langfuse callbacks (success_callback, failure_callback, flush_interval=30)
 - [x] 2.4 Создать `.env.example` с шаблонными LANGFUSE_* переменными
-- [ ] 2.5 Протестировать загрузку конфига и валидацию (с LANGFUSE_ENABLED=true и false)
+- [x] 2.5 Протестировать загрузку конфига и валидацию (с LANGFUSE_ENABLED=true и false)
 
 ## 3. Основной сервис: LangfuseIntegration (Фаза 2)
 
