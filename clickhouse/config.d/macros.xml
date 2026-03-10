@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Макросы для ReplicatedMergeTree таблиц (single-node) -->
+    <macros>
+        <shard>1</shard>
+        <replica>1</replica>
+    </macros>
+</clickhouse>

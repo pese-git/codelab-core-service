@@ -2,9 +2,9 @@
 
 ## 1. Подготовка инфраструктуры (Фаза 1)
 
-- [ ] 1.1 Создать `docker-compose.langfuse.yml` с сервисами PostgreSQL, Langfuse и Redis
-- [ ] 1.2 Добавить сервисы Langfuse в основной `docker-compose.yml` с правильной сетью
-- [ ] 1.3 Добавить LANGFUSE_* переменные окружения в `.env.example` и `.env` (локальная разработка)
+- [x] 1.1 Создать `docker-compose.langfuse.yml` с сервисами PostgreSQL, Langfuse и Redis
+- [x] 1.2 Добавить сервисы Langfuse в основной `docker-compose.yml` с правильной сетью
+- [x] 1.3 Добавить LANGFUSE_* переменные окружения в `.env.example` и `.env` (локальная разработка)
 - [ ] 1.4 Проверить что Docker Compose stack запускается и Langfuse доступен на http://localhost:3000
 - [ ] 1.5 Протестировать health check Langfuse и начальную настройку
 

@@ -97,33 +97,214 @@ services:
       timeout: 10s
       retries: 3
 
-  # LiteLLM Proxy для управления LLM провайдерами
+  # ClickHouse для Langfuse V3
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: codelab-clickhouse
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    #  - ./clickhouse/config.d/macros.xml:/etc/clickhouse-server/config.d/macros.xml
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+    restart: unless-stopped
+
+  # MinIO S3 Storage для Langfuse
+  minio:
+    image: cgr.dev/chainguard/minio
+    container_name: codelab-minio
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports:
+      - "9900:9000"
+      - "9901:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
+  # Langfuse Worker
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    container_name: codelab-langfuse-worker
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "3030:3030"
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: langfuse-secret-change-me
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/langfuse
+      SALT: langfuse-salt-change-me
+      ENCRYPTION_KEY: bf5672b1950e122c1b797146af33a32cd3c794615c8bb27ef5315cf38101aa1b
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      
+      # ClickHouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      
+      # S3 / MinIO
+      LANGFUSE_USE_AZURE_BLOB: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+      LANGFUSE_S3_BATCH_EXPORT_BUCKET: langfuse
+      LANGFUSE_S3_BATCH_EXPORT_PREFIX: exports/
+      LANGFUSE_S3_BATCH_EXPORT_REGION: auto
+      LANGFUSE_S3_BATCH_EXPORT_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_BATCH_EXPORT_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_BATCH_EXPORT_FORCE_PATH_STYLE: "true"
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ""
+      REDIS_TLS_ENABLED: "false"
+
+  # Langfuse Web UI
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:3
+    container_name: codelab-langfuse-web
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: langfuse-secret-change-me
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/langfuse
+      SALT: langfuse-salt-change-me
+      ENCRYPTION_KEY: bf5672b1950e122c1b797146af33a32cd3c794615c8bb27ef5315cf38101aa1b
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      
+      # ClickHouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      
+      # S3 / MinIO
+      LANGFUSE_USE_AZURE_BLOB: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+      LANGFUSE_S3_BATCH_EXPORT_BUCKET: langfuse
+      LANGFUSE_S3_BATCH_EXPORT_PREFIX: exports/
+      LANGFUSE_S3_BATCH_EXPORT_REGION: auto
+      LANGFUSE_S3_BATCH_EXPORT_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_BATCH_EXPORT_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_BATCH_EXPORT_FORCE_PATH_STYLE: "true"
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ""
+      REDIS_TLS_ENABLED: "false"
+      
+      # Initialization
+      LANGFUSE_INIT_ORG_ID: default-org
+      LANGFUSE_INIT_ORG_NAME: "Default Organization"
+      LANGFUSE_INIT_PROJECT_ID: default-project
+      LANGFUSE_INIT_PROJECT_NAME: "Default Project"
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk_defaultkey
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk_defaultsecret
+      LANGFUSE_INIT_USER_EMAIL: admin@langfuse.local
+      LANGFUSE_INIT_USER_NAME: Admin User
+      LANGFUSE_INIT_USER_PASSWORD: langfuse123
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # LiteLLM Proxy
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: codelab-litellm
     ports:
       - "4000:4000"
     environment:
-      # Мастер ключ для управления провайдерами через API
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-super-secret-key-change-in-production}
+      LITELLM_MASTER_KEY: super-secret-key-change-in-production
       LITELLM_URL: http://0.0.0.0:4000
-      
-      # PostgreSQL подключение для управления моделями и ключами
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/litellm
-      
-      # Сохранение моделей в БД (для динамического добавления)
       STORE_MODEL_IN_DB: "True"
-      
-      # Redis для кэширования
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 1
       REDIS_URL: redis://redis:6379/1
-      
-      # Логирование
       LITELLM_LOG: INFO
-      
-      # Настройки кэширования
       CACHE: "true"
     depends_on:
       postgres:
@@ -157,6 +338,7 @@ services:
       QDRANT_URL: http://qdrant:6333
       OTLP_EXPORTER_URL: http://jaeger:4318
       LITELLM_URL: http://litellm:4000
+      LANGFUSE_HOST: http://langfuse:3000
       PYTHONUNBUFFERED: 1
     env_file:
       - .env
@@ -168,6 +350,8 @@ services:
       qdrant:
         condition: service_healthy
       litellm:
+        condition: service_started
+      langfuse-web:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -192,3 +376,5 @@ volumes:
   qdrant_data:
   prometheus_data:
   grafana_data:
+  clickhouse_data:
+  minio_data:
