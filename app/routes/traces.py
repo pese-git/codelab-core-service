@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.user_worker_space import UserWorkerSpace
-from app.db.session import get_db_session
+from app.database import get_db
 from app.logging_config import get_logger
-from app.middleware.user_isolation import get_current_user_id, get_workspace_id
+from app.middleware.user_isolation import get_current_user_id
 from app.services.traces_service import get_traces_service
 
 logger = get_logger(__name__)
@@ -22,14 +22,14 @@ router = APIRouter(prefix="/traces", tags=["traces"])
 async def list_traces(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    workspace_id: Optional[UUID] = None,
     agent_name: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     order_by: str = Query("created_at", regex="^(created_at|duration)$"),
     order_direction: str = Query("desc", regex="^(asc|desc)$"),
     current_user_id: UUID = Depends(get_current_user_id),
-    workspace_id: UUID = Depends(get_workspace_id),
-    db_session: AsyncSession = Depends(get_db_session),
+    db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Получить список traces для пользователя.
@@ -51,7 +51,6 @@ async def list_traces(
 
         result = await traces_service.get_traces(
             user_id=current_user_id,
-            workspace_id=workspace_id,
             agent_name=agent_name,
             start_date=start_date,
             end_date=end_date,
@@ -85,9 +84,9 @@ async def list_traces(
 @router.get("/{trace_id}", name="get_trace")
 async def get_trace(
     trace_id: str,
+    workspace_id: Optional[UUID] = None,
     current_user_id: UUID = Depends(get_current_user_id),
-    workspace_id: UUID = Depends(get_workspace_id),
-    db_session: AsyncSession = Depends(get_db_session),
+    db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Получить детали trace по ID.
@@ -112,6 +111,7 @@ async def get_trace(
         logger.info(
             "trace_retrieved",
             trace_id=trace_id,
+            workspace_id=str(workspace_id),
             user_id=str(current_user_id),
         )
 
@@ -124,6 +124,7 @@ async def get_trace(
             "trace_retrieval_failed",
             error=str(e),
             trace_id=trace_id,
+            workspace_id=str(workspace_id),
         )
         raise HTTPException(
             status_code=500,
@@ -137,9 +138,9 @@ async def record_trace_score(
     score_name: str = Query(...),
     score_value: float = Query(..., ge=0.0, le=1.0),
     comment: Optional[str] = None,
+    workspace_id: Optional[UUID] = None,
     current_user_id: UUID = Depends(get_current_user_id),
-    workspace_id: UUID = Depends(get_workspace_id),
-    db_session: AsyncSession = Depends(get_db_session),
+    db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Записать score (оценку) для trace.
@@ -179,6 +180,7 @@ async def record_trace_score(
             trace_id=trace_id,
             score_name=score_name,
             score_value=score_value,
+            workspace_id=str(workspace_id),
             user_id=str(current_user_id),
         )
 
@@ -206,9 +208,9 @@ async def record_trace_score(
 @router.get("/analytics/summary", name="traces_summary")
 async def get_traces_summary(
     period: str = Query("7d", regex="^(7d|30d|all)$"),
+    workspace_id: Optional[UUID] = None,
     current_user_id: UUID = Depends(get_current_user_id),
-    workspace_id: UUID = Depends(get_workspace_id),
-    db_session: AsyncSession = Depends(get_db_session),
+    db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Получить summary аналитику для traces.
@@ -231,6 +233,7 @@ async def get_traces_summary(
         logger.info(
             "traces_summary_retrieved",
             period=period,
+            workspace_id=str(workspace_id),
             user_id=str(current_user_id),
         )
 
@@ -240,6 +243,7 @@ async def get_traces_summary(
         logger.error(
             "traces_summary_failed",
             error=str(e),
+            workspace_id=str(workspace_id),
             period=period,
         )
         raise HTTPException(
@@ -250,9 +254,9 @@ async def get_traces_summary(
 
 @router.get("/analytics/agents", name="agents_analytics")
 async def get_agents_analytics(
+    workspace_id: Optional[UUID] = None,
     current_user_id: UUID = Depends(get_current_user_id),
-    workspace_id: UUID = Depends(get_workspace_id),
-    db_session: AsyncSession = Depends(get_db_session),
+    db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Получить аналитику по агентам.
@@ -292,9 +296,9 @@ async def get_agents_analytics(
 async def get_cost_analysis(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    workspace_id: Optional[UUID] = None,
     current_user_id: UUID = Depends(get_current_user_id),
-    workspace_id: UUID = Depends(get_workspace_id),
-    db_session: AsyncSession = Depends(get_db_session),
+    db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Получить анализ стоимости LLM операций.

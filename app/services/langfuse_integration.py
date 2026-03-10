@@ -7,7 +7,6 @@ from uuid import UUID
 
 import structlog
 from langfuse import Langfuse
-from langfuse.client import StatefulTraceClient, StatefulSpanClient
 
 from app.config import settings
 
@@ -38,7 +37,7 @@ class LangfuseIntegration:
         """
         self.enabled = settings.langfuse_enabled
         self.client: Optional[Langfuse] = None
-        self._current_trace: Optional[StatefulTraceClient] = None
+        self._current_trace: Optional[Any] = None
 
         if not self.enabled:
             struct_logger.info("langfuse_disabled", reason="LANGFUSE_ENABLED=false")
@@ -98,7 +97,7 @@ class LangfuseIntegration:
         user_id: Optional[UUID] = None,
         workspace_id: Optional[UUID] = None,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> Optional[StatefulTraceClient]:
+    ) -> Optional[Any]:
         """
         Создает новый trace в Langfuse.
 
@@ -109,7 +108,7 @@ class LangfuseIntegration:
             metadata: Дополнительные метаданные trace
 
         Returns:
-            StatefulTraceClient или None если disabled/error
+            Trace object или None если disabled/error
         """
         if not self.enabled or not self.client:
             return None
@@ -158,13 +157,13 @@ class LangfuseIntegration:
 
     def create_span(
         self,
-        trace: StatefulTraceClient,
+        trace: Any,
         name: str,
         input_data: Optional[Any] = None,
         output_data: Optional[Any] = None,
         metadata: Optional[dict[str, Any]] = None,
         status: str = "success",
-    ) -> Optional[StatefulSpanClient]:
+    ) -> Optional[Any]:
         """
         Создает span внутри trace.
 
@@ -177,7 +176,7 @@ class LangfuseIntegration:
             status: Статус span ("success", "error", etc)
 
         Returns:
-            StatefulSpanClient или None если disabled/error
+            Span object или None если disabled/error
         """
         if not self.enabled or not self.client or not trace:
             return None
@@ -358,7 +357,7 @@ class LangfuseIntegration:
             metadata: Дополнительные метаданные
 
         Yields:
-            StatefulTraceClient или None если disabled
+            Trace object или None если disabled
         """
         trace = self.create_trace(
             name=name,

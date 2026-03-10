@@ -60,24 +60,24 @@
 
 ## 7. Сервис Traces: Логика query и фильтрации (Фаза 3)
 
-- [ ] 7.1 Создать модуль `app/services/traces_service.py`
-- [ ] 7.2 Реализовать `get_traces()` с фильтрацией (user_id, workspace_id, agent_name, временной диапазон)
-- [ ] 7.3 Реализовать поддержку pagination (limit, offset, total_count)
-- [ ] 7.4 Реализовать сортировку (по created_at, duration)
-- [ ] 7.5 Реализовать `get_trace_by_id()` с полными деталями
-- [ ] 7.6 Реализовать `get_traces_for_workspace()` с проверкой прав
-- [ ] 7.7 Реализовать analytics агрегацию: summary, by_agent, cost_analysis
-- [ ] 7.8 Добавить комплексную обработку ошибок и логирование
+- [x] 7.1 Создать модуль `app/services/traces_service.py`
+- [x] 7.2 Реализовать `get_traces()` с фильтрацией (user_id, workspace_id, agent_name, временной диапазон)
+- [x] 7.3 Реализовать поддержку pagination (limit, offset, total_count)
+- [x] 7.4 Реализовать сортировку (по created_at, duration)
+- [x] 7.5 Реализовать `get_trace_by_id()` с полными деталями
+- [x] 7.6 Реализовать `get_traces_for_workspace()` с проверкой прав
+- [x] 7.7 Реализовать analytics агрегацию: summary, by_agent, cost_analysis
+- [x] 7.8 Добавить комплексную обработку ошибок и логирование
 
 ## 8. Модульные тесты: Traces Service (Фаза 3)
 
-- [ ] 8.1 Создать `tests/test_traces_service.py`
-- [ ] 8.2 Протестировать get_traces с различными фильтрами
-- [ ] 8.3 Протестировать pagination (limit, offset, total_count)
-- [ ] 8.4 Протестировать сортировку по разным полям
-- [ ] 8.5 Протестировать permissions (юзер видит только свои traces)
-- [ ] 8.6 Протестировать analytics функции (summary, by_agent, cost)
-- [ ] 8.7 Достичь 100% покрытия кода для TracesService
+- [x] 8.1 Создать `tests/test_traces_service.py`
+- [x] 8.2 Протестировать get_traces с различными фильтрами
+- [x] 8.3 Протестировать pagination (limit, offset, total_count)
+- [x] 8.4 Протестировать сортировку по разным полям
+- [x] 8.5 Протестировать permissions (юзер видит только свои traces)
+- [x] 8.6 Протестировать analytics функции (summary, by_agent, cost)
+- [x] 8.7 Достичь 100% покрытия кода для TracesService
 
 ## 9. REST API роуты: Traces (Фаза 3)
 
@@ -92,31 +92,31 @@
 
 ## 10. REST API роуты: Scores и Feedback (Фаза 3)
 
-- [ ] 10.1 Создать модуль `app/routes/feedback.py`
-- [ ] 10.2 Реализовать `POST /traces/{trace_id}/scores` для записи scores
-- [ ] 10.3 Реализовать валидацию запросов (score name, value 0-1 диапазон, comment)
-- [ ] 10.4 Реализовать проверку permissions
-- [ ] 10.5 Добавить обработку ошибок (invalid trace_id, invalid value)
-- [ ] 10.6 Добавить логирование для записи scores
+- [x] 10.1 Создать модуль `app/routes/feedback.py`
+- [x] 10.2 Реализовать `POST /traces/{trace_id}/scores` для записи scores
+- [x] 10.3 Реализовать валидацию запросов (score name, value 0-1 диапазон, comment)
+- [x] 10.4 Реализовать проверку permissions
+- [x] 10.5 Добавить обработку ошибок (invalid trace_id, invalid value)
+- [x] 10.6 Добавить логирование для записи scores
 
 ## 11. REST API роуты: Analytics (Фаза 3)
 
-- [ ] 11.1 Реализовать `GET /analytics/traces/summary` endpoint (period=7d/30d/all)
-- [ ] 11.2 Реализовать `GET /analytics/agents` endpoint с метриками агентов
-- [ ] 11.3 Реализовать `GET /analytics/cost` endpoint для cost анализа
-- [ ] 11.4 Добавить валидацию запросов и проверку permissions
-- [ ] 11.5 Добавить caching для analytics queries (опционально если нужно)
+- [x] 11.1 Реализовать `GET /analytics/traces/summary` endpoint (period=7d/30d/all)
+- [x] 11.2 Реализовать `GET /analytics/agents` endpoint с метриками агентов
+- [x] 11.3 Реализовать `GET /analytics/cost` endpoint для cost анализа
+- [x] 11.4 Добавить валидацию запросов и проверку permissions
+- [x] 11.5 Добавить caching для analytics queries (опционально если нужно)
 
 ## 12. Integration тесты: API роуты (Фаза 3)
 
-- [ ] 12.1 Создать `tests/test_traces_api.py` для тестирования роутов
-- [ ] 12.2 Протестировать GET /traces с фильтрами и pagination
-- [ ] 12.3 Протестировать GET /traces/{trace_id}
-- [ ] 12.4 Протестировать POST /traces/{trace_id}/scores
-- [ ] 12.5 Протестировать analytics endpoints
-- [ ] 12.6 Протестировать permissions (401/403 ошибки)
-- [ ] 12.7 Протестировать валидацию входов (400 ошибки)
-- [ ] 12.8 Достичь 100% покрытия кода для API роутов
+- [x] 12.1 Создать `tests/test_traces_api.py` для тестирования роутов
+- [x] 12.2 Протестировать GET /traces с фильтрами и pagination
+- [x] 12.3 Протестировать GET /traces/{trace_id}
+- [x] 12.4 Протестировать POST /traces/{trace_id}/scores
+- [x] 12.5 Протестировать analytics endpoints
+- [x] 12.6 Протестировать permissions (401/403 ошибки)
+- [x] 12.7 Протестировать валидацию входов (400 ошибки)
+- [x] 12.8 Достичь 100% покрытия кода для API роутов
 
 ## 13. Health Check Endpoint (Фаза 4)
 

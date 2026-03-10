@@ -5,10 +5,9 @@ from typing import Any, Optional
 from uuid import UUID
 
 import structlog
-from langfuse import Langfuse
 
 from app.config import settings
-from app.services.langfuse_integration import get_langfuse
+from app.services.langfuse_rest_client import get_langfuse_rest_client
 
 struct_logger = structlog.get_logger(__name__)
 
@@ -26,7 +25,7 @@ class TracesService:
 
     def __init__(self) -> None:
         """Инициализация Traces Service."""
-        self.langfuse = get_langfuse()
+        self.rest_client = get_langfuse_rest_client()
         self.enabled = settings.langfuse_enabled
 
     async def get_traces(
@@ -67,10 +66,6 @@ class TracesService:
             }
 
         try:
-            # На данный момент Langfuse SDK не предоставляет REST API для query traces
-            # Нужно использовать REST API напрямую или дождаться обновления SDK
-            # Здесь мы подготавливаем структуру для будущей реализации
-
             struct_logger.info(
                 "traces_query",
                 user_id=str(user_id),
@@ -80,14 +75,37 @@ class TracesService:
                 offset=offset,
             )
 
-            # Placeholder для будущей реализации с REST API
-            # В production нужно будет использовать httpx для query Langfuse API
+            # Получаем traces из Langfuse REST API
+            result = await self.rest_client.get_traces(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                agent_name=agent_name,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+                offset=offset,
+            )
+
+            # Применяем сортировку если необходимо
+            traces = result.get("traces", [])
+            if traces and order_by == "created_at":
+                traces.sort(
+                    key=lambda t: t.get("createdAt", ""),
+                    reverse=(order_direction == "desc"),
+                )
+            elif traces and order_by == "duration":
+                traces.sort(
+                    key=lambda t: t.get("duration", 0),
+                    reverse=(order_direction == "desc"),
+                )
+
             return {
-                "traces": [],
-                "total_count": 0,
+                "traces": traces,
+                "total_count": result.get("total_count", 0),
                 "limit": limit,
                 "offset": offset,
-                "note": "REST API integration required for trace querying",
+                "order_by": order_by,
+                "order_direction": order_direction,
             }
 
         except Exception as e:
@@ -118,12 +136,20 @@ class TracesService:
             return None
 
         try:
-            # Placeholder для будущей реализации с REST API
             struct_logger.info(
                 "trace_retrieval",
                 trace_id=trace_id,
             )
-            return None
+
+            # Получаем trace из Langfuse REST API
+            trace = await self.rest_client.get_trace(trace_id)
+
+            if trace:
+                # Получаем spans для trace
+                spans = await self.rest_client.get_spans(trace_id)
+                trace["spans"] = spans
+
+            return trace
 
         except Exception as e:
             struct_logger.error(
@@ -217,10 +243,13 @@ class TracesService:
             end_date = datetime.utcnow()
             if period == "7d":
                 start_date = end_date - timedelta(days=7)
+                period_days = 7
             elif period == "30d":
                 start_date = end_date - timedelta(days=30)
+                period_days = 30
             else:
                 start_date = None
+                period_days = 365
 
             struct_logger.info(
                 "traces_summary_query",
@@ -228,13 +257,18 @@ class TracesService:
                 period=period,
             )
 
-            # Placeholder для будущей реализации
+            # Получаем аналитику из REST API
+            analytics = await self.rest_client.get_analytics_summary(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                period_days=period_days,
+            )
+
             return {
                 "period": period,
-                "total_traces": 0,
-                "total_spans": 0,
-                "avg_latency_ms": 0,
-                "total_cost": 0.0,
+                "total_traces": analytics.get("trace_count", 0),
+                "avg_latency_ms": int(analytics.get("avg_duration", 0)),
+                "total_cost": analytics.get("total_cost", 0.0),
                 "workspace_id": str(workspace_id) if workspace_id else None,
             }
 
@@ -276,10 +310,43 @@ class TracesService:
                 workspace_id=str(workspace_id),
             )
 
+            # Получаем traces для workspace
+            result = await self.get_traces(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                limit=1000,
+            )
+
+            traces = result.get("traces", [])
+
+            # Агрегируем по агентам
+            agents_stats: dict[str, Any] = {}
+
+            for trace in traces:
+                agent_name = trace.get("name", "unknown")
+                if agent_name not in agents_stats:
+                    agents_stats[agent_name] = {
+                        "name": agent_name,
+                        "trace_count": 0,
+                        "total_cost": 0.0,
+                        "avg_duration": 0,
+                    }
+
+                agents_stats[agent_name]["trace_count"] += 1
+                agents_stats[agent_name]["total_cost"] += trace.get("cost", 0.0)
+                agents_stats[agent_name]["avg_duration"] += trace.get("duration", 0)
+
+            # Вычисляем средние значения
+            for agent_data in agents_stats.values():
+                if agent_data["trace_count"] > 0:
+                    agent_data["avg_duration"] = (
+                        agent_data["avg_duration"] / agent_data["trace_count"]
+                    )
+
             return {
                 "workspace_id": str(workspace_id),
-                "agents": [],
-                "total_agents": 0,
+                "agents": list(agents_stats.values()),
+                "total_agents": len(agents_stats),
             }
 
         except Exception as e:
@@ -326,12 +393,41 @@ class TracesService:
                 workspace_id=str(workspace_id),
             )
 
+            # Получаем traces для workspace
+            result = await self.get_traces(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                start_date=start_date,
+                end_date=end_date,
+                limit=1000,
+            )
+
+            traces = result.get("traces", [])
+
+            # Агрегируем стоимость
+            total_cost = 0.0
+            by_model: dict[str, float] = {}
+            by_agent: dict[str, float] = {}
+
+            for trace in traces:
+                cost = trace.get("cost", 0.0)
+                total_cost += cost
+
+                # По моделям (из metadata)
+                model = trace.get("metadata", {}).get("model", "unknown")
+                by_model[model] = by_model.get(model, 0.0) + cost
+
+                # По агентам
+                agent_name = trace.get("name", "unknown")
+                by_agent[agent_name] = by_agent.get(agent_name, 0.0) + cost
+
             return {
                 "workspace_id": str(workspace_id),
-                "total_cost": 0.0,
-                "by_model": {},
-                "by_agent": {},
+                "total_cost": total_cost,
+                "by_model": by_model,
+                "by_agent": by_agent,
                 "currency": "USD",
+                "trace_count": len(traces),
             }
 
         except Exception as e:

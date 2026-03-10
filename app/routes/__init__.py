@@ -3,6 +3,7 @@
 from app.routes import (
     analytics,
     approvals,
+    feedback,
     health,
     llm_providers,
     monitoring,
@@ -12,11 +13,13 @@ from app.routes import (
     project_tools,
     projects,
     streaming,
+    traces,
 )
 
 __all__ = [
     "analytics",
     "approvals",
+    "feedback",
     "health",
     "llm_providers",
     "monitoring",
@@ -26,4 +29,5 @@ __all__ = [
     "project_tools",
     "projects",
     "streaming",
+    "traces",
 ]
