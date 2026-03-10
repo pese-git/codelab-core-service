@@ -30,6 +30,7 @@ from app.core.stream_manager import close_stream_manager, get_stream_manager
 from app.core.worker_space_manager import get_worker_space_manager
 from app.core.outbox_publisher import OutboxPublisher
 from app.tracing import initialize_tracing
+from app.services.litellm_client import LiteLLMClient, LiteLLMConnectionError
 
 # Configure logging
 configure_logging()
@@ -41,6 +42,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     # Startup
     logger.info("application_starting", version=settings.app_version)
+    
+    # Initialize and validate LiteLLM client configuration
+    try:
+        litellm_client = LiteLLMClient()
+        logger.info("litellm_client_validated_successfully", url=settings.litellm_url)
+    except LiteLLMConnectionError as e:
+        logger.error(
+            "litellm_configuration_validation_failed",
+            error=str(e),
+        )
+        raise RuntimeError(f"Failed to initialize LiteLLM client: {str(e)}") from e
     
     # Initialize database (create tables if needed)
     # Note: In production, use Alembic migrations instead

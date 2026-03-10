@@ -58,11 +58,17 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = Field(default=30)
     jwt_refresh_token_expire_days: int = Field(default=7)
 
+    # LiteLLM
+    litellm_url: str = Field(default="http://localhost:4000")
+    litellm_master_key: str = Field(default="")
+    
+    # Default LLM Provider (for starter pack initialization)
+    llm_default_model: str = Field(default="gpt-4-turbo-preview")
+    llm_default_embedding_model: str = Field(default="text-embedding-3-small")
+    llm_default_base_url: str = Field(default="https://openrouter.com/api/v1")
+    llm_default_api_key: str = Field(default="sk-you-openrouter-api-key-change-in-production")
+    
     # OpenAI / LiteLLM
-    openai_api_key: str = Field(default="")
-    openai_base_url: str | None = Field(default=None)  # For LiteLLM or custom endpoints
-    openai_model: str = Field(default="openrouter/openai/gpt-4.1")
-    openai_embedding_model: str = Field(default="text-embedding-3-small")
     openai_max_retries: int = Field(default=3)
     openai_timeout: int = Field(default=60)
 

@@ -41,23 +41,23 @@ async def create_seed_data() -> None:
             
             print(f"✓ Created test user: {test_user.email} (ID: {test_user.id})")
             
-            # Create Default Project for user
-            default_project = UserProject(
-                id=uuid4(),
-                user_id=test_user.id,
-                name="Default Project",
-                workspace_path="/Users/test/projects/default"
-            )
-            session.add(default_project)
-            await session.flush()
-            
-            print(f"✓ Created default project: {default_project.name} (ID: {default_project.id})")
-            
-            # Initialize Default Starter Pack for the project
-            agents = await initialize_starter_pack(session, test_user.id, default_project.id)
-            
-            for agent in agents:
-                print(f"✓ Created agent: {agent.name} (ID: {agent.id}) in project '{default_project.name}'")
+            ## Create Default Project for user
+            #default_project = UserProject(
+            #    id=uuid4(),
+            #    user_id=test_user.id,
+            #    name="Default Project",
+            #    workspace_path="/Users/test/projects/default"
+            #)
+            #session.add(default_project)
+            #await session.flush()
+            #
+            #print(f"✓ Created default project: {default_project.name} (ID: {default_project.id})")
+            #
+            ## Initialize Default Starter Pack for the project
+            #agents = await initialize_starter_pack(session, test_user.id, default_project.id)
+            #
+            #for agent in agents:
+            #    print(f"✓ Created agent: {agent.name} (ID: {agent.id}) in project '{default_project.name}'")
             
             await session.commit()
             print("\n✓ Seed data created successfully!")
@@ -65,9 +65,9 @@ async def create_seed_data() -> None:
             print(f"  Email: {test_user.email}")
             print(f"  User ID: {test_user.id}")
             print(f"\nDefault Project:")
-            print(f"  Project ID: {default_project.id}")
-            print(f"  Project Name: {default_project.name}")
-            print(f"  Agents Count: {len(agents)}")
+            #print(f"  Project ID: {default_project.id}")
+            #print(f"  Project Name: {default_project.name}")
+            #print(f"  Agents Count: {len(agents)}")
             print(f"\nYou can generate a JWT token using:")
             print(f"  python scripts/generate_test_jwt.py {test_user.id}")
             

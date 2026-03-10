@@ -130,6 +130,7 @@ class AgentManager:
         await self.db.flush()
 
         # Initialize contextual agent with provider info
+        # Use the same provider for embeddings (unless there's a specific embedding provider)
         contextual_agent = ContextualAgent(
             agent_id=agent.id,
             user_id=self.user_id,
@@ -138,6 +139,7 @@ class AgentManager:
             qdrant_client=self.qdrant,
             tool_executor=self.tool_executor,
             llm_provider=provider,
+            embedding_llm_provider=None,
         )
         await contextual_agent.initialize()
 
@@ -184,11 +186,8 @@ class AgentManager:
 
     async def list_agents(self) -> list[AgentResponse]:
         """List all user agents."""
-        result = await self.db.execute(
-            select(UserAgent).where(UserAgent.user_id == self.user_id)
-        )
-        agents = result.scalars().all()
-
+        agents_db = await self.list_agents_db()
+        
         return [
             AgentResponse(
                 id=agent.id,
@@ -197,18 +196,33 @@ class AgentManager:
                 created_at=agent.created_at,
                 config=AgentConfig(**agent.config) if isinstance(agent.config, dict) else agent.config,
             )
-            for agent in agents
+            for agent in agents_db
         ]
+    
+    async def list_agents_db(self) -> list:
+        """List all user agents with relationships loaded."""
+        from sqlalchemy.orm import joinedload
+        
+        result = await self.db.execute(
+            select(UserAgent)
+            .where(UserAgent.user_id == self.user_id)
+            .options(joinedload(UserAgent.llm_provider))
+        )
+        return result.scalars().unique().all()
 
     async def list_agents_by_project(self, project_id: UUID) -> list[AgentResponse]:
         """List all agents in a specific project."""
+        from sqlalchemy.orm import joinedload
+        
         result = await self.db.execute(
-            select(UserAgent).where(
+            select(UserAgent)
+            .where(
                 (UserAgent.user_id == self.user_id)
                 & (UserAgent.project_id == project_id)
             )
+            .options(joinedload(UserAgent.llm_provider))
         )
-        agents = result.scalars().all()
+        agents = result.scalars().unique().all()
 
         return [
             AgentResponse(
@@ -282,6 +296,7 @@ class AgentManager:
         await self.db.flush()
 
         # Initialize contextual agent with provider info
+        # Use the same provider for embeddings (unless there's a specific embedding provider)
         contextual_agent = ContextualAgent(
             agent_id=agent.id,
             user_id=self.user_id,
@@ -290,6 +305,7 @@ class AgentManager:
             qdrant_client=self.qdrant,
             tool_executor=self.tool_executor,
             llm_provider=provider,
+            embedding_llm_provider=None,
         )
         await contextual_agent.initialize()
 

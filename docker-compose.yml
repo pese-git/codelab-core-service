@@ -106,6 +106,7 @@ services:
     environment:
       # Мастер ключ для управления провайдерами через API
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-super-secret-key-change-in-production}
+      LITELLM_URL: http://0.0.0.0:4000
       
       # PostgreSQL подключение для управления моделями и ключами
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/litellm

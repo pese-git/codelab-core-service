@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,6 +65,7 @@ class UserProject(Base):
 
     # Indexes and constraints
     __table_args__ = (
+        UniqueConstraint("name", "workspace_path", name="uq_user_projects_name_workspace_path"),
         Index("ix_user_projects_user_id_name", "user_id", "name"),
         Index("ix_user_projects_user_id_created_at", "user_id", "created_at"),
     )

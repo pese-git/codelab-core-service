@@ -37,12 +37,13 @@
   "display_name": "My OpenAI GPT-4",
   "api_key": "sk-your-api-key-here",
   "config": {
-    "model": "gpt-4o",
-    "max_tokens": 2048,
-    "temperature": 0.7
+    "model": "gpt-4o"
   }
 }
 ```
+
+**Note:** Параметр `config` должен содержать только `model`. 
+Другие параметры (max_tokens, temperature и т.д.) передаются при использовании модели в запросах к API, а не при её регистрации.
 
 **Response: 201 Created**
 ```json
@@ -53,9 +54,7 @@
   "display_name": "My OpenAI GPT-4",
   "litellm_model_name": "user550e8400_openai_abc12345",
   "config": {
-    "model": "gpt-4o",
-    "max_tokens": 2048,
-    "temperature": 0.7
+    "model": "gpt-4o"
   },
   "use_count": 0,
   "created_at": "2026-03-09T08:00:00Z",
@@ -91,9 +90,7 @@
       "display_name": "My OpenAI GPT-4",
       "litellm_model_name": "user550e8400_openai_abc12345",
       "config": {
-        "model": "gpt-4o",
-        "max_tokens": 2048,
-        "temperature": 0.7
+        "model": "gpt-4o"
       },
       "use_count": 5,
       "last_used_at": "2026-03-09T07:45:00Z",
@@ -107,8 +104,7 @@
       "display_name": "Claude 3 Opus",
       "litellm_model_name": "user550e8400_anthropic_xyz789",
       "config": {
-        "model": "claude-3-opus-20240229",
-        "max_tokens": 4096
+        "model": "claude-3-opus-20240229"
       },
       "use_count": 2,
       "last_used_at": "2026-03-09T07:30:00Z",
@@ -140,9 +136,7 @@
   "display_name": "My OpenAI GPT-4",
   "litellm_model_name": "user550e8400_openai_abc12345",
   "config": {
-    "model": "gpt-4o",
-    "max_tokens": 2048,
-    "temperature": 0.7
+    "model": "gpt-4o"
   },
   "use_count": 5,
   "last_used_at": "2026-03-09T07:45:00Z",
@@ -169,9 +163,7 @@
 {
   "display_name": "Updated Name",
   "config": {
-    "model": "gpt-4-turbo",
-    "max_tokens": 4096,
-    "temperature": 0.5
+    "model": "gpt-4-turbo"
   }
 }
 ```
@@ -185,9 +177,7 @@
   "display_name": "Updated Name",
   "litellm_model_name": "user550e8400_openai_abc12345",
   "config": {
-    "model": "gpt-4-turbo",
-    "max_tokens": 4096,
-    "temperature": 0.5
+    "model": "gpt-4-turbo"
   },
   "use_count": 5,
   "last_used_at": "2026-03-09T07:45:00Z",

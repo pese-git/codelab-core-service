@@ -38,6 +38,7 @@ class ContextualAgent:
         qdrant_client: AsyncQdrantClient | None,
         tool_executor: 'ToolExecutor | None' = None,
         llm_provider: Any = None,
+        embedding_llm_provider: Any = None,
     ):
         """Initialize contextual agent.
         
@@ -48,7 +49,8 @@ class ContextualAgent:
             config: Agent configuration
             qdrant_client: Qdrant client instance, or None if Qdrant is disabled
             tool_executor: ToolExecutor instance for tool execution, or None if tools disabled
-            llm_provider: UserLLMProvider instance, or None to use default config
+            llm_provider: UserLLMProvider instance for chat, or None to use default config
+            embedding_llm_provider: UserLLMProvider instance for embeddings, or None to use default
         """
         self.agent_id = agent_id
         self.user_id = user_id
@@ -56,11 +58,17 @@ class ContextualAgent:
         self.config = config
         self.tool_executor = tool_executor
         self.llm_provider = llm_provider
+        self.embedding_llm_provider = embedding_llm_provider
         
         # Initialize OpenAI client (supports LiteLLM via base_url)
-        client_kwargs = {"api_key": settings.openai_api_key}
-        if settings.openai_base_url:
-            client_kwargs["base_url"] = settings.openai_base_url
+        # When calling LiteLLM REST API, always use litellm_master_key for authentication
+        # The user's API keys are already registered in LiteLLM under litellm_model_name
+        # base_url must always come from settings.litellm_url
+        client_kwargs = {
+            "api_key": settings.litellm_master_key,
+            "base_url": settings.litellm_url,
+        }
+        
         self.openai_client = openai.AsyncOpenAI(**client_kwargs)
         
         # Initialize context store
@@ -68,7 +76,28 @@ class ContextualAgent:
             client=qdrant_client,
             user_id=user_id,
             agent_name=agent_name,
+            llm_provider=llm_provider,
+            embedding_llm_provider=embedding_llm_provider,
         )
+    
+    def _get_provider_name(self) -> str:
+        """Get provider name for logging purposes.
+        
+        Uses display_name or provider_type to avoid accessing config which
+        can trigger DetachedInstanceError if provider is detached from session.
+        """
+        if self.llm_provider:
+            try:
+                # Try display_name first, fallback to provider_type
+                display_name = getattr(self.llm_provider, 'display_name', None)
+                if display_name:
+                    return display_name
+                provider_type = getattr(self.llm_provider, 'provider_type', None)
+                if provider_type:
+                    return provider_type
+            except Exception:
+                pass
+        return 'default'
 
     async def initialize(self) -> None:
         """Initialize agent (create Qdrant collection)."""
@@ -100,7 +129,12 @@ class ContextualAgent:
         with tracer.start_as_current_span("agent_execution") as span:
             span.set_attribute("agent.id", str(self.agent_id))
             span.set_attribute("agent.name", self.agent_name)
-            span.set_attribute("model", self.config.model)
+            # Safely access provider attributes to avoid DetachedInstanceError
+            try:
+                model_name = self.llm_provider.litellm_model_name if self.llm_provider else "unknown"
+            except Exception:
+                model_name = "unknown"
+            span.set_attribute("model", model_name)
             if session_id:
                 span.set_attribute("session.id", str(session_id))
             if task_id:
@@ -108,14 +142,24 @@ class ContextualAgent:
             
             try:
                 # Debug: Log executor status
+                # Safely access provider attributes to avoid DetachedInstanceError
+                provider_id = None
+                provider_type = None
+                if self.llm_provider:
+                    try:
+                        provider_id = str(self.llm_provider.id)
+                        provider_type = self.llm_provider.provider_type
+                    except Exception:
+                        pass
+                
                 logger.debug(
                     "execute_started",
                     agent_id=str(self.agent_id),
                     agent_name=self.agent_name,
                     has_tool_executor=self.tool_executor is not None,
                     task_id=task_id,
-                    llm_provider_id=str(self.llm_provider.id) if self.llm_provider else None,
-                    llm_provider_type=self.llm_provider.provider_type if self.llm_provider else None,
+                    llm_provider_id=provider_id,
+                    llm_provider_type=provider_type,
                 )
                 
                 # Retrieve relevant context
@@ -144,16 +188,37 @@ class ContextualAgent:
                 # Add user message
                 messages.append({"role": "user", "content": user_message})
 
-                # Determine which model to use: provider's model or config's model
-                model_to_use = self.config.model
-                if self.llm_provider and self.llm_provider.litellm_model_name:
-                    model_to_use = self.llm_provider.litellm_model_name
-                    logger.debug(
-                        "using_provider_model",
+                # Determine which model to use: must come from registered llm_provider
+                model_to_use = None
+                try:
+                    if self.llm_provider:
+                        model_to_use = self.llm_provider.litellm_model_name
+                except Exception as e:
+                    logger.warning(
+                        "failed_to_access_provider_model",
                         agent_id=str(self.agent_id),
-                        provider_model=model_to_use,
-                        config_model=self.config.model,
+                        error=str(e),
                     )
+                
+                if not model_to_use:
+                    error_msg = "Agent must have a registered LLM provider to execute"
+                    logger.error(
+                        "agent_execution_failed",
+                        agent_id=str(self.agent_id),
+                        agent_name=self.agent_name,
+                        error=error_msg,
+                        error_type="missing_provider",
+                    )
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "error_type": "missing_provider",
+                    }
+                logger.debug(
+                    "using_provider_model",
+                    agent_id=str(self.agent_id),
+                    provider_model=model_to_use,
+                )
                 
                 # Prepare LLM call arguments
                 llm_kwargs = {
@@ -178,9 +243,9 @@ class ContextualAgent:
 
                 # Call LLM with tracing
                 with tracer.start_as_current_span("llm_call") as llm_span:
-                    llm_span.set_attribute("model", self.config.model)
+                    llm_span.set_attribute("model", model_to_use)
                     llm_span.set_attribute("temperature", self.config.temperature)
-                    llm_span.set_attribute("provider", settings.openai_base_url or "openai")
+                    llm_span.set_attribute("provider", settings.litellm_url or "openai")
                     
                     start_time = time.time()
                     response = await self.openai_client.chat.completions.create(**llm_kwargs)
@@ -193,7 +258,7 @@ class ContextualAgent:
                         llm_span.set_attribute("tokens_total", response.usage.total_tokens)
                     
                     llm_span.add_event("llm_response_received", {
-                        "model": self.config.model,
+                        "model": model_to_use,
                         "tokens": response.usage.total_tokens if response.usage else 0,
                     })
                 
@@ -262,7 +327,7 @@ class ContextualAgent:
                     
                     # Get final response from LLM with tool results
                     final_response = await self.openai_client.chat.completions.create(
-                        model=self.config.model,
+                        model=model_to_use,
                         messages=messages,
                         temperature=self.config.temperature,
                         max_tokens=self.config.max_tokens,
@@ -286,7 +351,7 @@ class ContextualAgent:
                     task_id=task_id,
                     success=True,
                     metadata={
-                        "model": self.config.model,
+                        "model": model_to_use,
                         "tokens": total_tokens,
                         "tools_used": len(tool_calls) if tool_calls else 0,
                     },
@@ -315,15 +380,15 @@ class ContextualAgent:
                 }
 
             except openai.APITimeoutError as e:
-                error_msg = f"LLM request timeout: model '{self.config.model}' did not respond in time"
+                error_msg = f"LLM request timeout: model '{model_to_use}' did not respond in time"
                 logger.error(
                     "agent_execution_failed",
                     agent_id=str(self.agent_id),
                     agent_name=self.agent_name,
                     error=error_msg,
                     error_type="timeout",
-                    model=self.config.model,
-                    provider=settings.openai_base_url or "openai",
+                    model=model_to_use,
+                    provider=self._get_provider_name(),
                 )
 
                 span.record_exception(e)
@@ -341,8 +406,8 @@ class ContextualAgent:
                     "success": False,
                     "error": error_msg,
                     "error_type": "timeout",
-                    "provider": settings.openai_base_url or "openai",
-                    "model": self.config.model,
+                    "provider": self._get_provider_name(),
+                    "model": model_to_use,
                 }
 
             except openai.APIConnectionError as e:
@@ -353,8 +418,8 @@ class ContextualAgent:
                     agent_name=self.agent_name,
                     error=error_msg,
                     error_type="connection",
-                    model=self.config.model,
-                    provider=settings.openai_base_url or "openai",
+                    model=model_to_use,
+                    provider=self._get_provider_name(),
                 )
 
                 span.record_exception(e)
@@ -372,20 +437,20 @@ class ContextualAgent:
                     "success": False,
                     "error": error_msg,
                     "error_type": "connection",
-                    "provider": settings.openai_base_url or "openai",
-                    "model": self.config.model,
+                    "provider": self._get_provider_name(),
+                    "model": model_to_use,
                 }
 
             except openai.RateLimitError as e:
-                error_msg = f"LLM provider rate limit exceeded for model '{self.config.model}'"
+                error_msg = f"LLM provider rate limit exceeded for model '{model_to_use}'"
                 logger.error(
                     "agent_execution_failed",
                     agent_id=str(self.agent_id),
                     agent_name=self.agent_name,
                     error=error_msg,
                     error_type="rate_limit",
-                    model=self.config.model,
-                    provider=settings.openai_base_url or "openai",
+                    model=model_to_use,
+                    provider=self._get_provider_name(),
                 )
 
                 span.record_exception(e)
@@ -403,8 +468,8 @@ class ContextualAgent:
                     "success": False,
                     "error": error_msg,
                     "error_type": "rate_limit",
-                    "provider": settings.openai_base_url or "openai",
-                    "model": self.config.model,
+                    "provider": self._get_provider_name(),
+                    "model": model_to_use,
                 }
 
             except openai.AuthenticationError as e:
@@ -415,8 +480,8 @@ class ContextualAgent:
                     agent_name=self.agent_name,
                     error=error_msg,
                     error_type="authentication",
-                    model=self.config.model,
-                    provider=settings.openai_base_url or "openai",
+                    model=model_to_use,
+                    provider=self._get_provider_name(),
                 )
 
                 span.record_exception(e)
@@ -434,8 +499,8 @@ class ContextualAgent:
                     "success": False,
                     "error": error_msg,
                     "error_type": "authentication",
-                    "provider": settings.openai_base_url or "openai",
-                    "model": self.config.model,
+                    "provider": self._get_provider_name(),
+                    "model": model_to_use,
                 }
 
             except openai.BadRequestError as e:
@@ -446,8 +511,8 @@ class ContextualAgent:
                     agent_name=self.agent_name,
                     error=error_msg,
                     error_type="bad_request",
-                    model=self.config.model,
-                    provider=settings.openai_base_url or "openai",
+                    model=model_to_use,
+                    provider=self._get_provider_name(),
                 )
 
                 span.record_exception(e)
@@ -465,8 +530,8 @@ class ContextualAgent:
                     "success": False,
                     "error": error_msg,
                     "error_type": "bad_request",
-                    "provider": settings.openai_base_url or "openai",
-                    "model": self.config.model,
+                    "provider": self._get_provider_name(),
+                    "model": model_to_use,
                 }
 
             except Exception as e:
@@ -477,7 +542,7 @@ class ContextualAgent:
                     agent_name=self.agent_name,
                     error=error_msg,
                     error_type="unknown",
-                    model=self.config.model,
+                    model=model_to_use,
                 )
 
                 span.record_exception(e)
@@ -495,7 +560,7 @@ class ContextualAgent:
                     "success": False,
                     "error": error_msg,
                     "error_type": "unknown",
-                    "model": self.config.model,
+                    "model": model_to_use,
                 }
 
     def _get_available_tools(self) -> list[dict[str, Any]]:
@@ -827,11 +892,21 @@ class ContextualAgent:
             
             # We can't directly access the db session here, so we just log
             # The actual recording should be done by the caller
+            
+            # Safely access provider attributes to avoid DetachedInstanceError
+            provider_id = None
+            provider_type = None
+            try:
+                provider_id = str(self.llm_provider.id)
+                provider_type = self.llm_provider.provider_type
+            except Exception:
+                pass
+            
             logger.debug(
                 "recording_provider_usage",
                 agent_id=str(self.agent_id),
-                provider_id=str(self.llm_provider.id),
-                provider_type=self.llm_provider.provider_type,
+                provider_id=provider_id,
+                provider_type=provider_type,
             )
         except Exception as e:
             logger.warning(

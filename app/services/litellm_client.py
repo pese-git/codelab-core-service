@@ -14,6 +14,16 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+class LiteLLMAuthError(Exception):
+    """Ошибка аутентификации при подключении к LiteLLM."""
+    pass
+
+
+class LiteLLMConnectionError(Exception):
+    """Ошибка подключения к LiteLLM."""
+    pass
+
+
 class LiteLLMClient:
     """
     HTTP клиент для интеграции с LiteLLM.
@@ -31,7 +41,45 @@ class LiteLLMClient:
         self.master_key = settings.litellm_master_key
         self.timeout = 60.0
         self.max_retries = 3
-        self.retry_delay = 1.0  # exponential backoff startregion
+        self.retry_delay = 1.0  # exponential backoff
+        
+        # Validate configuration
+        self._validate_configuration()
+
+    def _validate_configuration(self) -> None:
+        """
+        Проверяет корректность конфигурации LiteLLM при инициализации.
+        
+        Raises:
+            LiteLLMConnectionError: Если конфигурация некорректна
+        """
+        errors = []
+        
+        # Проверка URL
+        if not self.base_url:
+            errors.append("LITELLM_URL не установлен")
+        elif not self.base_url.startswith("http"):
+            errors.append(f"LITELLM_URL должен начинаться с http/https: {self.base_url}")
+        
+        # Проверка MASTER_KEY
+        if not self.master_key:
+            errors.append("LITELLM_MASTER_KEY не установлен")
+        
+        if errors:
+            error_message = "; ".join(errors)
+            logger.error(
+                "litellm_configuration_invalid",
+                errors=error_message,
+                base_url=self.base_url,
+            )
+            raise LiteLLMConnectionError(
+                f"Ошибка конфигурации LiteLLM: {error_message}"
+            )
+        
+        logger.info(
+            "litellm_client_initialized",
+            base_url=self.base_url,
+        )
 
     async def add_model(
         self,
@@ -58,27 +106,20 @@ class LiteLLMClient:
         """
         litellm_model_name = self._generate_litellm_model_name(user_id, provider_type)
 
-        # Параметры для LiteLLM
+        # Модель ОБЯЗАТЕЛЬНА - пользователь должен её указать
+        if not config or "model" not in config:
+            raise ValueError(
+                f"Модель не указана для провайдера {provider_type}. "
+                f"Пожалуйста, укажите 'model' в конфигурации провайдера. "
+                f"Для OpenRouter используйте формат: 'openrouter/openai/gpt-4-turbo', "
+                f"'openrouter/anthropic/claude-3-opus' и т.д."
+            )
+        
+        # LiteLLM требует ровно два параметра: model и api_key
         litellm_params = {
+            "model": config["model"],
             "api_key": api_key,
         }
-        
-        # Добавляем model из config или используем default
-        if config and "model" in config:
-            litellm_params["model"] = config["model"]
-        else:
-            # Default model для типа провайдера
-            litellm_params["model"] = self._get_default_model(provider_type)
-        
-        # Добавляем base_url если есть
-        if config and "base_url" in config:
-            litellm_params["api_base"] = config["base_url"]
-        
-        # Добавляем остальные параметры из config (кроме model и base_url которые уже обработаны)
-        if config:
-            for key, value in config.items():
-                if key not in ["model", "base_url", "embedding_model", "is_default"]:
-                    litellm_params[key] = value
 
         payload = {
             "model_name": litellm_model_name,
@@ -285,16 +326,44 @@ class LiteLLMClient:
                     response.raise_for_status()
                     return response.json()
 
+            except httpx.HTTPStatusError as e:
+                # Специальная обработка для 401 Unauthorized
+                if e.response.status_code == 401:
+                    logger.error(
+                        "litellm_authentication_failed",
+                        status_code=401,
+                        url=url,
+                        endpoint=endpoint,
+                    )
+                    raise LiteLLMAuthError(
+                        "Ошибка аутентификации LiteLLM (401 Unauthorized). "
+                        "Проверьте значение LITELLM_MASTER_KEY в конфигурации. "
+                        "Убедитесь, что он совпадает с LITELLM_MASTER_KEY на сервере litellm."
+                    ) from e
+                
+                # Для других HTTP ошибок логируем и не повторяем попытку
+                last_error = e
+                logger.error(
+                    "litellm_http_error",
+                    status_code=e.response.status_code,
+                    url=url,
+                    endpoint=endpoint,
+                    response_text=e.response.text[:500],  # Ограничиваем размер логируемого текста
+                )
+                # Don't retry on HTTP errors (400, 403, 404, etc.)
+                raise
+
             except (httpx.TimeoutException, httpx.NetworkError) as e:
                 last_error = e
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)
                     logger.warning(
-                        "litellm_request_failed_retrying",
+                        "litellm_request_timeout_retrying",
                         attempt=attempt + 1,
                         max_retries=self.max_retries,
                         wait_time=wait_time,
                         error=str(e),
+                        url=url,
                     )
                     await asyncio.sleep(wait_time)
                 else:
@@ -302,16 +371,23 @@ class LiteLLMClient:
                         "litellm_request_failed_max_attempts",
                         max_retries=self.max_retries,
                         error=str(e),
+                        url=url,
                     )
+                    raise LiteLLMConnectionError(
+                        f"Не удалось подключиться к LiteLLM ({self.base_url}) "
+                        f"после {self.max_retries} попыток. Проверьте доступность сервера. "
+                        f"Ошибка: {str(e)}"
+                    ) from e
 
-            except httpx.HTTPStatusError as e:
-                last_error = e
+            except Exception as e:
+                # Неожиданная ошибка
                 logger.error(
-                    "litellm_api_error",
-                    status_code=e.response.status_code,
-                    response_text=e.response.text,
+                    "litellm_unexpected_error",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    url=url,
                 )
-                # Don't retry on HTTP errors (400, 401, etc.)
                 raise
 
-        raise last_error or httpx.NetworkError("Unknown error")
+        # На случай, если цикл завершился без return/raise
+        raise last_error or LiteLLMConnectionError("Unknown error connecting to LiteLLM")

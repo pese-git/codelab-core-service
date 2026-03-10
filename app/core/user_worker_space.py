@@ -256,10 +256,10 @@ class UserWorkerSpace:
                     tool_executor=self.executor,
                 )
 
-                # Load all agents for this project
-                agents = await self.agent_manager.list_agents()
+                # Load all agents for this project with relationships
+                agents_db = await self.agent_manager.list_agents_db()
 
-                for agent_db_model in agents:
+                for agent_db_model in agents_db:
                     await self._register_agent(agent_db_model)
 
                 self.initialized = True
@@ -269,7 +269,7 @@ class UserWorkerSpace:
                     "worker_space_initialized",
                     user_id=str(self.user_id),
                     project_id=self.project_id,
-                    agent_count=len(agents),
+                    agent_count=len(agents_db),
                 )
             except Exception as e:
                 logger.error(
@@ -303,6 +303,33 @@ class UserWorkerSpace:
                 executor_type=type(self.executor).__name__ if self.executor else None,
             )
             
+            # Get LLM provider if agent has one
+            # Use merge() to ensure provider stays attached to session
+            llm_provider = None
+            if hasattr(agent_db_model, 'llm_provider_id') and agent_db_model.llm_provider_id:
+                try:
+                    # Access the relationship while session is still active
+                    provider = agent_db_model.llm_provider
+                    if provider:
+                        # Merge provider into current session to prevent DetachedInstanceError
+                        llm_provider = await self.db.merge(provider)
+                except Exception as e:
+                    logger.warning(
+                        "failed_to_load_llm_provider",
+                        agent_id=str(agent_db_model.id),
+                        llm_provider_id=str(agent_db_model.llm_provider_id),
+                        error=str(e),
+                    )
+                    llm_provider = None
+            
+            logger.debug(
+                "agent_provider_info",
+                agent_id=str(agent_db_model.id),
+                agent_name=agent_db_model.name,
+                llm_provider_id=str(agent_db_model.llm_provider_id) if hasattr(agent_db_model, 'llm_provider_id') else None,
+                has_llm_provider=llm_provider is not None,
+            )
+            
             agent = ContextualAgent(
                 agent_id=agent_db_model.id,
                 user_id=self.user_id,
@@ -310,6 +337,8 @@ class UserWorkerSpace:
                 config=agent_config,
                 qdrant_client=self.qdrant,
                 tool_executor=self.executor,
+                llm_provider=llm_provider,
+                embedding_llm_provider=llm_provider,
             )
 
             # Cache agent
@@ -1092,7 +1121,7 @@ class UserWorkerSpace:
                 "avg_tokens_per_execution": 0.0,
             },
             "config": {
-                "model": agent.config.model,
+                "model": agent.llm_provider.litellm_model_name if agent.llm_provider else None,
                 "temperature": agent.config.temperature,
                 "max_tokens": agent.config.max_tokens,
                 "concurrency_limit": agent.config.concurrency_limit,

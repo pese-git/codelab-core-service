@@ -18,25 +18,47 @@ logger = get_logger(__name__)
 class AgentContextStore:
     """Store and retrieve agent context using Qdrant vector database."""
 
-    def __init__(self, client: AsyncQdrantClient | None, user_id: UUID, agent_name: str):
+    def __init__(self, client: AsyncQdrantClient | None, user_id: UUID, agent_name: str, llm_provider: Any = None, embedding_llm_provider: Any = None):
         """Initialize agent context store.
         
         Args:
             client: Qdrant client instance, or None if Qdrant is disabled
             user_id: User ID
             agent_name: Agent name
+            llm_provider: UserLLMProvider instance for chat (deprecated), or None to use default config
+            embedding_llm_provider: UserLLMProvider instance for embeddings, or None to use default
         """
         self.client = client
         self.user_id = user_id
         self.agent_name = agent_name
         self.collection_name = f"user{user_id}_{agent_name}_context"
         self.enabled = client is not None
+        self.llm_provider = llm_provider
+        self.embedding_llm_provider = embedding_llm_provider
         
         # Initialize OpenAI client (supports LiteLLM via base_url)
-        client_kwargs = {"api_key": settings.openai_api_key}
-        if settings.openai_base_url:
-            client_kwargs["base_url"] = settings.openai_base_url
+        # When calling LiteLLM REST API, always use litellm_master_key for authentication
+        # The user's API keys are already registered in LiteLLM under litellm_model_name
+        # base_url must always come from settings.litellm_url
+        client_kwargs = {
+            "api_key": settings.litellm_master_key,
+            "base_url": settings.litellm_url,
+        }
+        
         self.openai_client = openai.AsyncOpenAI(**client_kwargs)
+    
+    def _get_embedding_model(self) -> str:
+        """Get embedding model from registered embedding_llm_provider.
+        
+        The embedding_llm_provider should have embedding_model configured.
+        Falls back to default if not available.
+        """
+        if self.embedding_llm_provider and hasattr(self.embedding_llm_provider, 'config') and self.embedding_llm_provider.config:
+            embedding_model = self.embedding_llm_provider.config.get("embedding_model", settings.llm_default_embedding_model)
+        else:
+            embedding_model = settings.llm_default_embedding_model
+        
+        return embedding_model
 
     async def _ensure_collection_exists(self) -> bool:
         """Check if collection exists and initialize if needed.
@@ -98,7 +120,7 @@ class AgentContextStore:
         # Generate embedding
         try:
             response = await self.openai_client.embeddings.create(
-                model=settings.openai_embedding_model,
+                model=self._get_embedding_model(),
                 input=content,
             )
             embedding = response.data[0].embedding
@@ -176,7 +198,7 @@ class AgentContextStore:
         # Generate query embedding
         try:
             response = await self.openai_client.embeddings.create(
-                model=settings.openai_embedding_model,
+                model=self._get_embedding_model(),
                 input=query,
             )
             query_embedding = response.data[0].embedding

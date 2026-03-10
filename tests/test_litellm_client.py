@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from app.services.litellm_client import LiteLLMClient
+from app.services.litellm_client import LiteLLMClient, LiteLLMAuthError, LiteLLMConnectionError
 import httpx
 
 
@@ -149,7 +149,7 @@ async def test_http_request_retry_on_timeout(litellm_client: LiteLLMClient):
 
 @pytest.mark.asyncio
 async def test_http_request_no_retry_on_http_error(litellm_client: LiteLLMClient):
-    """Test HTTP request does not retry on HTTP status errors."""
+    """Test HTTP request raises LiteLLMAuthError on 401 and does not retry."""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_response = MagicMock()
@@ -162,12 +162,16 @@ async def test_http_request_no_retry_on_http_error(litellm_client: LiteLLMClient
         mock_client.__aexit__.return_value = None
         mock_client_class.return_value = mock_client
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(LiteLLMAuthError) as exc_info:
             await litellm_client._http_request(
                 method="POST",
                 endpoint="/test",
                 payload={"test": "data"}
             )
+        
+        # Verify error message is informative
+        assert "401 Unauthorized" in str(exc_info.value)
+        assert "LITELLM_MASTER_KEY" in str(exc_info.value)
 
         assert mock_client.post.call_count == 1  # Should not retry
 
@@ -229,12 +233,15 @@ async def test_add_model_with_config(litellm_client: LiteLLMClient, test_user_id
             config=config,
         )
 
-        # Verify the request included the config
+        # Verify the request has only model and api_key in litellm_params
         call_args = mock_client.post.call_args
         payload = call_args.kwargs["json"]
-        assert payload["model"] == "gpt-4-turbo"
-        assert payload["max_tokens"] == 4096
-        assert payload["temperature"] == 0.5
+        assert payload["litellm_params"]["model"] == "gpt-4-turbo"
+        assert payload["litellm_params"]["api_key"] == "sk-test"
+        # Only model and api_key should be in litellm_params
+        assert len(payload["litellm_params"]) == 2
+        assert "max_tokens" not in payload["litellm_params"]
+        assert "temperature" not in payload["litellm_params"]
 
 
 def test_litellm_client_initialization():
