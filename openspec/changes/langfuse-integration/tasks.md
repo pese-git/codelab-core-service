@@ -18,14 +18,14 @@
 
 ## 3. Основной сервис: LangfuseIntegration (Фаза 2)
 
-- [ ] 3.1 Создать модуль `app/services/langfuse_integration.py` с классом LangfuseIntegration
-- [ ] 3.2 Реализовать `__init__` с graceful обработкой (health check, enabled флаг, обработка исключений)
-- [ ] 3.3 Реализовать метод `create_trace()` с propagation контекста (user_id, workspace_id из structlog)
-- [ ] 3.4 Реализовать метод `create_span()` внутри trace контекста (input, output, metadata, status)
-- [ ] 3.5 Реализовать метод `record_score()` для user feedback и качественных метрик
-- [ ] 3.6 Реализовать метод `get_trace()` для получения trace по ID
-- [ ] 3.7 Реализовать обработку ошибок и логирование (все методы graceful, без propagation исключений)
-- [ ] 3.8 Реализовать поддержку context manager для автоматического закрытия spans
+- [x] 3.1 Создать модуль `app/services/langfuse_integration.py` с классом LangfuseIntegration
+- [x] 3.2 Реализовать `__init__` с graceful обработкой (health check, enabled флаг, обработка исключений)
+- [x] 3.3 Реализовать метод `create_trace()` с propagation контекста (user_id, workspace_id из structlog)
+- [x] 3.4 Реализовать метод `create_span()` внутри trace контекста (input, output, metadata, status)
+- [x] 3.5 Реализовать метод `record_score()` для user feedback и качественных метрик
+- [x] 3.6 Реализовать метод `get_trace()` для получения trace по ID
+- [x] 3.7 Реализовать обработку ошибок и логирование (все методы graceful, без propagation исключений)
+- [x] 3.8 Реализовать поддержку context manager для автоматического закрытия spans
 
 ## 4. Модульные тесты: LangfuseIntegration (Фаза 2)
 
