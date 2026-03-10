@@ -98,3 +98,18 @@ API ключи НИКОГДА НЕ ДОЛЖНЫ быть сохранены в a
 - **WHEN** приложение создает audit log
 - **THEN** таблица имеет индекс на (user_id, created_at DESC) для быстрого поиска операций пользователя
 
+### Requirement: Интеграция audit logs с Langfuse traces
+Audit logs ДОЛЖНЫ быть связаны с соответствующими Langfuse traces для расширенного трейсинга LLM операций.
+
+#### Scenario: Логирование события использования провайдера с Langfuse
+- **WHEN** агент использует провайдер для LLM вызова
+- **THEN** система создает запись audit log AND одновременно создает/обновляет Langfuse span с metadata={provider_id, provider_type, action: "use"}
+
+#### Scenario: Связь между audit events и LLM traces
+- **WHEN** пользователь просматривает audit log для провайдера
+- **THEN** каждая запись "use" содержит trace_id из Langfuse для быстрого переключения на детальный трейс LLM операции
+
+#### Scenario: Отслеживание стоимости в контексте провайдера
+- **WHEN** Langfuse записывает LLM запрос с provider_id в metadata
+- **THEN** система может агрегировать стоимость по провайдерам/workspace'ам через join audit_log и Langfuse traces
+

@@ -182,6 +182,16 @@ doc/
 - Использование разных провайдеров
 - Примеры
 
+#### [Langfuse Integration Evaluation](./langfuse-integration-evaluation.md)
+**Оценка интеграции Langfuse для LLM observability**
+- Анализ текущего состояния observability
+- Обзор Langfuse и возможностей
+- Преимущества и недостатки интеграции
+- Архитектура интеграции
+- План внедрения (3 фазы)
+- Трудозатраты и стоимость
+- ROI анализ и рекомендации
+
 #### [LLM Error Handling](./llm-error-handling.md)
 **Обработка ошибок LLM провайдеров**
 - Типы ошибок (timeout, connection, rate_limit, authentication, bad_request)

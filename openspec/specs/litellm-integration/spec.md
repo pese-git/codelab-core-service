@@ -66,3 +66,37 @@ LiteLLMClient ДОЛЖЕН генерировать уникальное имя 
 - **WHEN** user_id содержит дефисы (например, "550e8400-e29b-41d4-a716-446655440000")
 - **THEN** система удаляет дефисы и берет первые 16 символов для включения в имя модели
 
+### Requirement: LiteLLM настроен на отправку callbacks в Langfuse
+LiteLLM ДОЛЖЕН быть сконфигурирован для автоматической отправки данных о LLM операциях в Langfuse.
+
+#### Scenario: Включение success callback для Langfuse
+- **WHEN** litellm_config.yaml загружается приложением
+- **THEN** litellm_settings содержит success_callback: ["langfuse"]
+- **AND** при успешном завершении LLM запроса автоматически отправляются: model, prompt_tokens, completion_tokens, latency, cost
+
+#### Scenario: Включение failure callback для Langfuse
+- **WHEN** LLM запрос завершается с ошибкой
+- **THEN** failure_callback: ["langfuse"] автоматически логирует: error_type, error_message, stack_trace
+
+#### Scenario: Конфигурация Langfuse переменных
+- **WHEN** LiteLLM инициализируется
+- **THEN** используются environment variables:
+  - LANGFUSE_PUBLIC_KEY: публичный ключ Langfuse
+  - LANGFUSE_SECRET_KEY: секретный ключ Langfuse
+  - LANGFUSE_HOST: http://langfuse:3000 (для self-hosted)
+
+#### Scenario: Асинхронная обработка callbacks
+- **WHEN** LiteLLM обрабатывает callback
+- **THEN** callback отправляется асинхронно (не блокирует LLM запрос)
+- **AND** flush_interval: 30 (batch отправка каждые 30 сек)
+- **AND** max_retries: 2 (попытки переподключения)
+- **AND** timeout: 5 (fail-open если Langfuse недоступен)
+
+#### Scenario: Metaданные в callbacks
+- **WHEN** LiteLLM отправляет callback в Langfuse
+- **THEN** callback содержит структурированные метаданные для трейсинга:
+  - user_id: UUID пользователя (из контекста)
+  - workspace_id: UUID workspace (из контекста)
+  - agent_name: имя агента использующего модель (опционально)
+  - custom metadata: дополнительные поля из litellm запроса
+
