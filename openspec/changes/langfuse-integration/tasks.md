@@ -29,14 +29,14 @@
 
 ## 4. Модульные тесты: LangfuseIntegration (Фаза 2)
 
-- [ ] 4.1 Создать модуль тестов `tests/test_langfuse_integration.py`
-- [ ] 4.2 Протестировать инициализацию LangfuseIntegration (enabled/disabled режимы)
-- [ ] 4.3 Протестировать create_trace с mocked Langfuse клиентом
-- [ ] 4.4 Протестировать create_span с parent trace контекстом
-- [ ] 4.5 Протестировать record_score (валидные и невалидные входы)
-- [ ] 4.6 Протестировать graceful degradation (методы возвращают None когда disabled)
-- [ ] 4.7 Протестировать обработку ошибок (ошибки API не пробрасываются)
-- [ ] 4.8 Достичь 100% покрытия кода для LangfuseIntegration
+- [x] 4.1 Создать модуль тестов `tests/test_langfuse_integration.py`
+- [x] 4.2 Протестировать инициализацию LangfuseIntegration (enabled/disabled режимы)
+- [x] 4.3 Протестировать create_trace с mocked Langfuse клиентом
+- [x] 4.4 Протестировать create_span с parent trace контекстом
+- [x] 4.5 Протестировать record_score (валидные и невалидные входы)
+- [x] 4.6 Протестировать graceful degradation (методы возвращают None когда disabled)
+- [x] 4.7 Протестировать обработку ошибок (ошибки API не пробрасываются)
+- [x] 4.8 Достичь 100% покрытия кода для LangfuseIntegration
 
 ## 5. Интеграция с Agent Service (Фаза 2)
 
