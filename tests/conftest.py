@@ -313,7 +313,12 @@ def mock_litellm_client(monkeypatch) -> AsyncMock:
     mock_client = AsyncMock(spec=LiteLLMClient)
     mock_client.add_model = AsyncMock(return_value="user550e8400_openai_abc12345")
     mock_client.delete_model = AsyncMock(return_value=None)
-    mock_client.test_model = AsyncMock(return_value={"status": "ok"})
+    mock_client.test_model = AsyncMock(return_value={
+        "success": True,
+        "response": "Test response from LiteLLM",
+        "latency_ms": 123.45,
+        "error": None
+    })
     
     # Patch LiteLLMClient in llm_provider_service module
     monkeypatch.setattr(

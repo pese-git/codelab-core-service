@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -31,6 +31,7 @@ public_router = APIRouter(prefix="/llm-providers", tags=["llm-providers"])
 router = private_router
 
 
+# ==================== CREATE ====================
 @private_router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -87,6 +88,7 @@ async def create_llm_provider(
         )
 
 
+# ==================== LIST ====================
 @private_router.get("", response_model=LLMProviderListResponse)
 async def list_llm_providers(
     request: Request,
@@ -130,6 +132,169 @@ async def list_llm_providers(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list providers: {str(e)}",
+        )
+
+
+# ==================== SPECIFIC PATHS (before parameterized paths) ====================
+@private_router.get("/available", response_model=LLMProviderListResponse)
+async def get_available_llm_providers(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> LLMProviderListResponse:
+    """
+    Получает доступные провайдеры пользователя (активные и готовые к использованию).
+    
+    Требует аутентификации.
+    
+    Args:
+        request: HTTP request
+        db: Database session
+        
+    Returns:
+        Список доступных провайдеров
+    """
+    user_id = get_current_user_id(request)
+
+    try:
+        service = LLMProviderService(db)
+        providers, total = await service.get_user_providers(
+            user_id=user_id,
+            limit=1000,
+        )
+
+        return LLMProviderListResponse(
+            providers=[LLMProviderResponse.model_validate(p) for p in providers],
+            total=total,
+            page=1,
+            page_size=total,
+            total_pages=1,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available providers: {str(e)}",
+        )
+
+
+@private_router.get("/audit", response_model=LLMProviderAuditLogListResponse)
+async def get_provider_audit_log(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    provider_id: str | None = Query(None),
+    action: str | None = Query(None),
+    skip: int = Query(0),
+    limit: int = Query(100),
+) -> LLMProviderAuditLogListResponse:
+    """
+    Получает audit log операций с провайдерами.
+    
+    Требует аутентификации.
+    
+    Args:
+        provider_id: Фильтр по ID провайдера (опционально)
+        action: Фильтр по типу действия (опционально)
+        skip: Количество записей для пропуска
+        limit: Максимум записей
+        request: HTTP request
+        db: Database session
+        
+    Returns:
+        Audit log с пагинацией
+    """
+    user_id = get_current_user_id(request)
+    limit = min(max(1, limit), 100)  # Ensure limit is between 1 and 100
+    skip = max(0, skip)  # Ensure skip is >= 0
+
+    try:
+        # Convert provider_id string to UUID if provided
+        provider_id_uuid = None
+        if provider_id:
+            try:
+                provider_id_uuid = UUID(provider_id)
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid provider_id format: {provider_id}",
+                )
+
+        from app.services.llm_provider_audit_service import LLMProviderAuditService
+
+        audit_service = LLMProviderAuditService(db)
+        logs, total = await audit_service.get_audit_log(
+            user_id=user_id,
+            provider_id=provider_id_uuid,
+            action=action,
+            limit=limit,
+            offset=skip,
+        )
+
+        from app.schemas.llm_provider import LLMProviderAuditLogEntry
+
+        return LLMProviderAuditLogListResponse(
+            entries=[LLMProviderAuditLogEntry.model_validate(log) for log in logs],
+            total=total,
+            page=skip // limit + 1 if limit > 0 else 1,
+            page_size=limit,
+            total_pages=(total + limit - 1) // limit if limit > 0 else 1,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get audit log: {str(e)}",
+        )
+
+
+# ==================== PARAMETERIZED PATHS (after specific paths) ====================
+@private_router.post("/{provider_id}/test", response_model=LLMProviderTestResponse)
+async def test_llm_provider(
+    provider_id: UUID,
+    test_request: LLMProviderTestRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> LLMProviderTestResponse:
+    """
+    Тестирует подключение к LLM провайдеру.
+    
+    Требует аутентификации.
+    
+    Args:
+        provider_id: UUID провайдера
+        test_request: Параметры теста (test_prompt, max_tokens)
+        request: HTTP request
+        db: Database session
+        
+    Returns:
+        Результат теста (success, response, error, latency_ms)
+        
+    Raises:
+        HTTPException: Если провайдер не найден
+    """
+    user_id = get_current_user_id(request)
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    try:
+        service = LLMProviderService(db)
+        result = await service.test_provider(
+            user_id=user_id,
+            provider_id=provider_id,
+            test_prompt=test_request.test_prompt,
+            max_tokens=test_request.max_tokens,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        await db.commit()
+        return LLMProviderTestResponse(**result)
+    except LLMProviderNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Provider {provider_id} not found",
+        )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to test provider: {str(e)}",
         )
 
 
@@ -279,99 +444,7 @@ async def delete_llm_provider(
         )
 
 
-@private_router.post("/{provider_id}/test", response_model=LLMProviderTestResponse)
-async def test_llm_provider(
-    provider_id: UUID,
-    test_request: LLMProviderTestRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-) -> LLMProviderTestResponse:
-    """
-    Тестирует подключение к LLM провайдеру.
-    
-    Требует аутентификации.
-    
-    Args:
-        provider_id: UUID провайдера
-        test_request: Параметры теста (test_prompt, max_tokens)
-        request: HTTP request
-        db: Database session
-        
-    Returns:
-        Результат теста (success, response, error, latency_ms)
-        
-    Raises:
-        HTTPException: Если провайдер не найден
-    """
-    user_id = get_current_user_id(request)
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-
-    try:
-        service = LLMProviderService(db)
-        result = await service.test_provider(
-            user_id=user_id,
-            provider_id=provider_id,
-            test_prompt=test_request.test_prompt,
-            max_tokens=test_request.max_tokens,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-        await db.commit()
-        return LLMProviderTestResponse(**result)
-    except LLMProviderNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Provider {provider_id} not found",
-        )
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to test provider: {str(e)}",
-        )
-
-
-@private_router.get("/available", response_model=LLMProviderListResponse)
-async def get_available_llm_providers(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-) -> LLMProviderListResponse:
-    """
-    Получает доступные провайдеры пользователя (активные и готовые к использованию).
-    
-    Требует аутентификации.
-    
-    Args:
-        request: HTTP request
-        db: Database session
-        
-    Returns:
-        Список доступных провайдеров
-    """
-    user_id = get_current_user_id(request)
-
-    try:
-        service = LLMProviderService(db)
-        providers, total = await service.get_user_providers(
-            user_id=user_id,
-            limit=1000,
-        )
-
-        return LLMProviderListResponse(
-            providers=[LLMProviderResponse.model_validate(p) for p in providers],
-            total=total,
-            page=1,
-            page_size=total,
-            total_pages=1,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get available providers: {str(e)}",
-        )
-
-
+# ==================== PUBLIC ROUTES ====================
 @public_router.get("/types", response_model=list[LLMProviderTypeInfo])
 async def get_provider_types_list() -> list[LLMProviderTypeInfo]:
     """
@@ -383,59 +456,3 @@ async def get_provider_types_list() -> list[LLMProviderTypeInfo]:
         Список типов провайдеров с информацией о каждом
     """
     return get_provider_types()
-
-
-@private_router.get("/audit", response_model=LLMProviderAuditLogListResponse)
-async def get_provider_audit_log(
-    request: Request,
-    provider_id: UUID | None = None,
-    action: str | None = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-) -> LLMProviderAuditLogListResponse:
-    """
-    Получает audit log операций с провайдерами.
-    
-    Требует аутентификации.
-    
-    Args:
-        provider_id: Фильтр по ID провайдера (опционально)
-        action: Фильтр по типу действия (опционально)
-        skip: Количество записей для пропуска
-        limit: Максимум записей
-        request: HTTP request
-        db: Database session
-        
-    Returns:
-        Audit log с пагинацией
-    """
-    user_id = get_current_user_id(request)
-    limit = min(limit, 100)
-
-    try:
-        from app.services.llm_provider_audit_service import LLMProviderAuditService
-
-        audit_service = LLMProviderAuditService(db)
-        logs, total = await audit_service.get_audit_log(
-            user_id=user_id,
-            provider_id=provider_id,
-            action=action,
-            limit=limit,
-            offset=skip,
-        )
-
-        from app.schemas.llm_provider import LLMProviderAuditLogEntry
-
-        return LLMProviderAuditLogListResponse(
-            entries=[LLMProviderAuditLogEntry.model_validate(log) for log in logs],
-            total=total,
-            page=skip // limit + 1 if limit > 0 else 1,
-            page_size=limit,
-            total_pages=(total + limit - 1) // limit if limit > 0 else 1,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get audit log: {str(e)}",
-        )

@@ -386,7 +386,7 @@ class LLMProviderService:
             user_agent: User agent запроса (для аудита)
             
         Returns:
-            Результат теста (success, response, error, latency_ms)
+            Результат теста (success, response, error, latency_ms, message)
             
         Raises:
             LLMProviderNotFoundError: Если провайдер не найден
@@ -399,6 +399,12 @@ class LLMProviderService:
             test_prompt=test_prompt,
             max_tokens=max_tokens,
         )
+
+        # Добавляем message в результат
+        if test_result["success"]:
+            test_result["message"] = "Provider is working correctly"
+        else:
+            test_result["message"] = f"Provider test failed: {test_result.get('error', 'Unknown error')}"
 
         # Логируем в аудит
         await self.audit_service.log_action(
