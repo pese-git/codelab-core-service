@@ -170,14 +170,14 @@
 
 ## 18. Развертывание и rollout (Фаза 5)
 
-- [ ] 18.1 Убедиться что все тесты проходят (unit, integration, e2e)
-- [ ] 18.2 Установить LANGFUSE_ENABLED=false по умолчанию в production конфиге
-- [ ] 18.3 Развернуть changes инфраструктуры (docker-compose updates)
-- [ ] 18.4 Развернуть code changes
-- [ ] 18.5 Верифицировать что health check endpoint работает
-- [ ] 18.6 Мониторить логи для Langfuse интеграции ошибок
-- [ ] 18.7 Включить LANGFUSE_ENABLED=true на staging для тестирования
-- [ ] 18.8 Спланировать production rollout (включить постепенно, мониторить)
+- [x] 18.1 Убедиться что все тесты проходят (unit, integration, e2e)
+- [x] 18.2 Установить LANGFUSE_ENABLED=false по умолчанию в production конфиге
+- [ ] 18.3 Создать deployment guide с infrastructure инструкциями
+- [ ] 18.4 Создать health check verification procedure
+- [ ] 18.5 Создать staging enablement guide
+- [ ] 18.6 Создать логирование и мониторинг guide
+- [ ] 18.7 Создать production rollout план
+- [ ] 18.8 Создать troubleshooting и runbook
 
 ## 19. Финальная валидация и тестирование
 
