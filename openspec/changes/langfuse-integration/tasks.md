@@ -139,13 +139,13 @@
 
 ## 15. Политика хранения данных (Фаза 4)
 
-- [ ] 15.1 Создать `app/tasks/langfuse_retention.py` для retention задачи
-- [ ] 15.2 Реализовать логику удаления traces (старше LANGFUSE_RETENTION_DAYS)
-- [ ] 15.3 Добавить опциональное архивирование в S3 перед удалением
-- [ ] 15.4 Создать scheduled task (APScheduler или похожее) для ежедневного выполнения в 02:00 UTC
-- [ ] 15.5 Добавить логирование для выполнения retention
-- [ ] 15.6 Протестировать retention policy (unit тест с mocked удалением)
-- [ ] 15.7 Сделать retention policy configurable через environment переменные
+- [x] 15.1 Создать `app/tasks/langfuse_retention.py` для retention задачи
+- [x] 15.2 Реализовать логику удаления traces (старше LANGFUSE_RETENTION_DAYS)
+- [x] 15.3 Добавить опциональное архивирование в S3 перед удалением
+- [x] 15.4 Создать scheduled task (APScheduler или похожее) для ежедневного выполнения в 02:00 UTC
+- [x] 15.5 Добавить логирование для выполнения retention
+- [x] 15.6 Протестировать retention policy (unit тест с mocked удалением)
+- [x] 15.7 Сделать retention policy configurable через environment переменные
 
 ## 16. E2E Integration тесты (Фаза 4)
 
