@@ -123,8 +123,8 @@
 - [x] 13.1 Реализовать `GET /health/langfuse` endpoint
 - [x] 13.2 Проверить connectivity Langfuse (простой API вызов)
 - [x] 13.3 Возвращать {status: "healthy"} или {status: "unhealthy", error: "..."} с правильными HTTP кодами
-- [ ] 13.4 Добавить в существующую health check систему (если есть)
-- [ ] 13.5 Протестировать health check endpoint
+- [x] 13.4 Добавить в существующую health check систему (если есть)
+- [x] 13.5 Протестировать health check endpoint
 
 ## 14. Мониторинг и метрики (Фаза 4)
 
