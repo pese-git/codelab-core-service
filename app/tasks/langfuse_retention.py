@@ -2,8 +2,6 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
-import asyncio
 
 import structlog
 
@@ -153,7 +151,7 @@ class LangfuseRetentionPolicy:
 
 
 # Глобальный экземпляр retention policy
-_retention_policy: Optional[LangfuseRetentionPolicy] = None
+_retention_policy: LangfuseRetentionPolicy | None = None
 
 
 def get_langfuse_retention_policy() -> LangfuseRetentionPolicy:

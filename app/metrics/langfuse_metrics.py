@@ -1,9 +1,10 @@
 """Prometheus метрики для Langfuse интеграции."""
 
-from prometheus_client import Counter, Histogram, CollectorRegistry, REGISTRY
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
+
+from prometheus_client import REGISTRY, Counter, Histogram
 
 # Создаём метрики для Langfuse
 langfuse_traces_total = Counter(
@@ -46,7 +47,7 @@ langfuse_trace_creation_latency_seconds = Histogram(
 def trace_latency() -> Generator[None, None, None]:
     """
     Context manager для измерения latency создания trace.
-    
+
     Usage:
         with trace_latency():
             # trace creation code

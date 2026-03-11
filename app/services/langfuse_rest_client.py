@@ -2,7 +2,7 @@
 
 import base64
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -59,10 +59,10 @@ class LangfuseRestClient:
     async def get_traces(
         self,
         user_id: UUID,
-        workspace_id: Optional[UUID] = None,
-        agent_name: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
+        workspace_id: UUID | None = None,
+        agent_name: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -180,7 +180,7 @@ class LangfuseRestClient:
                 "error": str(e),
             }
 
-    async def get_trace(self, trace_id: str) -> Optional[dict[str, Any]]:
+    async def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         """
         Получить детали trace по ID.
 
@@ -298,7 +298,7 @@ class LangfuseRestClient:
         trace_id: str,
         score_name: str,
         score_value: float,
-        comment: Optional[str] = None,
+        comment: str | None = None,
     ) -> bool:
         """
         Записать score (оценку) для trace.
@@ -381,7 +381,7 @@ class LangfuseRestClient:
     async def get_analytics_summary(
         self,
         user_id: UUID,
-        workspace_id: Optional[UUID] = None,
+        workspace_id: UUID | None = None,
         period_days: int = 7,
     ) -> dict[str, Any]:
         """
@@ -514,7 +514,7 @@ class LangfuseRestClient:
 
 
 # Глобальный экземпляр REST клиента
-_rest_client: Optional[LangfuseRestClient] = None
+_rest_client: LangfuseRestClient | None = None
 
 
 def get_langfuse_rest_client() -> LangfuseRestClient:

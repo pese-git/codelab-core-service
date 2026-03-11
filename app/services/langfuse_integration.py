@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -10,11 +10,13 @@ from langfuse import Langfuse
 
 from app.config import settings
 from app.metrics import (
-    record_trace_created,
-    record_span_created,
-    record_score as record_score_metric,
     record_callback_failure,
+    record_span_created,
+    record_trace_created,
     trace_latency,
+)
+from app.metrics import (
+    record_score as record_score_metric,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,8 +45,8 @@ class LangfuseIntegration:
         4. Логирование статуса
         """
         self.enabled = settings.langfuse_enabled
-        self.client: Optional[Langfuse] = None
-        self._current_trace: Optional[Any] = None
+        self.client: Langfuse | None = None
+        self._current_trace: Any | None = None
 
         if not self.enabled:
             struct_logger.info("langfuse_disabled", reason="LANGFUSE_ENABLED=false")
@@ -101,10 +103,10 @@ class LangfuseIntegration:
     def create_trace(
         self,
         name: str,
-        user_id: Optional[UUID] = None,
-        workspace_id: Optional[UUID] = None,
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> Optional[Any]:
+        user_id: UUID | None = None,
+        workspace_id: UUID | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Any | None:
         """
         Создает новый trace в Langfuse.
 
@@ -163,7 +165,7 @@ class LangfuseIntegration:
         except Exception as e:
             # Записываем ошибку callback
             record_callback_failure("trace_creation", type(e).__name__)
-            
+
             struct_logger.error(
                 "langfuse_trace_creation_failed",
                 error=str(e),
@@ -175,11 +177,11 @@ class LangfuseIntegration:
         self,
         trace: Any,
         name: str,
-        input_data: Optional[Any] = None,
-        output_data: Optional[Any] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        input_data: Any | None = None,
+        output_data: Any | None = None,
+        metadata: dict[str, Any] | None = None,
         status: str = "success",
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """
         Создает span внутри trace.
 
@@ -229,7 +231,7 @@ class LangfuseIntegration:
         except Exception as e:
             # Записываем ошибку callback
             record_callback_failure("span_creation", type(e).__name__)
-            
+
             struct_logger.error(
                 "langfuse_span_creation_failed",
                 error=str(e),
@@ -242,7 +244,7 @@ class LangfuseIntegration:
         trace_id: str,
         name: str,
         value: float,
-        comment: Optional[str] = None,
+        comment: str | None = None,
     ) -> bool:
         """
         Записывает score (оценку качества) для trace.
@@ -282,7 +284,7 @@ class LangfuseIntegration:
         except Exception as e:
             # Записываем ошибку callback
             record_callback_failure("score_recording", type(e).__name__)
-            
+
             struct_logger.error(
                 "langfuse_score_recording_failed",
                 error=str(e),
@@ -291,7 +293,7 @@ class LangfuseIntegration:
             )
             return False
 
-    def get_trace(self, trace_id: str) -> Optional[dict[str, Any]]:
+    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         """
         Получает информацию о trace по ID.
 
@@ -362,9 +364,9 @@ class LangfuseIntegration:
     async def trace_context(
         self,
         name: str,
-        user_id: Optional[UUID] = None,
-        workspace_id: Optional[UUID] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: UUID | None = None,
+        workspace_id: UUID | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Context manager для автоматического управления trace lifetime.
@@ -411,7 +413,7 @@ class LangfuseIntegration:
 
 
 # Глобальный экземпляр LangfuseIntegration
-_langfuse_instance: Optional[LangfuseIntegration] = None
+_langfuse_instance: LangfuseIntegration | None = None
 
 
 def get_langfuse() -> LangfuseIntegration:

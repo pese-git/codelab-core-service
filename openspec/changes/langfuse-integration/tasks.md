@@ -172,12 +172,12 @@
 
 - [x] 18.1 Убедиться что все тесты проходят (unit, integration, e2e)
 - [x] 18.2 Установить LANGFUSE_ENABLED=false по умолчанию в production конфиге
-- [ ] 18.3 Создать deployment guide с infrastructure инструкциями
-- [ ] 18.4 Создать health check verification procedure
-- [ ] 18.5 Создать staging enablement guide
-- [ ] 18.6 Создать логирование и мониторинг guide
-- [ ] 18.7 Создать production rollout план
-- [ ] 18.8 Создать troubleshooting и runbook
+- [x] 18.3 Создать deployment guide с infrastructure инструкциями
+- [x] 18.4 Создать health check verification procedure
+- [x] 18.5 Создать staging enablement guide
+- [x] 18.6 Создать логирование и мониторинг guide
+- [x] 18.7 Создать production rollout план
+- [x] 18.8 Создать troubleshooting и runbook
 
 ## 19. Финальная валидация и тестирование
 
