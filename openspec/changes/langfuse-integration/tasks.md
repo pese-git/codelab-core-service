@@ -149,13 +149,13 @@
 
 ## 16. E2E Integration тесты (Фаза 4)
 
-- [ ] 16.1 Создать `tests/test_langfuse_e2e.py` для end-to-end тестов
-- [ ] 16.2 Протестировать полный flow: Agent process_message → LLM call → Langfuse trace
-- [ ] 16.3 Протестировать LiteLLM callbacks с real Langfuse (Docker container)
-- [ ] 16.4 Протестировать запись scores через API
-- [ ] 16.5 Протестировать получение traces через API
-- [ ] 16.6 Протестировать graceful degradation (Langfuse down)
-- [ ] 16.7 Достичь 100% покрытия для critical paths
+- [x] 16.1 Создать `tests/test_langfuse_e2e.py` для end-to-end тестов
+- [x] 16.2 Протестировать полный flow: Agent process_message → LLM call → Langfuse trace
+- [x] 16.3 Протестировать LiteLLM callbacks с real Langfuse (Docker container)
+- [x] 16.4 Протестировать запись scores через API
+- [x] 16.5 Протестировать получение traces через API
+- [x] 16.6 Протестировать graceful degradation (Langfuse down)
+- [x] 16.7 Достичь 100% покрытия для critical paths
 
 ## 17. Документация (Фаза 4)
 
