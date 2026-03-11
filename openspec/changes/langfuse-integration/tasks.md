@@ -159,14 +159,14 @@
 
 ## 17. Документация (Фаза 4)
 
-- [ ] 17.1 Создать `doc/langfuse-integration.md` с обзором архитектуры
-- [ ] 17.2 Документировать API сервиса LangfuseIntegration (методы, параметры)
-- [ ] 17.3 Документировать REST API endpoints (GET /traces, POST /traces/{id}/scores и т.д.)
-- [ ] 17.4 Документировать analytics endpoints
-- [ ] 17.5 Документировать конфигурацию (LANGFUSE_* переменные окружения)
-- [ ] 17.6 Создать deployment гайд (self-hosted Langfuse setup)
-- [ ] 17.7 Создать troubleshooting гайд (частые проблемы, health checks)
-- [ ] 17.8 Добавить код примеры для SDK использования
+- [x] 17.1 Создать `doc/langfuse-integration.md` с обзором архитектуры
+- [x] 17.2 Документировать API сервиса LangfuseIntegration (методы, параметры)
+- [x] 17.3 Документировать REST API endpoints (GET /traces, POST /traces/{id}/scores и т.д.)
+- [x] 17.4 Документировать analytics endpoints
+- [x] 17.5 Документировать конфигурацию (LANGFUSE_* переменные окружения)
+- [x] 17.6 Создать deployment гайд (self-hosted Langfuse setup)
+- [x] 17.7 Создать troubleshooting гайд (частые проблемы, health checks)
+- [x] 17.8 Добавить код примеры для SDK использования
 
 ## 18. Развертывание и rollout (Фаза 5)
 
