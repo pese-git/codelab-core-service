@@ -128,14 +128,14 @@
 
 ## 14. Мониторинг и метрики (Фаза 4)
 
-- [ ] 14.1 Добавить Prometheus метрики для Langfuse интеграции
-- [ ] 14.2 Добавить метрику: langfuse_traces_total (counter)
-- [ ] 14.3 Добавить метрику: langfuse_spans_total (counter)
-- [ ] 14.4 Добавить метрику: langfuse_scores_total (counter)
-- [ ] 14.5 Добавить метрику: langfuse_callback_failures (counter)
-- [ ] 14.6 Добавить метрику: langfuse_trace_creation_latency_seconds (histogram)
-- [ ] 14.7 Обновить Prometheus конфигурацию в `monitoring/prometheus.yml`
-- [ ] 14.8 Протестировать сбор метрик и scraping
+- [x] 14.1 Добавить Prometheus метрики для Langfuse интеграции
+- [x] 14.2 Добавить метрику: langfuse_traces_total (counter)
+- [x] 14.3 Добавить метрику: langfuse_spans_total (counter)
+- [x] 14.4 Добавить метрику: langfuse_scores_total (counter)
+- [x] 14.5 Добавить метрику: langfuse_callback_failures (counter)
+- [x] 14.6 Добавить метрику: langfuse_trace_creation_latency_seconds (histogram)
+- [x] 14.7 Обновить Prometheus конфигурацию в `monitoring/prometheus.yml`
+- [x] 14.8 Протестировать сбор метрик и scraping
 
 ## 15. Политика хранения данных (Фаза 4)
 

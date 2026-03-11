@@ -9,6 +9,13 @@ import structlog
 from langfuse import Langfuse
 
 from app.config import settings
+from app.metrics import (
+    record_trace_created,
+    record_span_created,
+    record_score as record_score_metric,
+    record_callback_failure,
+    trace_latency,
+)
 
 logger = logging.getLogger(__name__)
 struct_logger = structlog.get_logger(__name__)
@@ -129,14 +136,20 @@ class LangfuseIntegration:
             if workspace_id:
                 trace_metadata["workspace_id"] = str(workspace_id)
 
-            # Создаем trace в Langfuse
-            trace = self.client.trace(
-                name=name,
-                user_id=str(user_id) if user_id else None,
-                metadata=trace_metadata,
-            )
+            # Измеряем latency создания trace
+            with trace_latency():
+                # Создаем trace в Langfuse
+                trace = self.client.trace(
+                    name=name,
+                    user_id=str(user_id) if user_id else None,
+                    metadata=trace_metadata,
+                )
 
             self._current_trace = trace
+
+            # Записываем метрику
+            if workspace_id:
+                record_trace_created(str(workspace_id))
 
             struct_logger.info(
                 "langfuse_trace_created",
@@ -148,6 +161,9 @@ class LangfuseIntegration:
             return trace
 
         except Exception as e:
+            # Записываем ошибку callback
+            record_callback_failure("trace_creation", type(e).__name__)
+            
             struct_logger.error(
                 "langfuse_trace_creation_failed",
                 error=str(e),
@@ -198,6 +214,9 @@ class LangfuseIntegration:
             # Создаем span в Langfuse
             span = trace.span(**span_kwargs)
 
+            # Записываем метрику
+            record_span_created(str(trace.id))
+
             struct_logger.info(
                 "langfuse_span_created",
                 trace_id=trace.id,
@@ -208,6 +227,9 @@ class LangfuseIntegration:
             return span
 
         except Exception as e:
+            # Записываем ошибку callback
+            record_callback_failure("span_creation", type(e).__name__)
+            
             struct_logger.error(
                 "langfuse_span_creation_failed",
                 error=str(e),
@@ -245,6 +267,9 @@ class LangfuseIntegration:
                 comment=comment,
             )
 
+            # Записываем метрику
+            record_score_metric(name)
+
             struct_logger.info(
                 "langfuse_score_recorded",
                 trace_id=trace_id,
@@ -255,6 +280,9 @@ class LangfuseIntegration:
             return True
 
         except Exception as e:
+            # Записываем ошибку callback
+            record_callback_failure("score_recording", type(e).__name__)
+            
             struct_logger.error(
                 "langfuse_score_recording_failed",
                 error=str(e),
