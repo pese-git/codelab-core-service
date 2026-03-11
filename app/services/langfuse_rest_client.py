@@ -470,6 +470,48 @@ class LangfuseRestClient:
                 "error": str(e),
             }
 
+    async def check_health(self) -> bool:
+        """
+        Проверить доступность Langfuse сервиса.
+
+        Returns:
+            True если сервис здоров, False если недоступен или ошибка
+        """
+        if not self.public_key or not self.secret_key:
+            struct_logger.warning("langfuse_rest_client_credentials_missing")
+            return False
+
+        try:
+            # Langfuse имеет endpoint /api/public/health для проверки статуса
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/api/public/health",
+                    headers=self._auth_header,
+                )
+
+                if response.status_code == 200:
+                    struct_logger.info("langfuse_health_check_success")
+                    return True
+                else:
+                    struct_logger.warning(
+                        "langfuse_health_check_failed",
+                        status_code=response.status_code,
+                    )
+                    return False
+
+        except httpx.TimeoutException:
+            struct_logger.error(
+                "langfuse_health_check_timeout",
+                timeout=self.timeout,
+            )
+            return False
+        except Exception as e:
+            struct_logger.error(
+                "langfuse_health_check_error",
+                error=str(e),
+            )
+            return False
+
 
 # Глобальный экземпляр REST клиента
 _rest_client: Optional[LangfuseRestClient] = None
