@@ -177,10 +177,12 @@ class TestLangfuseE2E:
 
     def test_basic_endpoints_exist(self, client):
         """Тест что базовые endpoints существуют."""
-        # Health endpoints
-        assert client.get("/health").status_code in [200, 404]
-        assert client.get("/ready").status_code in [200, 404]
-        assert client.get("/health/langfuse").status_code in [200, 503, 404]
+        # Health endpoints - ключевые endpoints
+        health_response = client.get("/health")
+        assert health_response.status_code == 200
         
-        # Traces endpoints
-        assert client.get("/traces").status_code in [200, 401, 403, 404]
+        ready_response = client.get("/ready")
+        assert ready_response.status_code == 200
+        
+        langfuse_health_response = client.get("/health/langfuse")
+        assert langfuse_health_response.status_code in [200, 503]
