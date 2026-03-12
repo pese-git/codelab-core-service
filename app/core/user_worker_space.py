@@ -22,6 +22,7 @@ from app.core.tools.executor import ToolExecutor
 from app.logging_config import get_logger
 from app.models.user_project import UserProject
 from app.schemas.agent import AgentConfig
+from app.services.langfuse_integration import get_langfuse
 from app.vectorstore.agent_context_store import AgentContextStore
 
 logger = get_logger(__name__)
@@ -349,8 +350,50 @@ class UserWorkerSpace:
             concurrency_limit = agent_config.concurrency_limit
 
             async def agent_handler(task_item: Any) -> Any:
-                """Handle agent task."""
-                return await agent.execute(task_item.payload)
+                """Handle agent task with Langfuse tracing."""
+                langfuse = get_langfuse()
+                
+                # Create Langfuse trace for agent execution
+                trace_id = None
+                if langfuse.enabled and langfuse.client:
+                    trace_id = langfuse.client.create_trace_id()
+                    langfuse.client.start_observation(
+                        name=f"agent_execution_{agent_db_model.agent_name}",
+                        trace_id=trace_id,
+                        input=task_item.payload,
+                    )
+                
+                try:
+                    result = await agent.execute(task_item.payload)
+                    
+                    # Record successful execution
+                    if langfuse.enabled and langfuse.client and trace_id:
+                        langfuse.client.create_event(
+                            name="agent_execution_success",
+                            trace_id=trace_id,
+                            output=result,
+                            metadata={
+                                "agent_id": str(agent_db_model.id),
+                                "agent_name": agent_db_model.agent_name,
+                            }
+                        )
+                        langfuse.client.flush()
+                    
+                    return result
+                except Exception as e:
+                    # Record execution error
+                    if langfuse.enabled and langfuse.client and trace_id:
+                        langfuse.client.create_event(
+                            name="agent_execution_error",
+                            trace_id=trace_id,
+                            output={"error": str(e)},
+                            metadata={
+                                "agent_id": str(agent_db_model.id),
+                                "agent_name": agent_db_model.agent_name,
+                            }
+                        )
+                        langfuse.client.flush()
+                    raise
 
             await self.agent_bus.register_agent(
                 agent_id=agent_db_model.id,
@@ -781,8 +824,30 @@ class UserWorkerSpace:
             metadata=metadata,
         )
 
-        # Execute
+        # Execute with Langfuse tracing
         start_time = time.time()
+        langfuse = get_langfuse()
+        trace_id = None
+        
+        # Create Langfuse trace for direct agent execution
+        if langfuse.enabled and langfuse.client:
+            trace_id = langfuse.client.create_trace_id()
+            langfuse.client.create_event(
+                name=f"agent_execution_started_{agent.agent_name}",
+                input={
+                    "user_message": user_message,
+                    "session_history_length": len(session_history or []),
+                    "task_id": task_id,
+                },
+                metadata={
+                    "trace_id": trace_id,
+                    "agent_id": str(agent_id),
+                    "agent_name": agent.agent_name,
+                    "workspace_id": str(self.project_id),
+                    "user_id": str(self.user_id),
+                }
+            )
+        
         try:
             result = await agent.execute(
                 user_message=user_message,
@@ -791,6 +856,23 @@ class UserWorkerSpace:
                 session_id=session_id,
             )
             execution_time = (time.time() - start_time) * 1000  # ms
+
+            # Record successful execution in Langfuse
+            if langfuse.enabled and langfuse.client and trace_id:
+                langfuse.client.create_event(
+                    name=f"agent_execution_completed_{agent.agent_name}",
+                    output={
+                        "success": result.get("success"),
+                        "response_length": len(str(result.get("response", ""))),
+                        "tokens_used": result.get("tokens_used", 0),
+                    },
+                    metadata={
+                        "trace_id": trace_id,
+                        "execution_time_ms": execution_time,
+                        "context_used": result.get("context_used", 0),
+                    }
+                )
+                langfuse.client.flush()
 
             # Add output context if successful
             if result.get("success"):
@@ -825,6 +907,22 @@ class UserWorkerSpace:
             }
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
+            
+            # Record error in Langfuse
+            if langfuse.enabled and langfuse.client:
+                langfuse.client.create_event(
+                    name=f"agent_execution_error_{agent.agent_name}",
+                    output={"error": str(e)},
+                    metadata={
+                        "agent_id": str(agent_id),
+                        "agent_name": agent.agent_name,
+                        "execution_time_ms": execution_time,
+                        "error_type": type(e).__name__,
+                        "event_type": "agent_execution_error",
+                    }
+                )
+                langfuse.client.flush()
+            
             logger.error(
                 "direct_execution_error",
                 agent_id=str(agent_id),
