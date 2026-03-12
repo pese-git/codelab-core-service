@@ -21,6 +21,7 @@ from app.schemas.event import StreamEventType
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.tracing import get_tracer
+from app.services.langfuse_integration import LangfuseIntegration, get_langfuse
 
 logger = get_logger(__name__)
 tracer = get_tracer(__name__)
@@ -45,6 +46,7 @@ class ToolExecutor:
         db: AsyncSession,
         approval_manager: ApprovalManager,
         stream_manager: Optional[StreamManager] = None,
+        langfuse_integration: Optional[LangfuseIntegration] = None,
     ):
         """Initialize Tool Executor
         
@@ -55,6 +57,7 @@ class ToolExecutor:
             db: AsyncSession for database operations
             approval_manager: ApprovalManager instance
             stream_manager: Optional StreamManager for SSE events
+            langfuse_integration: Optional LangfuseIntegration for Langfuse tracing (uses global if not provided)
         """
         self.user_id = user_id
         self.project_id = project_id
@@ -62,6 +65,9 @@ class ToolExecutor:
         self.db = db
         self.approval_manager = approval_manager
         self.stream_manager = stream_manager
+        
+        # Initialize Langfuse integration (use provided or get global instance)
+        self.langfuse = langfuse_integration or get_langfuse()
 
         # Initialize validators
         self.path_validator = PathValidator(workspace_root)
@@ -79,7 +85,7 @@ class ToolExecutor:
     ) -> ToolExecutionResponse:
         """Execute tool with full validation and approval workflow
         
-        Main entry point for tool execution
+        Main entry point for tool execution. Includes both OpenTelemetry and Langfuse tracing.
         
         Args:
             tool_name: Name of the tool to execute
@@ -91,8 +97,38 @@ class ToolExecutor:
         """
         tool_id = uuid4()
         created_at = datetime.utcnow().isoformat()
+        
+        # Performance tracking for Langfuse operations
+        langfuse_overhead_start = datetime.utcnow()
 
         execution: ToolExecution | None = None
+        
+        # Create Langfuse root span for tool execution with graceful error handling
+        langfuse_span = None
+        try:
+            langfuse_span = self.langfuse.create_tool_execution_span(
+                tool_name=tool_name,
+                input_params=tool_params,
+                metadata={
+                    "user_id": str(self.user_id),
+                    "project_id": str(self.project_id),
+                    "session_id": str(session_id) if session_id else None,
+                    "tool_id": str(tool_id),
+                }
+            )
+        except Exception as langfuse_error:
+            self.logger.warning(
+                "langfuse_root_span_creation_failed",
+                tool_id=str(tool_id),
+                tool_name=tool_name,
+                error=str(langfuse_error),
+            )
+            # Continue without Langfuse tracing
+            langfuse_span = None
+        
+        # Track if execution succeeded for Langfuse span completion
+        execution_result = None
+        execution_error = None
 
         with tracer.start_as_current_span("tool_execution") as span:
             span.set_attribute("tool.name", tool_name)
@@ -110,9 +146,42 @@ class ToolExecutor:
                 # ====================================================================
                 # STEP 1: Validate tool parameters
                 # ====================================================================
+                # Create Langfuse nested span for validation with graceful error handling
+                validation_langfuse_span = None
+                try:
+                    validation_langfuse_span = self.langfuse._create_nested_span(
+                        parent_span_id=langfuse_span.span_id if langfuse_span else None,
+                        span_name=f"tool_{tool_name}_validation",
+                        input_params={},
+                        metadata={"validation_type": "params"},
+                    )
+                except Exception as langfuse_error:
+                    self.logger.warning(
+                        "langfuse_validation_span_creation_failed",
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        error=str(langfuse_error),
+                    )
+                    validation_langfuse_span = None
+                
                 with tracer.start_as_current_span("tool_validation") as val_span:
                     is_valid, error = await self._validate_tool_params(tool_name, tool_params)
                     val_span.set_attribute("validation_status", "passed" if is_valid else "failed")
+                    
+                    # Complete Langfuse validation span with graceful error handling
+                    if validation_langfuse_span:
+                        try:
+                            self.langfuse.end_tool_execution_span(
+                                validation_langfuse_span,
+                                result={"validation_status": "passed" if is_valid else "failed"},
+                                error=Exception(error) if error else None,
+                            )
+                        except Exception as langfuse_error:
+                            self.logger.warning(
+                                "langfuse_validation_span_completion_failed",
+                                tool_id=str(tool_id),
+                                error=str(langfuse_error),
+                            )
                     
                     if not is_valid:
                         self.logger.warning(
@@ -123,6 +192,14 @@ class ToolExecutor:
                         )
                         val_span.add_event("validation_error", {"error": error})
                         span.set_attribute("status", "failed")
+                        
+                        # Complete Langfuse span with validation error
+                        self.langfuse.end_tool_execution_span(
+                            langfuse_span,
+                            result={"status": "validation_failed"},
+                            error=Exception(error),
+                        )
+                        
                         return ToolExecutionResponse(
                             tool_id=str(tool_id),
                             tool_name=tool_name,
@@ -134,9 +211,42 @@ class ToolExecutor:
                 # ====================================================================
                 # STEP 2: Assess risk level
                 # ====================================================================
+                # Create Langfuse nested span for risk assessment with graceful error handling
+                risk_langfuse_span = None
+                try:
+                    risk_langfuse_span = self.langfuse._create_nested_span(
+                        parent_span_id=langfuse_span.span_id if langfuse_span else None,
+                        span_name=f"tool_{tool_name}_risk_assessment",
+                        input_params={},
+                        metadata={"assessment_type": "tool_risk"},
+                    )
+                except Exception as langfuse_error:
+                    self.logger.warning(
+                        "langfuse_risk_assessment_span_creation_failed",
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        error=str(langfuse_error),
+                    )
+                    risk_langfuse_span = None
+                
                 with tracer.start_as_current_span("risk_assessment") as risk_span:
                     risk_level = self.risk_assessor.assess_tool_risk(tool_name, tool_params)
                     risk_span.set_attribute("risk_level", risk_level.value)
+                    
+                    # Complete Langfuse risk assessment span with graceful error handling
+                    if risk_langfuse_span:
+                        try:
+                            self.langfuse.end_tool_execution_span(
+                                risk_langfuse_span,
+                                result={"risk_level": risk_level.value},
+                                error=None,
+                            )
+                        except Exception as langfuse_error:
+                            self.logger.warning(
+                                "langfuse_risk_assessment_span_completion_failed",
+                                tool_id=str(tool_id),
+                                error=str(langfuse_error),
+                            )
                     
                     self.logger.debug(
                         "tool_risk_assessed",
@@ -182,6 +292,24 @@ class ToolExecutor:
                         timeout=timeout_seconds,
                     )
 
+                    # Create Langfuse nested span for approval workflow with graceful error handling
+                    approval_langfuse_span = None
+                    try:
+                        approval_langfuse_span = self.langfuse._create_nested_span(
+                            parent_span_id=langfuse_span.span_id if langfuse_span else None,
+                            span_name=f"tool_{tool_name}_approval",
+                            input_params={},
+                            metadata={"approval_type": "tool_execution"},
+                        )
+                    except Exception as langfuse_error:
+                        self.logger.warning(
+                            "langfuse_approval_span_creation_failed",
+                            tool_id=str(tool_id),
+                            tool_name=tool_name,
+                            error=str(langfuse_error),
+                        )
+                        approval_langfuse_span = None
+                    
                     with tracer.start_as_current_span("approval_workflow") as approval_span:
                         approval = await self.approval_manager.request_tool_execution_approval(
                             tool_name=tool_name,
@@ -215,6 +343,22 @@ class ToolExecutor:
                             execution.completed_at = datetime.utcnow()
                             await self.db.flush()
                             span.set_attribute("status", "rejected")
+                            
+                            # Complete Langfuse approval span with rejection error
+                            if approval_langfuse_span:
+                                try:
+                                    self.langfuse.end_tool_execution_span(
+                                        approval_langfuse_span,
+                                        result={"approval_status": "rejected"},
+                                        error=Exception(reason),
+                                    )
+                                except Exception as langfuse_error:
+                                    self.logger.warning(
+                                        "langfuse_approval_span_completion_failed",
+                                        tool_id=str(tool_id),
+                                        error=str(langfuse_error),
+                                    )
+                            
                             return ToolExecutionResponse(
                                 tool_id=str(tool_id),
                                 tool_name=tool_name,
@@ -226,6 +370,21 @@ class ToolExecutor:
 
                         approval_span.set_attribute("approval_status", "approved")
                         execution.status = "approved"
+                        
+                        # Complete Langfuse approval span with successful approval
+                        if approval_langfuse_span:
+                            try:
+                                self.langfuse.end_tool_execution_span(
+                                    approval_langfuse_span,
+                                    result={"approval_status": "approved"},
+                                    error=None,
+                                )
+                            except Exception as langfuse_error:
+                                self.logger.warning(
+                                    "langfuse_approval_span_completion_failed",
+                                    tool_id=str(tool_id),
+                                    error=str(langfuse_error),
+                                )
 
                 await self.db.flush()
 
@@ -239,15 +398,74 @@ class ToolExecutor:
                     approval_id=str(approval_id) if approval_id else None,
                 )
 
-                with tracer.start_as_current_span("client_execution") as client_span:
-                    # Send execution signal via SSE
-                    await self.approval_manager.send_tool_execution_signal(
+                # Create Langfuse nested span for client execution with graceful error handling
+                client_execution_langfuse_span = None
+                try:
+                    client_execution_langfuse_span = self.langfuse._create_nested_span(
+                        parent_span_id=langfuse_span.span_id if langfuse_span else None,
+                        span_name=f"tool_{tool_name}_client_execution",
+                        input_params={"tool_params": tool_params},
+                        metadata={"execution_stage": "client_call", "approval_id": str(approval_id) if approval_id else None},
+                    )
+                except Exception as langfuse_error:
+                    self.logger.warning(
+                        "langfuse_client_execution_span_creation_failed",
                         tool_id=str(tool_id),
                         tool_name=tool_name,
-                        tool_params=tool_params,
-                        session_id=session_id,
+                        error=str(langfuse_error),
                     )
-                    client_span.set_attribute("execution_signal_sent", True)
+                    client_execution_langfuse_span = None
+
+                with tracer.start_as_current_span("client_execution") as client_span:
+                    try:
+                        # Send execution signal via SSE
+                        await self.approval_manager.send_tool_execution_signal(
+                            tool_id=str(tool_id),
+                            tool_name=tool_name,
+                            tool_params=tool_params,
+                            session_id=session_id,
+                        )
+                        client_span.set_attribute("execution_signal_sent", True)
+                        
+                        # Complete Langfuse execution span with success
+                        if client_execution_langfuse_span:
+                            try:
+                                self.langfuse.end_tool_execution_span(
+                                    client_execution_langfuse_span,
+                                    result={"execution_signal_sent": True},
+                                    error=None,
+                                )
+                            except Exception as langfuse_error:
+                                self.logger.warning(
+                                    "langfuse_client_execution_span_completion_failed",
+                                    tool_id=str(tool_id),
+                                    error=str(langfuse_error),
+                                )
+                    except Exception as client_error:
+                        self.logger.error(
+                            "client_execution_error",
+                            tool_id=str(tool_id),
+                            tool_name=tool_name,
+                            error=str(client_error),
+                            exc_info=True,
+                        )
+                        client_span.set_attribute("execution_signal_sent", False)
+                        
+                        # Complete Langfuse execution span with error
+                        if client_execution_langfuse_span:
+                            try:
+                                self.langfuse.end_tool_execution_span(
+                                    client_execution_langfuse_span,
+                                    result={"execution_signal_sent": False},
+                                    error=client_error,
+                                )
+                            except Exception as langfuse_error:
+                                self.logger.warning(
+                                    "langfuse_client_execution_span_completion_failed",
+                                    tool_id=str(tool_id),
+                                    error=str(langfuse_error),
+                                )
+                        raise
 
                 # ====================================================================
                 # STEP 5: Wait for tool result from client
@@ -290,6 +508,35 @@ class ToolExecutor:
                 # STEP 7: Return result response
                 # ====================================================================
                 span.set_attribute("status", execution.status)
+                
+                # Complete Langfuse span with successful result
+                if langfuse_span:
+                    try:
+                        self.langfuse.end_tool_execution_span(
+                            langfuse_span,
+                            result={
+                                "status": execution.status,
+                                "tool_result": tool_result,
+                            },
+                            error=None,
+                        )
+                    except Exception as langfuse_error:
+                        self.logger.warning(
+                            "langfuse_root_span_completion_failed",
+                            tool_id=str(tool_id),
+                            error=str(langfuse_error),
+                        )
+                
+                # Calculate and log Langfuse overhead
+                langfuse_overhead_ms = (datetime.utcnow() - langfuse_overhead_start).total_seconds() * 1000
+                self.logger.info(
+                    "tool_execution_langfuse_overhead",
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                    overhead_ms=round(langfuse_overhead_ms, 2),
+                    status=execution.status,
+                )
+                
                 return ToolExecutionResponse(
                     tool_id=str(tool_id),
                     tool_name=tool_name,
@@ -312,11 +559,41 @@ class ToolExecutor:
                 span.record_exception(e)
                 span.set_attribute("status", "error")
                 
+                # Track error for Langfuse span completion
+                execution_error = e
+                
                 if execution is not None:
                     execution.status = "failed"
                     execution.error = str(e)
                     execution.completed_at = datetime.utcnow()
                     await self.db.flush()
+                
+                # Complete Langfuse span with error
+                if langfuse_span:
+                    try:
+                        self.langfuse.end_tool_execution_span(
+                            langfuse_span,
+                            result={"status": "failed"},
+                            error=e,
+                        )
+                    except Exception as langfuse_error:
+                        self.logger.warning(
+                            "langfuse_root_span_completion_failed",
+                            tool_id=str(tool_id),
+                            error=str(langfuse_error),
+                        )
+                
+                # Calculate and log Langfuse overhead for error case
+                langfuse_overhead_ms = (datetime.utcnow() - langfuse_overhead_start).total_seconds() * 1000
+                self.logger.info(
+                    "tool_execution_langfuse_overhead",
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                    overhead_ms=round(langfuse_overhead_ms, 2),
+                    status="failed",
+                    error_type=type(e).__name__,
+                )
+                
                 return ToolExecutionResponse(
                     tool_id=str(tool_id),
                     tool_name=tool_name,
@@ -324,6 +601,10 @@ class ToolExecutor:
                     error=f"Tool execution error: {str(e)}",
                     created_at=created_at,
                 )
+            finally:
+                # Complete Langfuse span if not already completed
+                # (in normal execution path, span is completed before return)
+                pass
 
     async def _validate_tool_params(
         self,

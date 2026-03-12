@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.user_worker_space import UserWorkerSpace
@@ -16,6 +18,9 @@ from app.services.traces_service import get_traces_service
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/traces", tags=["traces"])
+
+# Rate limiter for analytics endpoints: 100 requests/minute per IP
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("", name="list_traces")
@@ -373,3 +378,211 @@ async def langfuse_health_check() -> dict[str, Any]:
             "status": "unhealthy",
             "error": str(e),
         }
+
+
+# ============================================================================
+# Tool Performance Analytics API Endpoints
+# ============================================================================
+
+
+@router.get("/tools/metrics", name="get_tool_metrics")
+@limiter.limit("100/minute")
+async def get_tool_metrics(
+    request: Request,
+    workspace_id: UUID = Query(..., description="Workspace ID"),
+    tool_name: Optional[str] = Query(None, description="Filter by tool name"),
+    period_days: int = Query(7, ge=1, le=90, description="Period in days"),
+    current_user_id: UUID = Depends(get_current_user_id),
+    db_session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get tool execution metrics for a workspace.
+
+    Query параметры:
+    - workspace_id: Workspace ID (обязательно)
+    - tool_name: Фильтр по имени инструмента (опционально)
+    - period_days: Период в днях для анализа (1-90, по умолчанию 7)
+
+    Returns:
+        Словарь с метриками: count, success_rate, latency percentiles
+    """
+    try:
+        from app.services.langfuse_integration import get_langfuse
+        
+        # Verify user has access to workspace
+        user_workspace = UserWorkerSpace(
+            user_id=current_user_id,
+            workspace_id=workspace_id,
+            db=db_session,
+        )
+        await user_workspace.validate_workspace_access()
+        
+        langfuse = get_langfuse()
+        
+        # Try to get from cache first
+        cached_metrics = langfuse._get_cached_metrics(
+            workspace_id=str(workspace_id),
+            tool_name=tool_name,
+            period_days=period_days,
+        )
+        
+        if cached_metrics:
+            return {
+                "status": "success",
+                "data": cached_metrics,
+                "source": "cache",
+            }
+        
+        # Get fresh metrics if not cached
+        metrics = langfuse.get_tool_metrics(
+            workspace_id=str(workspace_id),
+            tool_name=tool_name,
+            period_days=period_days,
+        )
+        
+        if metrics is None:
+            return {
+                "error": "Failed to retrieve tool metrics",
+                "workspace_id": str(workspace_id),
+            }
+        
+        # Cache the metrics
+        langfuse._cache_metrics(
+            workspace_id=str(workspace_id),
+            metrics=metrics,
+            tool_name=tool_name,
+            period_days=period_days,
+            ttl_seconds=3600,  # 1 hour
+        )
+        
+        return {
+            "status": "success",
+            "data": metrics,
+        }
+    except Exception as e:
+        logger.error(
+            "get_tool_metrics_error",
+            workspace_id=str(workspace_id),
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tools/ranking", name="get_tool_ranking")
+@limiter.limit("100/minute")
+async def get_tool_ranking(
+    request: Request,
+    workspace_id: UUID = Query(..., description="Workspace ID"),
+    metric: str = Query("success_rate", regex="^(success_rate|latency_p99_ms|count)$"),
+    limit: int = Query(10, ge=1, le=100),
+    current_user_id: UUID = Depends(get_current_user_id),
+    db_session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get tool ranking by specified metric.
+
+    Query параметры:
+    - workspace_id: Workspace ID (обязательно)
+    - metric: Метрика для рейтинга (success_rate, latency_p99_ms, count)
+    - limit: Максимальное количество инструментов (1-100, по умолчанию 10)
+
+    Returns:
+        Список инструментов, отсортированный по выбранной метрике
+    """
+    try:
+        from app.services.langfuse_integration import get_langfuse
+        
+        # Verify user has access to workspace
+        user_workspace = UserWorkerSpace(
+            user_id=current_user_id,
+            workspace_id=workspace_id,
+            db=db_session,
+        )
+        await user_workspace.validate_workspace_access()
+        
+        langfuse = get_langfuse()
+        ranking = langfuse.get_tool_ranking(
+            workspace_id=str(workspace_id),
+            metric=metric,
+            limit=limit,
+        )
+        
+        if ranking is None:
+            return {
+                "error": "Failed to retrieve tool ranking",
+                "workspace_id": str(workspace_id),
+            }
+        
+        return {
+            "status": "success",
+            "metric": metric,
+            "data": ranking,
+        }
+    except Exception as e:
+        logger.error(
+            "get_tool_ranking_error",
+            workspace_id=str(workspace_id),
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tools/score", name="record_tool_score")
+@limiter.limit("100/minute")
+async def record_tool_score(
+    request: Request,
+    trace_id: str = Query(..., description="Trace ID"),
+    score: float = Query(..., ge=0.0, le=1.0, description="Score 0.0-1.0"),
+    name: str = Query("quality", description="Metric name"),
+    comment: Optional[str] = Query(None, description="Optional comment"),
+    current_user_id: UUID = Depends(get_current_user_id),
+    db_session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Record a quality score for a tool execution trace.
+
+    Query параметры:
+    - trace_id: ID trace в Langfuse (обязательно)
+    - score: Оценка от 0.0 до 1.0 (обязательно)
+    - name: Название метрики (quality, accuracy, relevance, и т.д.)
+    - comment: Опциональный комментарий к оценке
+
+    Returns:
+        Статус успеха/ошибки операции
+    """
+    try:
+        from app.services.langfuse_integration import get_langfuse
+        
+        langfuse = get_langfuse()
+        success = langfuse.record_tool_score(
+            trace_id=trace_id,
+            score=score,
+            name=name,
+            comment=comment,
+        )
+        
+        if not success:
+            return {
+                "status": "error",
+                "message": "Failed to record tool score",
+                "trace_id": trace_id,
+            }
+        
+        return {
+            "status": "success",
+            "message": "Tool score recorded successfully",
+            "trace_id": trace_id,
+            "score": score,
+            "name": name,
+        }
+    except Exception as e:
+        logger.error(
+            "record_tool_score_error",
+            trace_id=trace_id,
+            score=score,
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=str(e))

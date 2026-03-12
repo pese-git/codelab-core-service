@@ -283,6 +283,63 @@ GET /llm-providers/types
 
 Подробнее: [Управление LLM провайдерами](doc/litellm-providers-management.md)
 
+### Tool Execution Tracing
+
+Платформа поддерживает полное трейсирование исполнения инструментов (tools) с интеграцией в Langfuse для анализа производительности и качества.
+
+**Возможности:**
+- 📊 Полное трейсирование tool execution с nested spans (validation, risk assessment, approval, execution)
+- 📈 Анализ метрик инструментов (success rate, latency percentiles, execution count)
+- 🎯 Ранжирование инструментов по различным метрикам
+- ✅ Quality feedback - оценка качества исполнения с комментариями
+- 🔐 Безопасное хранение trace ID и метаданных
+- ⚡ Graceful degradation - tool execution продолжается даже если Langfuse недоступен
+- 🚀 Минимальный overhead (< 50ms per execution)
+
+**REST API для аналитики:**
+```bash
+# Получить метрики инструментов
+GET /api/traces/tools/metrics?workspace_id=<id>&tool_name=<name>&period_days=7
+
+# Получить ранжирование инструментов
+GET /api/traces/tools/ranking?workspace_id=<id>&metric=success_rate&limit=10
+
+# Записать оценку качества
+POST /api/traces/tools/score
+{
+  "trace_id": "trace-123",
+  "score": 0.95,
+  "name": "accuracy",
+  "comment": "отличные результаты"
+}
+```
+
+**Пример интеграции:**
+```python
+# Tool executor автоматически создает spans для всех инструментов
+from app.core.tools.executor import ToolExecutor
+from app.services.langfuse_integration import LangfuseIntegration
+
+executor = ToolExecutor(langfuse_integration=langfuse)
+
+# Выполнение инструмента автоматически трейсируется
+result = await executor.execute_tool(
+    tool_name="calculator",
+    input_params={"expression": "2+2"},
+    user_id="user-123",
+    workspace_id="workspace-456"
+)
+
+# Spans автоматически отправляются в Langfuse с полной иерархией
+# - root span (tool execution)
+#   - validation span
+#   - risk assessment span
+#   - approval workflow span (если нужно)
+#   - execution span
+```
+
+Подробнее: [Tool Execution Tracing документация](doc/tool-execution-tracing.md)
+
 ### Руководства
 
 - [📖 Руководство по настройке и запуску](doc/setup-guide.md) - Полная инструкция по установке, настройке и решению проблем

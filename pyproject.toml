@@ -33,6 +33,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.48b0",
     "deprecated>=1.2.13",
     "langfuse>=3.0.0",
+    "slowapi>=0.1.9",
 ]
 
 [tool.hatch.build.targets.wheel]
