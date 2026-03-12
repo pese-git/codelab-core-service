@@ -28,15 +28,16 @@ LiteLLM ДОЛЖЕН отправлять данные о LLM операциях
 
 #### Scenario: Создание root trace для агента
 - **WHEN** агент начинает обработку сообщения пользователя
-- **THEN** система создает trace с name=f"agent_{agent_name}", user_id, session_id=f"workspace_{workspace_id}", metadata={agent, model, ...}
+- **THEN** система создает trace с name=f"agent_{agent_name}", user_id, session_id (из контекста чата), metadata={agent, model, workspace_id, ...}
 
 #### Scenario: Создание spans для шагов агента
 - **WHEN** агент выполняет шаги: prepare_context → generate_response → save_interaction
 - **THEN** для каждого шага создается span с input, output, metadata и end_time
 
 #### Scenario: Группировка traces в sessions
-- **WHEN** пользователь проводит разговор с агентом
-- **THEN** все traces для этого workspace группируются в session_id=f"workspace_{workspace_id}"
+- **WHEN** пользователь проводит разговор с агентом в одной chat session
+- **THEN** все traces для этого разговора группируются в одном session_id (ID чат-сессии)
+- **AND** системе доступны все traces пользователя, фильтруемые по workspace_id через metadata
 
 ### Requirement: Запись оценок качества (scores) для traces
 
