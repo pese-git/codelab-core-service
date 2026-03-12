@@ -519,6 +519,88 @@ class LangfuseIntegration:
             if trace:
                 self.flush()
 
+    @asynccontextmanager
+    async def span_context(
+        self,
+        trace: Any,
+        name: str,
+        input_data: Any | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
+        """
+        Context manager для автоматического управления span lifetime.
+
+        Usage:
+            async with langfuse.span_context(
+                trace=trace,
+                name="context_retrieval",
+                input_data={"query": "..."}
+            ) as span:
+                context = await retrieve_context()
+
+        Args:
+            trace: Родительский trace (обязательно)
+            name: Имя span
+            input_data: Входные данные span (опционально)
+            metadata: Дополнительные метаданные
+
+        Yields:
+            Span object или None если disabled
+        """
+        if not self.enabled or not trace:
+            yield None
+            return
+
+        import time
+        start_time = time.time()
+        span = None
+
+        try:
+            # Создать span с начальными данными
+            span = self.create_span(
+                trace=trace,
+                name=name,
+                input_data=input_data,
+                metadata=metadata,
+                status="success",
+            )
+
+            yield span
+
+            # Записать успешное завершение
+            latency_ms = int((time.time() - start_time) * 1000)
+            self.create_event(
+                trace_id=trace.id,
+                name=f"{name}_completed",
+                metadata={
+                    "latency_ms": latency_ms,
+                    "status": "completed",
+                },
+            )
+
+        except Exception as e:
+            # Записать ошибку
+            latency_ms = int((time.time() - start_time) * 1000)
+            self.create_event(
+                trace_id=trace.id,
+                name=f"{name}_error",
+                metadata={
+                    "latency_ms": latency_ms,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+
+            struct_logger.error(
+                "langfuse_span_context_error",
+                error=str(e),
+                span_name=name,
+                trace_id=trace.id,
+                latency_ms=latency_ms,
+            )
+
+            raise
+
 
 # Глобальный экземпляр LangfuseIntegration
 _langfuse_instance: LangfuseIntegration | None = None

@@ -1,102 +1,217 @@
-"""REST API routes для feedback и scores в Langfuse."""
+"""REST API routes для записи feedback и scores в Langfuse."""
 
-from typing import Any, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
 from app.logging_config import get_logger
 from app.middleware.user_isolation import get_current_user_id
-from app.services.langfuse_rest_client import get_langfuse_rest_client
-from app.services.traces_service import get_traces_service
+from app.services.langfuse_integration import get_langfuse
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/traces", tags=["feedback"])
+router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
-class ScoreRequest(BaseModel):
-    """Запрос для записи score."""
-
-    score_name: str = Field(..., description="Имя score (например, user_satisfaction)")
-    score_value: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Значение score (0.0-1.0)",
-    )
-    comment: Optional[str] = Field(None, description="Опциональный комментарий")
-
-
-class ScoreResponse(BaseModel):
-    """Ответ при успешной записи score."""
-
-    success: bool
-    trace_id: str
-    score_name: str
-    score_value: float
-    message: str
-
-
-@router.post(
-    "/{trace_id}/scores",
-    name="record_trace_score",
-    response_model=ScoreResponse,
-)
-async def record_trace_score(
+@router.post("/traces/{trace_id}/rating")
+async def rate_trace(
     trace_id: str,
-    request: ScoreRequest,
+    rating: int = Query(..., ge=1, le=5, description="Оценка от 1 до 5"),
+    comment: Optional[str] = Query(None, description="Опциональный комментарий"),
     current_user_id: UUID = Depends(get_current_user_id),
-    db_session: AsyncSession = Depends(get_db),
-) -> ScoreResponse:
+):
     """
-    Записать score (оценку) для trace.
+    Оценить качество trace/ответа агента.
 
     Args:
-        trace_id: ID trace
-        request: ScoreRequest с параметрами score
+        trace_id: ID trace для оценки
+        rating: Оценка (1-5 звезд)
+        comment: Опциональный комментарий
 
     Returns:
-        ScoreResponse с результатом операции
+        Результат записи оценки
     """
     try:
-        # Проверяем что trace принадлежит пользователю (через workspace_id)
-        traces_service = get_traces_service()
-
-        # Получаем trace для проверки прав доступа
-        trace = await traces_service.get_trace_by_id(trace_id)
-
-        if not trace:
-            logger.warning(
-                "trace_not_found_for_score",
-                trace_id=trace_id,
-                user_id=str(current_user_id),
-            )
+        if not trace_id or len(trace_id.strip()) == 0:
             raise HTTPException(
-                status_code=404,
-                detail=f"Trace {trace_id} not found",
+                status_code=400,
+                detail="Trace ID cannot be empty",
             )
 
-        # Записываем score через REST API клиент
-        rest_client = get_langfuse_rest_client()
+        if not 1 <= rating <= 5:
+            raise HTTPException(
+                status_code=400,
+                detail="Rating must be between 1 and 5",
+            )
 
-        success = await rest_client.record_score(
+        langfuse = get_langfuse()
+
+        # Нормализовать rating к 0-1 (1 star = 0.2, 5 stars = 1.0)
+        normalized_score = rating / 5.0
+
+        success = langfuse.record_score(
             trace_id=trace_id,
-            score_name=request.score_name,
-            score_value=request.score_value,
-            comment=request.comment,
+            name="user_satisfaction",
+            value=normalized_score,
+            comment=comment,
         )
 
         if not success:
-            logger.error(
-                "score_recording_failed",
-                trace_id=trace_id,
-                score_name=request.score_name,
-                user_id=str(current_user_id),
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to record rating",
             )
+
+        logger.info(
+            "trace_rating_recorded",
+            trace_id=trace_id,
+            rating=rating,
+            user_id=str(current_user_id),
+        )
+
+        return {
+            "success": True,
+            "trace_id": trace_id,
+            "rating": rating,
+            "normalized_score": normalized_score,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "trace_rating_failed",
+            trace_id=trace_id,
+            error=str(e),
+            user_id=str(current_user_id),
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to record rating",
+        ) from e
+
+
+@router.post("/traces/{trace_id}/thumbs")
+async def thumbs_feedback(
+    trace_id: str,
+    thumbs_up: bool = Query(
+        ..., description="True для одобрения, False для неодобрения"
+    ),
+    current_user_id: UUID = Depends(get_current_user_id),
+):
+    """
+    Простой thumbs up/down feedback для trace.
+
+    Args:
+        trace_id: ID trace
+        thumbs_up: True если лайк, False если дизлайк
+
+    Returns:
+        Результат записи feedback
+    """
+    try:
+        if not trace_id or len(trace_id.strip()) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Trace ID cannot be empty",
+            )
+
+        langfuse = get_langfuse()
+
+        # Thumbs up = 1.0, Thumbs down = 0.0
+        score = 1.0 if thumbs_up else 0.0
+
+        success = langfuse.record_score(
+            trace_id=trace_id,
+            name="thumbs",
+            value=score,
+            comment="thumbs_up" if thumbs_up else "thumbs_down",
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to record feedback",
+            )
+
+        logger.info(
+            "trace_thumbs_recorded",
+            trace_id=trace_id,
+            thumbs_up=thumbs_up,
+            user_id=str(current_user_id),
+        )
+
+        return {
+            "success": True,
+            "trace_id": trace_id,
+            "thumbs_up": thumbs_up,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "trace_thumbs_failed",
+            trace_id=trace_id,
+            error=str(e),
+            user_id=str(current_user_id),
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to record feedback",
+        ) from e
+
+
+@router.post("/traces/{trace_id}/scores/{score_name}")
+async def record_custom_score(
+    trace_id: str,
+    score_name: str,
+    score_value: float = Query(..., ge=0.0, le=1.0, description="Значение от 0.0 до 1.0"),
+    comment: Optional[str] = Query(None, description="Опциональный комментарий"),
+    current_user_id: UUID = Depends(get_current_user_id),
+):
+    """
+    Записать пользовательскую оценку для trace.
+
+    Args:
+        trace_id: ID trace
+        score_name: Имя оценки (например, "relevance", "accuracy")
+        score_value: Значение оценки (0.0-1.0)
+        comment: Опциональный комментарий
+
+    Returns:
+        Результат записи оценки
+    """
+    try:
+        if not trace_id or len(trace_id.strip()) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Trace ID cannot be empty",
+            )
+
+        if not score_name or len(score_name.strip()) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Score name cannot be empty",
+            )
+
+        if not 0.0 <= score_value <= 1.0:
+            raise HTTPException(
+                status_code=400,
+                detail="Score value must be between 0.0 and 1.0",
+            )
+
+        langfuse = get_langfuse()
+
+        success = langfuse.record_score(
+            trace_id=trace_id,
+            name=score_name,
+            value=score_value,
+            comment=comment,
+        )
+
+        if not success:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to record score",
@@ -105,95 +220,29 @@ async def record_trace_score(
         logger.info(
             "trace_score_recorded",
             trace_id=trace_id,
-            score_name=request.score_name,
-            score_value=request.score_value,
-            user_id=str(current_user_id),
-        )
-
-        return ScoreResponse(
-            success=True,
-            trace_id=trace_id,
-            score_name=request.score_name,
-            score_value=request.score_value,
-            message="Score recorded successfully",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            "score_recording_error",
-            error=str(e),
-            trace_id=trace_id,
-            user_id=str(current_user_id),
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to record score",
-        ) from e
-
-
-@router.get(
-    "/{trace_id}/scores",
-    name="get_trace_scores",
-)
-async def get_trace_scores(
-    trace_id: str,
-    current_user_id: UUID = Depends(get_current_user_id),
-    db_session: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """
-    Получить все scores для trace.
-
-    Args:
-        trace_id: ID trace
-
-    Returns:
-        Словарь с list of scores
-    """
-    try:
-        traces_service = get_traces_service()
-
-        # Получаем trace для проверки прав доступа
-        trace = await traces_service.get_trace_by_id(trace_id)
-
-        if not trace:
-            logger.warning(
-                "trace_not_found_for_scores",
-                trace_id=trace_id,
-                user_id=str(current_user_id),
-            )
-            raise HTTPException(
-                status_code=404,
-                detail=f"Trace {trace_id} not found",
-            )
-
-        # Langfuse хранит scores в trace data
-        scores = trace.get("scores", []) if trace else []
-
-        logger.info(
-            "trace_scores_retrieved",
-            trace_id=trace_id,
-            score_count=len(scores),
+            score_name=score_name,
+            score_value=score_value,
             user_id=str(current_user_id),
         )
 
         return {
+            "success": True,
             "trace_id": trace_id,
-            "scores": scores,
-            "count": len(scores),
+            "score_name": score_name,
+            "score_value": score_value,
         }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            "scores_retrieval_error",
-            error=str(e),
+            "trace_score_recording_failed",
             trace_id=trace_id,
+            score_name=score_name,
+            error=str(e),
             user_id=str(current_user_id),
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to retrieve scores",
+            detail="Failed to record score",
         ) from e
