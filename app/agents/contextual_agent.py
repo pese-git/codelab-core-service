@@ -16,6 +16,7 @@ from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
+from app.services.langfuse_decorators import trace_llm_call
 from app.services.langfuse_integration import get_langfuse
 from app.tracing import get_tracer
 from app.vectorstore.agent_context_store import AgentContextStore
@@ -102,6 +103,50 @@ class ContextualAgent:
             except Exception:
                 pass
         return 'default'
+
+    @trace_llm_call(name="agent_llm_generation")
+    async def _call_llm_with_trace(
+        self,
+        model: str,
+        messages: list,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        tools: list | None = None,
+        langfuse_trace: Any | None = None,
+    ) -> Any:
+        """Call LLM with automatic Langfuse tracing.
+        
+        This method uses @trace_llm_call decorator to automatically capture
+        LLM metrics (tokens, latency, errors) in Langfuse.
+        
+        Args:
+            model: Model name
+            messages: Chat messages
+            temperature: Temperature parameter
+            max_tokens: Max tokens
+            tools: Optional tools
+            langfuse_trace: Optional Langfuse trace for span creation
+            
+        Returns:
+            OpenAI API response
+        """
+        llm_kwargs = {
+            "model": model,
+            "messages": messages,
+        }
+        
+        if temperature is not None:
+            llm_kwargs["temperature"] = temperature
+        
+        if max_tokens is not None:
+            llm_kwargs["max_tokens"] = max_tokens
+        
+        if tools:
+            llm_kwargs["tools"] = tools
+            llm_kwargs["tool_choice"] = "auto"
+        
+        # Call OpenAI API - decorator will handle Langfuse tracing
+        return await self.openai_client.chat.completions.create(**llm_kwargs)
 
     async def initialize(self) -> None:
         """Initialize agent (create Qdrant collection)."""
@@ -269,18 +314,24 @@ class ContextualAgent:
                     # Allow model to decide whether to use tools
                     llm_kwargs["tool_choice"] = "auto"
 
-                # Call LLM with tracing
+                # Call LLM with automatic Langfuse tracing via decorator
                 with tracer.start_as_current_span("llm_call") as llm_span:
                     llm_span.set_attribute("model", model_to_use)
                     llm_span.set_attribute("temperature", self.config.temperature)
                     llm_span.set_attribute("provider", settings.litellm_url or "openai")
                     
-                    start_time = time.time()
-                    response = await self.openai_client.chat.completions.create(**llm_kwargs)
-                    latency_ms = int((time.time() - start_time) * 1000)
+                    # Use _call_llm_with_trace which has @trace_llm_call decorator
+                    # This automatically logs to Langfuse without manual span creation
+                    response = await self._call_llm_with_trace(
+                        model=model_to_use,
+                        messages=messages,
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                        tools=llm_kwargs.get("tools"),
+                        langfuse_trace=langfuse_trace,
+                    )
                     
                     if response.usage:
-                        llm_span.set_attribute("latency_ms", latency_ms)
                         llm_span.set_attribute("tokens_prompt", response.usage.prompt_tokens)
                         llm_span.set_attribute("tokens_completion", response.usage.completion_tokens)
                         llm_span.set_attribute("tokens_total", response.usage.total_tokens)
@@ -289,22 +340,6 @@ class ContextualAgent:
                         "model": model_to_use,
                         "tokens": response.usage.total_tokens if response.usage else 0,
                     })
-                    if langfuse_trace and self.langfuse.enabled:
-                        self.langfuse.create_span(
-                            trace=langfuse_trace,
-                            name="llm_call",
-                            input_data={
-                                "model": model_to_use,
-                                "temperature": self.config.temperature,
-                                "messages_count": len(messages),
-                            },
-                            output_data={
-                                "latency_ms": latency_ms,
-                                "tokens_prompt": response.usage.prompt_tokens if response.usage else 0,
-                                "tokens_completion": response.usage.completion_tokens if response.usage else 0,
-                                "tokens_total": response.usage.total_tokens if response.usage else 0,
-                            },
-                        )
                 
                 assistant_message = response.choices[0].message.content or ""
                 total_tokens = response.usage.total_tokens if response.usage else 0
@@ -375,12 +410,13 @@ class ContextualAgent:
                             "content": tool_result.get("content", ""),
                         })
                     
-                    # Get final response from LLM with tool results
-                    final_response = await self.openai_client.chat.completions.create(
+                    # Get final response from LLM with tool results using traced method
+                    final_response = await self._call_llm_with_trace(
                         model=model_to_use,
                         messages=messages,
                         temperature=self.config.temperature,
                         max_tokens=self.config.max_tokens,
+                        langfuse_trace=langfuse_trace,
                     )
                     
                     assistant_message = final_response.choices[0].message.content or ""
