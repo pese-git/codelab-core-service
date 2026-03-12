@@ -17,13 +17,14 @@ def trace_llm_call(
     capture_input: bool = True,
     capture_output: bool = True,
     include_model: bool = True,
+    max_output_length: int | None = None,
 ):
     """
     Декоратор для автоматического трейсинга LLM вызовов в Langfuse.
 
     Oборачивает LLM запрос и автоматически создает span в Langfuse с:
     - Input data (messages, model, parameters)
-    - Output data (response, tokens, latency)
+    - Output data (response, tokens, latency) - ПОЛНЫЙ КОНТЕНТ БЕЗ ОБРЕЗАНИЯ
     - Metadata (timing, status, errors)
     - Metrics записываются в Prometheus
 
@@ -40,6 +41,7 @@ def trace_llm_call(
         capture_input: Захватывать ли input данные (по умолчанию True)
         capture_output: Захватывать ли output данные (по умолчанию True)
         include_model: Включать ли model в метаданные (по умолчанию True)
+        max_output_length: Максимальная длина output контента (None = без ограничений)
     """
 
     def decorator(func: Callable) -> Callable:
@@ -69,18 +71,29 @@ def trace_llm_call(
                 # Выполнить LLM вызов
                 result = await func(*args, **kwargs)
 
-                # Подготовить output данные
+                # Подготовить output данные - ПОЛНЫЕ БЕЗ ОБРЕЗАНИЯ
                 output_data = None
                 if capture_output and result:
                     # Поддержка OpenAI-style response objects
                     if hasattr(result, "choices") and hasattr(result, "usage"):
+                        # Захватить все choices, а не только первый
+                        choices_data = []
+                        for choice in result.choices:
+                            choice_content = choice.message.content if choice.message else None
+                            
+                            # Применить max_output_length ограничение если указано
+                            if max_output_length and choice_content and len(choice_content) > max_output_length:
+                                choice_content = choice_content[:max_output_length] + f"...[truncated, original length: {len(choice_content)}]"
+                            
+                            choices_data.append({
+                                "content": choice_content,
+                                "finish_reason": choice.finish_reason,
+                                "index": choice.index,
+                            })
+                        
                         output_data = {
-                            "content": result.choices[0].message.content
-                            if result.choices
-                            else None,
-                            "finish_reason": result.choices[0].finish_reason
-                            if result.choices
-                            else None,
+                            "choices": choices_data,
+                            "first_choice_content": choices_data[0]["content"] if choices_data else None,
                             "prompt_tokens": result.usage.prompt_tokens,
                             "completion_tokens": result.usage.completion_tokens,
                             "total_tokens": result.usage.total_tokens,
