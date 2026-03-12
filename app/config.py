@@ -117,6 +117,8 @@ class Settings(BaseSettings):
     langfuse_public_key: str = Field(default="")
     langfuse_secret_key: str = Field(default="")
     langfuse_retention_days: int = Field(default=30)
+    langfuse_full_prompts: bool = Field(default=False)
+    langfuse_payload_max_chars: int = Field(default=2000)
 
     # LiteLLM
     litellm_url: str = Field(default="http://localhost:4000")

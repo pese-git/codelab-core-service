@@ -1,7 +1,10 @@
 """Langfuse интеграция для LLM observability."""
 
 import logging
+import json
+import re
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +25,12 @@ from app.metrics import (
 
 logger = logging.getLogger(__name__)
 struct_logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class LangfuseTraceRef:
+    """Lightweight reference to a Langfuse trace."""
+    id: str
 
 
 class LangfuseIntegration:
@@ -79,6 +88,45 @@ class LangfuseIntegration:
             self.enabled = False
             self.client = None
 
+    @staticmethod
+    def _mask_sensitive(text: str) -> str:
+        """Mask common sensitive patterns in text."""
+        # Emails
+        text = re.sub(r"[\w\.-]+@[\w\.-]+\.\w+", "***@***", text)
+        # Phone numbers (very rough)
+        text = re.sub(r"\+?\d[\d\-\s\(\)]{7,}\d", "***", text)
+        # API keys / tokens in key=value or key: value formats
+        text = re.sub(
+            r"(?i)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s,;]+)",
+            r"\1=***",
+            text,
+        )
+        # OpenAI-style keys
+        text = re.sub(r"\bsk-[A-Za-z0-9]{20,}\b", "sk-***", text)
+        # Bearer tokens
+        text = re.sub(r"(?i)\bBearer\s+[A-Za-z0-9\._\-]+\b", "Bearer ***", text)
+        return text
+
+    def _sanitize_payload(self, payload: Any | None) -> Any | None:
+        """Sanitize payloads before sending to Langfuse."""
+        if payload is None:
+            return None
+        if settings.langfuse_full_prompts:
+            return payload
+
+        if isinstance(payload, (dict, list)):
+            text = json.dumps(payload, ensure_ascii=True, default=str)
+        else:
+            text = str(payload)
+
+        text = self._mask_sensitive(text)
+
+        max_chars = settings.langfuse_payload_max_chars
+        if max_chars > 0 and len(text) > max_chars:
+            text = text[:max_chars] + "...(truncated)"
+
+        return text
+
     def _perform_health_check(self) -> None:
         """
         Выполняет health check Langfuse сервиса.
@@ -107,6 +155,7 @@ class LangfuseIntegration:
         user_id: UUID | None = None,
         workspace_id: UUID | None = None,
         metadata: dict[str, Any] | None = None,
+        otel_trace_id: str | None = None,
     ) -> Any | None:
         """
         Создает новый trace в Langfuse.
@@ -138,16 +187,19 @@ class LangfuseIntegration:
                 trace_metadata["user_id"] = str(user_id)
             if workspace_id:
                 trace_metadata["workspace_id"] = str(workspace_id)
+            if otel_trace_id:
+                trace_metadata["otel_trace_id"] = otel_trace_id
 
             # Измеряем latency создания trace
             with trace_latency():
-                # Создаем trace в Langfuse
-                trace = self.client.trace(
+                trace_id = self.client.create_trace_id()
+                self.client.create_event(
+                    trace_context={"trace_id": trace_id},
                     name=name,
-                    user_id=str(user_id) if user_id else None,
                     metadata=trace_metadata,
                 )
 
+            trace = LangfuseTraceRef(id=trace_id)
             self._current_trace = trace
 
             # Записываем метрику
@@ -201,21 +253,15 @@ class LangfuseIntegration:
             return None
 
         try:
-            # Готовим дополнительные параметры
-            span_kwargs: dict[str, Any] = {
-                "name": name,
-                "status_code": status,
-            }
-
-            if input_data is not None:
-                span_kwargs["input"] = input_data
-            if output_data is not None:
-                span_kwargs["output"] = output_data
-            if metadata:
-                span_kwargs["metadata"] = metadata
-
-            # Создаем span в Langfuse
-            span = trace.span(**span_kwargs)
+            # Создаем событие как span-эквивалент в Langfuse
+            span = self.client.create_event(
+                trace_context={"trace_id": trace.id},
+                name=name,
+                input=self._sanitize_payload(input_data) if input_data is not None else None,
+                output=self._sanitize_payload(output_data) if output_data is not None else None,
+                metadata=metadata,
+                level="ERROR" if status == "error" else "DEFAULT",
+            )
 
             # Записываем метрику
             record_span_created(str(trace.id))
@@ -239,6 +285,67 @@ class LangfuseIntegration:
                 name=name,
             )
             return None
+
+    def create_event(
+        self,
+        trace_id: str,
+        name: str,
+        input_data: Any | None = None,
+        output_data: Any | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> bool:
+        """
+        Создает event в trace.
+
+        Args:
+            trace_id: ID trace для создания event
+            name: Имя event
+            input_data: Входные данные event (опционально)
+            output_data: Выходные данные event (опционально)
+            metadata: Дополнительные метаданные
+
+        Returns:
+            True если успешно, False если ошибка
+        """
+        if not self.enabled or not self.client:
+            return False
+
+        try:
+            # Готовим параметры для event
+            event_kwargs: dict[str, Any] = {
+                "trace_context": {"trace_id": trace_id},
+                "name": name,
+            }
+
+            if input_data is not None:
+                event_kwargs["input"] = self._sanitize_payload(input_data)
+            if output_data is not None:
+                event_kwargs["output"] = self._sanitize_payload(output_data)
+            if metadata:
+                event_kwargs["metadata"] = metadata
+
+            # Создаем event в Langfuse
+            self.client.create_event(**event_kwargs)
+
+            struct_logger.info(
+                "langfuse_event_created",
+                trace_id=trace_id,
+                event_name=name,
+            )
+
+            return True
+
+        except Exception as e:
+            # Записываем ошибку callback
+            record_callback_failure("event_creation", type(e).__name__)
+
+            struct_logger.error(
+                "langfuse_event_creation_failed",
+                error=str(e),
+                trace_id=trace_id,
+                event_name=name,
+            )
+            return False
 
     def record_score(
         self,

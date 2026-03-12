@@ -118,6 +118,7 @@ class ContextualAgent:
         session_history: list[dict[str, str]] | None = None,
         task_id: str | None = None,
         session_id: UUID | None = None,
+        langfuse_trace: Any | None = None,
     ) -> dict[str, Any]:
         """Execute agent with context retrieval and optional tool support.
         
@@ -143,6 +144,22 @@ class ContextualAgent:
                 span.set_attribute("session.id", str(session_id))
             if task_id:
                 span.set_attribute("task.id", task_id)
+
+            # Link Langfuse trace with current OpenTelemetry trace
+            if langfuse_trace and self.langfuse.enabled:
+                try:
+                    otel_ctx = span.get_span_context()
+                    otel_trace_id = (
+                        format(otel_ctx.trace_id, "032x") if otel_ctx and otel_ctx.trace_id else None
+                    )
+                    if otel_trace_id:
+                        self.langfuse.create_event(
+                            trace_id=langfuse_trace.id,
+                            name="otel_trace_link",
+                            metadata={"otel_trace_id": otel_trace_id},
+                        )
+                except Exception:
+                    pass
             
             try:
                 # Debug: Log executor status
@@ -172,6 +189,13 @@ class ContextualAgent:
                     limit=settings.context_search_limit,
                     filter_success=True,
                 )
+                if langfuse_trace and self.langfuse.enabled:
+                    self.langfuse.create_span(
+                        trace=langfuse_trace,
+                        name="context_retrieval",
+                        input_data={"query": user_message, "limit": settings.context_search_limit},
+                        output_data={"results": len(context_results)},
+                    )
 
                 # Build context string
                 context_str = ""
@@ -265,6 +289,22 @@ class ContextualAgent:
                         "model": model_to_use,
                         "tokens": response.usage.total_tokens if response.usage else 0,
                     })
+                    if langfuse_trace and self.langfuse.enabled:
+                        self.langfuse.create_span(
+                            trace=langfuse_trace,
+                            name="llm_call",
+                            input_data={
+                                "model": model_to_use,
+                                "temperature": self.config.temperature,
+                                "messages_count": len(messages),
+                            },
+                            output_data={
+                                "latency_ms": latency_ms,
+                                "tokens_prompt": response.usage.prompt_tokens if response.usage else 0,
+                                "tokens_completion": response.usage.completion_tokens if response.usage else 0,
+                                "tokens_total": response.usage.total_tokens if response.usage else 0,
+                            },
+                        )
                 
                 assistant_message = response.choices[0].message.content or ""
                 total_tokens = response.usage.total_tokens if response.usage else 0
@@ -273,6 +313,12 @@ class ContextualAgent:
                 tool_calls = response.choices[0].message.tool_calls
                 if tool_calls and self.tool_executor:
                     span.add_event("tool_calls_detected", {"count": len(tool_calls)})
+                    if langfuse_trace and self.langfuse.enabled:
+                        self.langfuse.create_event(
+                            trace_id=langfuse_trace.id,
+                            name="tool_calls_detected",
+                            metadata={"count": len(tool_calls)},
+                        )
                     
                     logger.info(
                         "processing_tool_calls",
