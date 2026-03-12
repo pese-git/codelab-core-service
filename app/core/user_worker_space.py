@@ -23,6 +23,7 @@ from app.logging_config import get_logger
 from app.models.user_project import UserProject
 from app.schemas.agent import AgentConfig
 from app.services.langfuse_integration import get_langfuse
+from app.services.quality_metrics import QualityMetricsCollector
 from app.vectorstore.agent_context_store import AgentContextStore
 
 logger = get_logger(__name__)
@@ -1111,6 +1112,8 @@ class UserWorkerSpace:
         - If target_agent_id is provided → DIRECT mode
         - If target_agent_id is None → ORCHESTRATED mode
 
+        Creates Langfuse trace for session-level observability.
+
         Args:
             message_content: Message text
             target_agent_id: Target agent ID (optional)
@@ -1128,33 +1131,67 @@ class UserWorkerSpace:
         if not message_content:
             raise ValueError("message_content cannot be empty")
 
-        if target_agent_id:
-            # Direct execution mode
-            logger.info(
-                "handle_message_direct_mode",
-                agent_id=str(target_agent_id),
+        # Create Langfuse trace for session-level observability
+        langfuse = get_langfuse()
+        execution_mode = "direct" if target_agent_id else "orchestrated"
+        
+        trace = None
+        if langfuse.enabled:
+            trace = langfuse.create_trace(
+                name=f"message_handling_{execution_mode}",
+                user_id=str(self.user_id),
+                metadata={
+                    "user_id": str(self.user_id),
+                    "project_id": str(self.project_id),
+                    "session_id": str(session_id) if session_id else None,
+                    "task_id": task_id,
+                    "execution_mode": execution_mode,
+                    "target_agent_id": str(target_agent_id) if target_agent_id else None,
+                    "message_length": len(message_content),
+                    **(metadata or {}),
+                },
+            )
+
+        try:
+            if target_agent_id:
+                # Direct execution mode
+                logger.info(
+                    "handle_message_direct_mode",
+                    agent_id=str(target_agent_id),
+                    project_id=self.project_id,
+                )
+                result = await self.direct_execution(
+                    agent_id=target_agent_id,
+                    user_message=message_content,
+                    session_history=session_history,
+                    task_id=task_id,
+                    metadata=metadata,
+                    session_id=session_id,
+                )
+            else:
+                # Orchestrated execution mode
+                logger.info(
+                    "handle_message_orchestrated_mode",
+                    project_id=self.project_id,
+                )
+                result = await self.orchestrated_execution(
+                    user_message=message_content,
+                    session_history=session_history,
+                    task_id=task_id,
+                    metadata=metadata,
+                    session_id=session_id,
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "handle_message_failed",
+                error=str(e),
+                execution_mode=execution_mode,
                 project_id=self.project_id,
             )
-            return await self.direct_execution(
-                agent_id=target_agent_id,
-                user_message=message_content,
-                session_history=session_history,
-                task_id=task_id,
-                metadata=metadata,
-            )
-        else:
-            # Orchestrated execution mode
-            logger.info(
-                "handle_message_orchestrated_mode",
-                project_id=self.project_id,
-            )
-            return await self.orchestrated_execution(
-                user_message=message_content,
-                session_history=session_history,
-                task_id=task_id,
-                metadata=metadata,
-                session_id=session_id,
-            )
+            raise
 
     # ========== ЭТАП 3: Методы для получения метрик (10.6) ==========
 
