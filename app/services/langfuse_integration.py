@@ -9,6 +9,7 @@ import structlog
 from langfuse import Langfuse
 
 from app.config import settings
+from app.logging_config import get_logger
 from app.metrics import (
     record_callback_failure,
     record_span_created,
@@ -20,7 +21,7 @@ from app.metrics import (
 )
 
 logger = logging.getLogger(__name__)
-struct_logger = structlog.get_logger(__name__)
+struct_logger = get_logger(__name__)
 
 
 class LangfuseIntegration:
@@ -58,7 +59,7 @@ class LangfuseIntegration:
                 public_key=settings.langfuse_public_key,
                 secret_key=settings.langfuse_secret_key,
                 base_url=settings.langfuse_host,
-                enabled=True,
+                debug=True,  # Отключаем debug для продакшена
             )
 
             # Выполняем health check
