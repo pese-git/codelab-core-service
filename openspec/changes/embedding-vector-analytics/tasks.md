@@ -2,8 +2,8 @@
 
 ## 1. Подготовка и Infrastructure
 
-- [ ] 1.1 Добавить feature flags в .env.example (EMBEDDING_TRACING_ENABLED, VECTOR_SEARCH_TRACING_ENABLED, EMBEDDING_ANALYTICS_API_ENABLED)
-- [ ] 1.2 Обновить pyproject.toml зависимости (если нужны новые библиотеки для анализа)
+- [x] 1.1 Добавить feature flags в .env.example (EMBEDDING_TRACING_ENABLED, VECTOR_SEARCH_TRACING_ENABLED, EMBEDDING_ANALYTICS_API_ENABLED)
+- [x] 1.2 Обновить pyproject.toml зависимости (если нужны новые библиотеки для анализа)
 - [ ] 1.3 Создать пакеты `app/services/embedding_service.py` и обновить `app/services/vector_store_service.py` для tracing hooks
 - [ ] 1.4 Написать unit тесты для feature flag checks (3 теста)
 
