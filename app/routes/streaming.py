@@ -54,15 +54,16 @@ async def event_stream_generator(
                 # Handle StreamEvent
                 if isinstance(event, StreamEvent):
                     # Trace stream event with content details
+                    ndjson_output = event.to_ndjson()
                     with tracer.start_as_current_span("stream_event_sent") as span:
                         span.set_attribute("session.id", str(session_id))
                         span.set_attribute("user.id", str(user_id))
                         span.set_attribute("event.type", event.event_type)
                         span.set_attribute("payload.keys", ",".join(event.payload.keys()) if event.payload else "empty")
                         span.add_event("event_serialized", {
-                            "ndjson_length": len(event.to_ndjson())
+                            "ndjson_length": len(ndjson_output)
                         })
-                    yield event.to_ndjson()
+                    yield ndjson_output
                     continue
 
                 logger.warning(f"Unknown event type: {type(event)}")

@@ -41,15 +41,27 @@ def initialize_tracing(app: Optional[object] = None) -> None:
 
         # OTLP exporter - uses HTTP protocol for Jaeger/other collectors
         # Falls back to no-op if collector is unavailable
+        # Increased timeout from default 10s to 30s for better reliability
         otlp_exporter = OTLPSpanExporter(
             endpoint=f"{settings.otlp_exporter_url}/v1/traces",
+            timeout=30,
         )
 
         # TracerProvider - global provider for all traces
         tracer_provider = TracerProvider(resource=resource)
 
         # Use BatchSpanProcessor for minimal performance impact
-        tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+        # Increased schedule_delay from 5s to 10s and max_export_batch_size for batching
+        # NOTE: Main tracing goes through Langfuse SDK (via decorators in code),
+        # OTEL spans are secondary and exported via this processor
+        tracer_provider.add_span_processor(
+            BatchSpanProcessor(
+                otlp_exporter,
+                schedule_delay_millis=10000,  # 10 seconds
+                max_export_batch_size=512,
+                max_queue_size=2048,
+            )
+        )
 
         # Set as global
         trace.set_tracer_provider(tracer_provider)

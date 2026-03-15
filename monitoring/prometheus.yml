@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 30s
+  evaluation_interval: 30s
   external_labels:
     cluster: 'codelab-core-service'
     environment: 'development'
@@ -12,24 +12,14 @@ scrape_configs:
 
   - job_name: 'codelab-core-service'
     static_configs:
-      - targets: ['app:8000']
+      - targets: ['codelab-core-service:8000']
     metrics_path: '/metrics'
-    scrape_interval: 10s
-
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']
-
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
+    scrape_interval: 30s
+    scrape_timeout: 10s
 
   - job_name: 'qdrant'
     static_configs:
-      - targets: ['qdrant:6333']
-
-  - job_name: 'langfuse'
-    static_configs:
-      - targets: ['langfuse:3000']
-    metrics_path: '/api/public/metrics'
-    scrape_interval: 15s
+      - targets: ['codelab-qdrant:6333']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s

@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     database_echo: bool = Field(default=False)
 
     # Redis
-    redis_url: RedisDsn = Field(default="redis://localhost:6379/0")
+    redis_url: RedisDsn = Field(default="redis://:redis-secure-password-change-in-production@localhost:6379/0")
     redis_max_connections: int = Field(default=50)
     redis_socket_timeout: int = Field(default=5)
     redis_socket_connect_timeout: int = Field(default=5)

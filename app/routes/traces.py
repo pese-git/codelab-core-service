@@ -31,8 +31,8 @@ async def list_traces(
     agent_name: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    order_by: str = Query("created_at", regex="^(created_at|duration)$"),
-    order_direction: str = Query("desc", regex="^(asc|desc)$"),
+    order_by: str = Query("created_at", pattern="^(created_at|duration)$"),
+    order_direction: str = Query("desc", pattern="^(asc|desc)$"),
     current_user_id: UUID = Depends(get_current_user_id),
     db_session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -212,7 +212,7 @@ async def record_trace_score(
 
 @router.get("/analytics/summary", name="traces_summary")
 async def get_traces_summary(
-    period: str = Query("7d", regex="^(7d|30d|all)$"),
+    period: str = Query("7d", pattern="^(7d|30d|all)$"),
     workspace_id: Optional[UUID] = None,
     current_user_id: UUID = Depends(get_current_user_id),
     db_session: AsyncSession = Depends(get_db),
@@ -474,7 +474,7 @@ async def get_tool_metrics(
 async def get_tool_ranking(
     request: Request,
     workspace_id: UUID = Query(..., description="Workspace ID"),
-    metric: str = Query("success_rate", regex="^(success_rate|latency_p99_ms|count)$"),
+    metric: str = Query("success_rate", pattern="^(success_rate|latency_p99_ms|count)$"),
     limit: int = Query(10, ge=1, le=100),
     current_user_id: UUID = Depends(get_current_user_id),
     db_session: AsyncSession = Depends(get_db),
