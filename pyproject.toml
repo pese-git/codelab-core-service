@@ -29,6 +29,7 @@ dependencies = [
     "gradio>=6.5.1",
     "deprecated>=1.2.13",
     "slowapi>=0.1.9",
+    "langfuse[openai]>=4.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]

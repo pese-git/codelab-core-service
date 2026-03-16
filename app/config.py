@@ -119,6 +119,13 @@ class Settings(BaseSettings):
     llm_default_base_url: str = Field(default="https://openrouter.com/api/v1")
     llm_default_api_key: str = Field(default="sk-you-openrouter-api-key-change-in-production")
 
+    # Langfuse (Observability)
+    langfuse_enabled: bool = Field(default=True)
+    langfuse_public_key: str | None = Field(default=None)
+    langfuse_secret_key: str | None = Field(default=None)
+    langfuse_host: str = Field(default="http://localhost:3000")
+    langfuse_debug: bool = Field(default=False)
+
     # CORS
     cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8080"]

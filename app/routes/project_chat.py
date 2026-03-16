@@ -3,8 +3,10 @@
 import json
 import logging
 from uuid import UUID
-
+from langfuse import observe
+from app.services.langfuse_client import get_langfuse_client
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy import func, select
@@ -190,6 +192,7 @@ async def get_project_messages(
 
 
 @router.post("/{session_id}/message/", response_model=MessageResponse)
+@observe(name="ChatMessage")
 async def send_project_message(
     project_id: UUID,
     session_id: UUID,
@@ -208,6 +211,18 @@ async def send_project_message(
     - Routes to orchestrated_execution() if no target_agent
     """
     user_id = get_current_user_id(request)
+    
+    # Add metadata for Langfuse tracing (v4 API)
+    try:
+        langfuse_client = get_langfuse_client()
+        if langfuse_client.enabled and langfuse_client.client:
+            langfuse_client.client.update_current_trace(
+                user_id=str(user_id),
+                session_id=str(project_id),
+            )
+    except Exception:
+        pass  # Gracefully ignore Langfuse errors
+    
     logger.info(f"Sending message to session: session_id={session_id}, project_id={project_id}")
     
     # Verify session belongs to user and project

@@ -30,6 +30,7 @@ from app.core.stream_manager import close_stream_manager, get_stream_manager
 from app.core.worker_space_manager import get_worker_space_manager
 from app.core.outbox_publisher import OutboxPublisher
 from app.services.litellm_client import LiteLLMClient, LiteLLMConnectionError
+from app.services.langfuse_client import get_langfuse_client
 
 # Configure logging
 configure_logging()
@@ -53,6 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         raise RuntimeError(f"Failed to initialize LiteLLM client: {str(e)}") from e
     
+    # Initialize Langfuse client for observability
+    langfuse_client = get_langfuse_client()
+    app.state.langfuse_client = langfuse_client
     
     # Initialize database (create tables if needed)
     # Note: In production, use Alembic migrations instead
@@ -86,6 +90,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("application_shutting_down")
     
+    # Graceful shutdown of Langfuse (flush remaining traces)
+    langfuse_client.flush()
     
     # Stop OutboxPublisher
     await outbox_publisher.stop()

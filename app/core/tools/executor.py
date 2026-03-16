@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from uuid import UUID, uuid4
 
+from langfuse import observe
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tools.definitions import ToolName, AVAILABLE_TOOLS
@@ -69,6 +70,7 @@ class ToolExecutor:
 
         self.logger = logger
 
+    @observe(as_type="tool", name="ExecuteTool")
     async def execute_tool(
         self,
         tool_name: str,
@@ -95,6 +97,7 @@ class ToolExecutor:
         execution_result = None
         execution_error = None
 
+    @observe(as_type="tool", name="ValidateTool")
     async def _validate_tool_params(
         self,
         tool_name: str,

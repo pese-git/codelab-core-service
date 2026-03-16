@@ -6,7 +6,7 @@ import time
 from typing import Any, TYPE_CHECKING
 from uuid import UUID
 
-import openai
+from langfuse.openai import openai
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy import select
 
@@ -15,7 +15,10 @@ from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
+from app.services.langfuse_client import get_langfuse_client
 from app.vectorstore.agent_context_store import AgentContextStore
+
+from langfuse import observe
 
 if TYPE_CHECKING:
     from app.core.tools.executor import ToolExecutor
@@ -141,6 +144,7 @@ class ContextualAgent:
             agent_name=self.agent_name,
         )
 
+    @observe(name="Executor")
     async def execute(
         self,
         user_message: str,
