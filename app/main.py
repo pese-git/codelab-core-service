@@ -16,7 +16,6 @@ from app.redis_client import close_redis, get_redis
 from app.routes import (
     analytics,
     approvals,
-    feedback,
     health,
     llm_providers,
     monitoring,
@@ -26,14 +25,11 @@ from app.routes import (
     project_tools,
     projects,
     streaming,
-    traces,
 )
 from app.core.stream_manager import close_stream_manager, get_stream_manager
 from app.core.worker_space_manager import get_worker_space_manager
 from app.core.outbox_publisher import OutboxPublisher
-from app.tracing import initialize_tracing
 from app.services.litellm_client import LiteLLMClient, LiteLLMConnectionError
-from app.services.langfuse_integration import get_langfuse
 
 # Configure logging
 configure_logging()
@@ -57,12 +53,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         raise RuntimeError(f"Failed to initialize LiteLLM client: {str(e)}") from e
     
-    # Initialize Langfuse integration (LLM observability)
-    langfuse = get_langfuse()
-    if langfuse.enabled:
-        logger.info("langfuse_initialized", host=settings.langfuse_host)
-    else:
-        logger.info("langfuse_disabled")
     
     # Initialize database (create tables if needed)
     # Note: In production, use Alembic migrations instead
@@ -96,9 +86,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("application_shutting_down")
     
-    # Flush Langfuse data before shutdown
-    langfuse.shutdown()
-    logger.info("langfuse_shutdown_completed")
     
     # Stop OutboxPublisher
     await outbox_publisher.stop()
@@ -125,8 +112,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Initialize OpenTelemetry tracing
-initialize_tracing(app)
+
 
 
 def custom_openapi():
@@ -184,8 +170,6 @@ app.include_router(streaming.project_router)
 app.include_router(monitoring.router)
 app.include_router(llm_providers.private_router)
 app.include_router(llm_providers.public_router)
-app.include_router(traces.router)
-app.include_router(feedback.router)
 
 
 @app.get("/")

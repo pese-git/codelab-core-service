@@ -11,8 +11,6 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from app.config import settings
 from app.logging_config import get_logger
 from app.qdrant_client import ensure_collection
-from app.services.langfuse_decorators import trace_embedding_call
-from app.services.langfuse_integration import get_langfuse
 
 logger = get_logger(__name__)
 
@@ -48,10 +46,6 @@ class AgentContextStore:
         }
         
         self.openai_client = openai.AsyncOpenAI(**client_kwargs)
-        
-        # Initialize Langfuse integration
-        self.langfuse = get_langfuse()
-        self.langfuse_trace = None
     
     def _get_embedding_model(self) -> str:
         """Get embedding model from registered embedding_llm_provider.
@@ -66,25 +60,14 @@ class AgentContextStore:
         
         return embedding_model
     
-    def set_langfuse_trace(self, trace: Any) -> None:
-        """Установить Langfuse trace для трейсинга встраиваний.
-        
-        Args:
-            trace: LangfuseTraceRef instance из session-level trace
-        """
-        self.langfuse_trace = trace
-    
-    @trace_embedding_call(name="add_interaction_embedding")
     async def _create_embedding_for_interaction(
         self,
         content: str,
-        langfuse_trace: Any = None,
     ) -> list[float]:
-        """Создать embedding для interaction с трейсингом в Langfuse.
+        """Создать embedding для interaction.
         
         Args:
             content: Текст для embedding
-            langfuse_trace: Langfuse trace для создания span
         
         Returns:
             Embedding вектор
@@ -95,17 +78,14 @@ class AgentContextStore:
         )
         return response.data[0].embedding
     
-    @trace_embedding_call(name="search_context_embedding")
     async def _create_embedding_for_search(
         self,
         query: str,
-        langfuse_trace: Any = None,
     ) -> list[float]:
-        """Создать embedding для search query с трейсингом в Langfuse.
+        """Создать embedding для search query.
         
         Args:
             query: Search query текст
-            langfuse_trace: Langfuse trace для создания span
         
         Returns:
             Embedding вектор
@@ -174,11 +154,10 @@ class AgentContextStore:
         if not self.enabled:
             return ""
         
-        # Generate embedding с трейсингом в Langfuse
+        # Generate embedding
         try:
             embedding = await self._create_embedding_for_interaction(
                 content=content,
-                langfuse_trace=self.langfuse_trace,
             )
         except Exception as e:
             # Fallback: if embeddings fail, use a simple hash-based vector
@@ -256,7 +235,6 @@ class AgentContextStore:
         try:
             query_embedding = await self._create_embedding_for_search(
                 query=query,
-                langfuse_trace=self.langfuse_trace,
             )
         except Exception as e:
             # Fallback: if embeddings fail, use a simple hash-based vector

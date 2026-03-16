@@ -45,9 +45,6 @@ class LiteLLMClient:
         
         # Validate configuration
         self._validate_configuration()
-        
-        # Configure Langfuse callbacks for automatic LLM tracing
-        self._setup_langfuse_callbacks()
 
     def _validate_configuration(self) -> None:
         """
@@ -83,44 +80,6 @@ class LiteLLMClient:
             "litellm_client_initialized",
             base_url=self.base_url,
         )
-
-    def _setup_langfuse_callbacks(self) -> None:
-        """
-        Настроить Langfuse callbacks для автоматического трейсинга LLM вызовов.
-
-        LiteLLM имеет встроенную поддержку Langfuse callbacks, которая автоматически
-        захватывает все LLM вызовы и отправляет их в Langfuse для observability.
-        """
-        import os
-
-        if not settings.langfuse_enabled:
-            logger.debug("langfuse_callbacks_disabled")
-            return
-
-        try:
-            import litellm
-
-            # Включить Langfuse callbacks для успешных и ошибочных запросов
-            litellm.success_callback = ["langfuse"]
-            litellm.failure_callback = ["langfuse"]
-
-            # Установить credentials для Langfuse в environment
-            os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
-            os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
-            os.environ["LANGFUSE_HOST"] = settings.langfuse_host
-
-            logger.info(
-                "langfuse_callbacks_configured",
-                langfuse_host=settings.langfuse_host,
-            )
-
-        except ImportError:
-            logger.warning("litellm_module_not_available_for_callbacks")
-        except Exception as e:
-            logger.error(
-                "langfuse_callbacks_setup_failed",
-                error=str(e),
-            )
 
     async def add_model(
         self,

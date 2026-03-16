@@ -20,13 +20,10 @@ from app.models.user_project import UserProject
 from app.redis_client import get_redis
 from app.core.stream_manager import get_stream_manager, StreamManager
 from app.schemas.event import StreamEvent
-from app.tracing import get_tracer
 
 logger = logging.getLogger(__name__)
-tracer = get_tracer(__name__)
 
 project_router = APIRouter(prefix="/my/projects", tags=["project-streaming"])
-
 
 async def event_stream_generator(
     session_id: UUID,
@@ -36,7 +33,7 @@ async def event_stream_generator(
 ):
     """
     Generator for streaming event stream in NDJSON format.
-    
+
     Yields events from the queue until connection is closed.
     Each event is a JSON object followed by a newline.
     """
@@ -55,14 +52,6 @@ async def event_stream_generator(
                 if isinstance(event, StreamEvent):
                     # Trace stream event with content details
                     ndjson_output = event.to_ndjson()
-                    with tracer.start_as_current_span("stream_event_sent") as span:
-                        span.set_attribute("session.id", str(session_id))
-                        span.set_attribute("user.id", str(user_id))
-                        span.set_attribute("event.type", event.event_type)
-                        span.set_attribute("payload.keys", ",".join(event.payload.keys()) if event.payload else "empty")
-                        span.add_event("event_serialized", {
-                            "ndjson_length": len(ndjson_output)
-                        })
                     yield ndjson_output
                     continue
 
@@ -94,7 +83,6 @@ async def event_stream_generator(
         except Exception as e:
             logger.error(f"Error unregistering connection: {e}")
 
-
 # Per-project streaming endpoints
 @project_router.get(
     "/{project_id}/chat/{session_id}/events/",
@@ -103,16 +91,16 @@ async def event_stream_generator(
     description="""
     Establishes a streaming connection to receive real-time updates
     for a specific chat session in a project using Fetch API and JSON Lines (NDJSON) format.
-    
+
     **Authentication:**
     - Requires JWT token in Authorization header: `Bearer <token>`
     - Query parameter authentication is NOT supported for security reasons
-    
+
     **Response Format:**
     - Content-Type: `application/x-ndjson`
     - Each event is a JSON object on a separate line
     - Format: `{"event_type": "...", "payload": {...}, "timestamp": "...", "session_id": "..."}\n`
-    
+
     **Event Types:**
     - `message_created` - New message created (user or assistant)
     - `direct_agent_call` - Direct agent invocation
@@ -127,13 +115,13 @@ async def event_stream_generator(
     - `approval_required` - User approval required
     - `heartbeat` - Keep-alive heartbeat (sent every 30 seconds)
     - `error` - Error occurred
-    
+
     **Connection Management:**
     - Heartbeat sent every 30 seconds as JSON event
     - Connection timeout: 5 minutes of inactivity
     - Buffered events (last 100) sent on reconnect
     - Use `?since=<timestamp>` to retrieve only events after a specific time (prevents duplicates on reconnect)
-    
+
     **Security:**
     - User isolation enforced via JWT
     - Project isolation enforced - only events for user's project sessions are sent
@@ -153,7 +141,7 @@ async def subscribe_to_project_events(
 ) -> StreamingResponse:
     """
     Subscribe to streaming events for a chat session in a project.
-    
+
     Args:
         project_id: Project UUID
         session_id: Chat session UUID
@@ -161,66 +149,53 @@ async def subscribe_to_project_events(
         db: Database session
         project: User project (validated via dependency)
         since: Optional timestamp to filter buffered events (only events after this time)
-        
+
     Returns:
         StreamingResponse with NDJSON events
-        
+
     Raises:
         HTTPException: 404 if session not found, 403 if access denied
     """
     # Get user_id from request
     user_id = get_current_user_id(request)
-    
-    # Create tracing span for subscription lifecycle
-    with tracer.start_as_current_span("stream_subscription") as span:
-        span.set_attribute("session.id", str(session_id))
-        span.set_attribute("project.id", str(project_id))
-        span.set_attribute("user.id", str(user_id))
-        span.set_attribute("since", str(since) if since else "none")
-        
-        logger.info(f"Verifying session access: project_id={project_id}, session_id={session_id}, user_id={user_id}")
 
-        # Verify session exists and belongs to user and project
-        result = await db.execute(
-            select(ChatSession).where(
-                ChatSession.id == session_id,
-                ChatSession.user_id == user_id,
-                ChatSession.project_id == project_id,
-            )
+    logger.info(f"Verifying session access: project_id={project_id}, session_id={session_id}, user_id={user_id}")
+
+    # Verify session exists and belongs to user and project
+    result = await db.execute(
+        select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.project_id == project_id,
         )
-        session = result.scalar_one_or_none()
+    )
+    session = result.scalar_one_or_none()
 
-        if not session:
-            logger.warning(f"Session not found: project_id={project_id}, session_id={session_id}, user_id={user_id}")
-            span.set_attribute("status", "session_not_found")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Chat session {session_id} not found in project {project_id}",
-            )
-
-        # Get Stream manager
-        redis = await get_redis()
-        stream_manager = await get_stream_manager(redis)
-
-        # Register connection and get queue (with optional 'since' filter)
-        queue = await stream_manager.register_connection(session_id, user_id, since)
-
-        logger.info(
-            f"Streaming connection established: user={user_id}, project={project_id}, session={session_id}, since={since}"
+    if not session:
+        logger.warning(f"Session not found: project_id={project_id}, session_id={session_id}, user_id={user_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Chat session {session_id} not found in project {project_id}",
         )
-        
-        span.set_attribute("status", "connected")
-        span.add_event("connection_established", {
-            "queue_size": queue.qsize()
-        })
 
-        # Create streaming response
-        return StreamingResponse(
-            event_stream_generator(session_id, user_id, stream_manager, queue),
-            media_type="application/x-ndjson",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",  # Disable nginx buffering
-            },
-        )
+    # Get Stream manager
+    redis = await get_redis()
+    stream_manager = await get_stream_manager(redis)
+
+    # Register connection and get queue (with optional 'since' filter)
+    queue = await stream_manager.register_connection(session_id, user_id, since)
+
+    logger.info(
+        f"Streaming connection established: user={user_id}, project={project_id}, session={session_id}, since={since}"
+    )
+
+    # Create streaming response
+    return StreamingResponse(
+        event_stream_generator(session_id, user_id, stream_manager, queue),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
