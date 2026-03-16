@@ -340,6 +340,73 @@ result = await executor.execute_tool(
 
 Подробнее: [Tool Execution Tracing документация](doc/tool-execution-tracing.md)
 
+## Observability
+
+Проект использует **Langfuse v4** для полного трейсинга LLM вызовов и агентных workflow'ов. OpenTelemetry полностью удалена (16 марта 2026).
+
+### Конфигурация
+
+**Environment переменные:**
+```bash
+LANGFUSE_ENABLED=true              # Включить/отключить трейсинг
+LANGFUSE_PUBLIC_KEY=pk-...         # Public API key из Langfuse dashboard
+LANGFUSE_SECRET_KEY=sk-...         # Secret API key из Langfuse dashboard
+LANGFUSE_HOST=http://localhost:3000  # Langfuse server (http://localhost:3000 или https://cloud.langfuse.com)
+LANGFUSE_DEBUG=false               # Debug режим для логирования
+```
+
+### Инструментированные компоненты
+
+1. **Chat Endpoints** - трейсинг сообщений пользователя ([`send_project_message`](app/routes/project_chat.py:195-196))
+   - Декоратор: `@observe(name="ChatMessage")`
+   - Метаданные: user_id, project_id, tags
+
+2. **Contextual Agent** - трейсинг выполнения агента ([`ContextualAgent.execute`](app/agents/contextual_agent.py:147-148))
+   - Декоратор: `@observe(name="Executor")`
+   - Автоматический захват LLM вызовов через `langfuse.openai.AsyncOpenAI`
+   - Включает: context retrieval, LLM calls, tool execution
+
+3. **Tool Executor** - трейсинг выполнения инструментов ([`app/core/tools/executor.py`](app/core/tools/executor.py:73-74,100-101))
+   - Декоратор: `@observe(as_type="tool")`
+   - Каждый инструмент логируется отдельным span
+
+### Как это работает
+
+```
+Chat Endpoint (@observe)
+├─ Update metadata (user_id, project_id)
+├─ Agent Executor (@observe)
+│  ├─ Context retrieval (Qdrant)
+│  ├─ LLM Call (langfuse.openai.AsyncOpenAI wrapper)
+│  │  └─ Автоматический LLM span
+│  └─ Tool Execution (@observe)
+│     ├─ Tool 1
+│     └─ Tool 2
+└─ All traces sent to Langfuse (async batch)
+```
+
+### Просмотр traces
+
+- **Langfuse Web UI:** http://localhost:3000 или https://cloud.langfuse.com
+- **Фильтрация:** по user_id, session_id, tags, timestamps
+- **Анализ:** spans hierarchy, latency, tokens, costs
+- **Метаданные:** полный контекст каждого trace
+
+### Graceful Degradation
+
+Приложение продолжает работу если Langfuse недоступен:
+- LANGFUSE_ENABLED=false → без трейсинга
+- Отсутствуют API ключи → без трейсинга  
+- Langfuse server down → без трейсинга и задержек
+- Ошибка при трейсинге → логируется, но не влияет на обработку
+
+### Подробнее
+
+- [Langfuse Integration спецификация](openspec/specs/langfuse-integration/spec.md) - архитектура и требования
+- [LLM Call Tracing спецификация](openspec/specs/llm-call-tracing/spec.md) - как работает автоматический захват LLM
+- [Agent Workflow Tracing спецификация](openspec/specs/agent-workflow-tracing/spec.md) - структура traces для workflows
+- [Observability Current State](openspec/specs/observability-current-state/spec.md) - полный обзор текущей реализации
+
 ### Руководства
 
 - [📖 Руководство по настройке и запуску](doc/setup-guide.md) - Полная инструкция по установке, настройке и решению проблем
