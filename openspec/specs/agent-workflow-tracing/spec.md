@@ -47,7 +47,9 @@ Traces ДОЛЖНЫ содержать полный контекст для от
 - **WHEN** [`send_project_message`](app/routes/project_chat.py:195) обновляет trace metadata через [`langfuse_client.client.update_current_trace()`](app/routes/project_chat.py:219-222)
 - **THEN** текущий trace получает:
   - `user_id`: идентификатор пользователя (для row-level security)
-  - `session_id`: ID проекта (для группировки traces в сессию)
+  - `session_id`: ID чат-сессии (для группировки traces в conversation flow)
+  - `metadata.project_id`: ID проекта (для фильтрации traces по проектам)
+  - `metadata.project_name`: название проекта (для удобства в UI)
   - `tags`: включают версию приложения и кастомные теги
 
 #### Scenario: Контекст в Agent.execute()
@@ -118,12 +120,17 @@ async def send_project_message(
     message_request: MessageRequest,
     ...
 ) -> MessageResponse:
-    # Обновление метаданных trace
+    # ✅ Обновление метаданных trace с правильным session_id
     langfuse_client = get_langfuse_client()
     if langfuse_client.enabled and langfuse_client.client:
         langfuse_client.client.update_current_trace(
             user_id=str(user_id),
-            session_id=str(project_id),
+            session_id=str(session_id),  # ✅ Используем chat_session_id
+            metadata={
+                "project_id": str(project_id),  # ✅ Сохраняем project_id в metadata
+                "project_name": project.name,
+            },
+            tags=["v0.2.0"],
         )
 ```
 
@@ -132,7 +139,9 @@ async def send_project_message(
 **Метаданные:**
 - `name`: "ChatMessage"
 - `user_id`: ID пользователя (для row-level security)
-- `session_id`: ID проекта (для группировки в одну сессию)
+- `session_id`: ID чат-сессии (для правильной группировки conversation flow)
+- `metadata.project_id`: ID проекта (для фильтрации traces)
+- `metadata.project_name`: название проекта (для UI)
 - `tags`: версия приложения
 
 #### 2. Agent Executor ([`app/agents/contextual_agent.py`](app/agents/contextual_agent.py))
@@ -189,22 +198,27 @@ async def execute_tool(self, tool_name: str, **kwargs):
 ### Поток трейсинга
 
 ```
-1. send_project_message() вызывается
+1. send_project_message() вызывается с project_id и session_id
    └─ @observe(name="ChatMessage") создает root trace
-      └─ update_current_trace(user_id, project_id) добавляет metadata
+      └─ update_current_trace(user_id, session_id, metadata={project_id, project_name}) добавляет metadata
+         ✅ session_id = chat_session_id (для правильной группировки conversation flow)
+         ✅ metadata.project_id = project_id (для фильтрации по проектам)
       
 2. workspace.handle_message() выполняется
    └─ вызывает agent.execute() или orchestrator.execute()
       └─ @observe(name="Executor") создает child span
+         └─ Наследует session_id из parent trace (ChatMessage)
          └─ langfuse.openai.AsyncOpenAI перехватывает LLM call
             └─ создает LLM span автоматически
          └─ tool_executor.execute_tool() вызывается (если нужны инструменты)
             └─ @observe(as_type="tool") создает tool span
+            └─ Также наследует session_id из parent
             
 3. Результаты агрегируются и отправляются
    └─ trace завершается с status=success (или error)
    
 4. Langfuse SDK async flush отправляет данные на backend
+   └─ Все spans одной chat-сессии группируются в одну Langfuse session
 ```
 
 ### Конфигурация
@@ -243,9 +257,14 @@ langfuse_debug: bool = Field(default=False)
 # 1. Chat endpoint создает root trace
 @observe(name="ChatMessage")
 async def send_project_message(...):
+    # ✅ Используем chat session_id и сохраняем project_id в metadata
     langfuse_client.client.update_current_trace(
         user_id=str(user_id),
-        session_id=str(project_id),
+        session_id=str(session_id),  # ✅ chat_session_id для правильной группировки
+        metadata={
+            "project_id": str(project_id),
+            "project_name": project.name,
+        },
     )
     
     # 2. Workspace handle_message вызывает агента
@@ -354,7 +373,8 @@ graph TB
 ### Security
 - User_id используется для row-level security
 - API ключи не логируются в spans
-- Session_id изолирует данные проектов
+- Session_id изолирует данные chat-сессий (conversation flows)
+- Metadata.project_id позволяет фильтровать traces по проектам
 
 ### Scalability
 - Поддержка 100+ concurrent traces

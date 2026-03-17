@@ -3,7 +3,7 @@
 import json
 import logging
 from uuid import UUID
-from langfuse import observe
+from langfuse import observe, propagate_attributes
 from app.services.langfuse_client import get_langfuse_client
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -211,335 +211,325 @@ async def send_project_message(
     - Routes to orchestrated_execution() if no target_agent
     """
     user_id = get_current_user_id(request)
-    
-    # Add metadata for Langfuse tracing (v4 API)
-    try:
-        langfuse_client = get_langfuse_client()
-        if langfuse_client.enabled and langfuse_client.client:
-            langfuse_client.client.update_current_trace(
-                user_id=str(user_id),
-                session_id=str(project_id),
+    # Propagate session_id to all child observations
+    with propagate_attributes(user_id=user_id, session_id=session_id, metadata={"project_id": str(project_id), "project_name": project.name}):
+        logger.info(f"Sending message to session: session_id={session_id}, project_id={project_id}")
+
+        # Verify session belongs to user and project
+        result = await db.execute(
+            select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == user_id,
+                ChatSession.project_id == project_id,
             )
-    except Exception:
-        pass  # Gracefully ignore Langfuse errors
-    
-    logger.info(f"Sending message to session: session_id={session_id}, project_id={project_id}")
-    
-    # Verify session belongs to user and project
-    result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.id == session_id,
-            ChatSession.user_id == user_id,
-            ChatSession.project_id == project_id,
         )
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        logger.warning(f"Session not found: session_id={session_id}, project_id={project_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
-    
-    # Get SSE manager
-    stream_manager = await get_stream_manager(redis)
-    
-    try:
-        # Save user message
-        user_message = Message(
-            session_id=session_id,
-            role=MessageRole.USER.value,
-            content=message_request.content,
-        )
-        db.add(user_message)
-        await db.flush()
-        
-        # Record event in outbox (same transaction as message)
-        # Domain events will be published through OutboxPublisher, not directly
-        await OutboxRepository.record_event(
-            session=db,
-            aggregate_type="chat_message",
-            aggregate_id=user_message.id,
-            user_id=user_id,
-            project_id=project_id,
-            event_type="message_created",
-            payload={
-                "message_id": str(user_message.id),
-                "session_id": str(session_id),
-                "role": MessageRole.USER.value,
-                "content": user_message.content,
-                "timestamp": user_message.created_at.isoformat(),
-            },
-        )
-        
-        # Get session history for workspace execution
-        history_result = await db.execute(
-            select(Message)
-            .where(Message.session_id == session_id)
-            .order_by(Message.created_at.desc())
-            .limit(10)
-        )
-        history_messages = history_result.scalars().all()
-        session_history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in reversed(history_messages)
-        ]
-        
-        # Parse target agent ID if provided
-        target_agent_id = None
-        if message_request.target_agent:
-            try:
-                target_agent_id = UUID(message_request.target_agent)
-            except ValueError:
-                logger.warning(f"Invalid agent_id: {message_request.target_agent}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="target_agent must be a valid agent UUID",
-                )
-        
-        # Use unified workspace API
-        exec_result = await workspace.handle_message(
-            message_content=message_request.content,
-            target_agent_id=target_agent_id,
-            session_history=session_history,
-            task_id=str(session_id),
-            session_id=session_id,
-        )
-        
-        # Get agent info for SSE events
-        agent_manager = AgentManager(
-            db=db,
-            redis=redis,
-            qdrant=qdrant,
-            user_id=user_id,
-            tool_executor=workspace.executor,
-        )
-        agent_id = target_agent_id or exec_result.get("selected_agent_id")
-        
-        if agent_id:
-            try:
-                agent_id_uuid = UUID(str(agent_id))
-                agent_response = await agent_manager.get_agent_by_project(
-                    agent_id=agent_id_uuid,
-                    project_id=project_id,
-                )
-            except (ValueError, Exception):
+        session = result.scalar_one_or_none()
+        if not session:
+            logger.warning(f"Session not found: session_id={session_id}, project_id={project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found",
+            )
+
+        # Get SSE manager
+        stream_manager = await get_stream_manager(redis)
+
+        try:
+            # Save user message
+            user_message = Message(
+                session_id=session_id,
+                role=MessageRole.USER.value,
+                content=message_request.content,
+            )
+            db.add(user_message)
+            await db.flush()
+
+            # Record event in outbox (same transaction as message)
+            # Domain events will be published through OutboxPublisher, not directly
+            await OutboxRepository.record_event(
+                session=db,
+                aggregate_type="chat_message",
+                aggregate_id=user_message.id,
+                user_id=user_id,
+                project_id=project_id,
+                event_type="message_created",
+                payload={
+                    "message_id": str(user_message.id),
+                    "session_id": str(session_id),
+                    "role": MessageRole.USER.value,
+                    "content": user_message.content,
+                    "timestamp": user_message.created_at.isoformat(),
+                },
+            )
+
+            # Get session history for workspace execution
+            history_result = await db.execute(
+                select(Message)
+                .where(Message.session_id == session_id)
+                .order_by(Message.created_at.desc())
+                .limit(10)
+            )
+            history_messages = history_result.scalars().all()
+            session_history = [
+                {"role": msg.role, "content": msg.content}
+                for msg in reversed(history_messages)
+            ]
+
+            # Parse target agent ID if provided
+            target_agent_id = None
+            if message_request.target_agent:
+                try:
+                    target_agent_id = UUID(message_request.target_agent)
+                except ValueError:
+                    logger.warning(f"Invalid agent_id: {message_request.target_agent}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="target_agent must be a valid agent UUID",
+                    )
+
+            # Use unified workspace API
+            exec_result = await workspace.handle_message(
+                message_content=message_request.content,
+                target_agent_id=target_agent_id,
+                session_history=session_history,
+                task_id=str(session_id),
+                session_id=session_id,
+            )
+
+            # Get agent info for SSE events
+            agent_manager = AgentManager(
+                db=db,
+                redis=redis,
+                qdrant=qdrant,
+                user_id=user_id,
+                tool_executor=workspace.executor,
+            )
+            agent_id = target_agent_id or exec_result.get("selected_agent_id")
+
+            if agent_id:
+                try:
+                    agent_id_uuid = UUID(str(agent_id))
+                    agent_response = await agent_manager.get_agent_by_project(
+                        agent_id=agent_id_uuid,
+                        project_id=project_id,
+                    )
+                except (ValueError, Exception):
+                    agent_response = None
+            else:
                 agent_response = None
-        else:
-            agent_response = None
-        
-        # Send appropriate SSE events based on mode
-        if target_agent_id:
-            # Direct mode
+
+            # Send appropriate SSE events based on mode
+            if target_agent_id:
+                # Direct mode
+                await stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=StreamEvent(
+                        event_type=StreamEventType.DIRECT_AGENT_CALL,
+                        payload={
+                            "agent_id": str(target_agent_id),
+                            "agent_name": agent_response.name if agent_response else "Unknown",
+                            "message": message_request.content,
+                        },
+                        session_id=session_id,
+                    ),
+                )
+            else:
+                # Orchestrated mode
+                await stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=StreamEvent(
+                        event_type=StreamEventType.TASK_STARTED,
+                        payload={
+                            "routing_score": exec_result.get("routing_score", 0.0),
+                            "selected_agent_id": str(agent_id),
+                            "message": message_request.content,
+                        },
+                        session_id=session_id,
+                    ),
+                )
+
+            # Check for execution errors
+            if not exec_result.get("success"):
+                error_msg = exec_result.get("response", "Unknown error")
+                logger.error(f"Execution failed: {error_msg}")
+
+                # Send error event
+                await stream_manager.broadcast_event(
+                    session_id=session_id,
+                    event=StreamEvent(
+                        event_type=StreamEventType.ERROR,
+                        payload={
+                            "agent_id": str(agent_id) if agent_id else "unknown",
+                            "error": error_msg,
+                            "error_type": "execution_error",
+                        },
+                        session_id=session_id,
+                    ),
+                )
+
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Agent execution failed: {error_msg}",
+                )
+
+            # Save assistant message with structured data support
+            # Extract user-friendly response text and optional payload from agent response
+            response_text = exec_result.get("response", "")
+            payload_data = None
+
+            # If response is a JSON string, extract text and store full structure as payload
+            if isinstance(response_text, str) and response_text.strip().startswith("{"):
+                try:
+                    response_obj = json.loads(response_text)
+
+                    if isinstance(response_obj, dict):
+                        # Store full structured response as payload
+                        payload_data = response_obj
+
+                        # Extract user-friendly text from common fields (priority order)
+                        extracted_text = None
+                        # Priority 1: Explicit summary field (for structured LLM responses)
+                        if "summary" in response_obj and response_obj["summary"]:
+                            extracted_text = response_obj["summary"]
+                        # Priority 2: Description field
+                        elif "description" in response_obj and response_obj["description"]:
+                            extracted_text = response_obj["description"]
+                        # Priority 3: Title (with optional description)
+                        elif "title" in response_obj and response_obj["title"]:
+                            if "description" in response_obj and response_obj["description"]:
+                                extracted_text = f"{response_obj['title']}\n\n{response_obj['description']}"
+                            else:
+                                extracted_text = response_obj["title"]
+                        # Priority 4: Message field
+                        elif "message" in response_obj and response_obj["message"]:
+                            extracted_text = response_obj["message"]
+                        # Priority 5: Response field
+                        elif "response" in response_obj and response_obj["response"]:
+                            extracted_text = response_obj["response"]
+
+                        # If we found suitable text, use it; otherwise use compact JSON representation
+                        if extracted_text:
+                            response_text = extracted_text
+                        else:
+                            # Generate summary from available fields
+                            summary_parts = []
+                            for key in ["title", "architecture_decision", "components", "rationale"]:
+                                if key in response_obj and response_obj[key]:
+                                    if isinstance(response_obj[key], dict) and "title" in response_obj[key]:
+                                        summary_parts.append(response_obj[key]["title"])
+                                    elif isinstance(response_obj[key], str) and len(response_obj[key]) < 200:
+                                        summary_parts.append(response_obj[key])
+
+                            if summary_parts:
+                                response_text = "\n".join(summary_parts)
+                            else:
+                                # Last resort: create minimal summary
+                                response_text = f"Architecture decision prepared ({len(response_obj)} fields)"
+                except (json.JSONDecodeError, TypeError):
+                    # Not valid JSON, use original response as-is
+                    pass
+                
+            assistant_message = Message(
+                session_id=session_id,
+                role=MessageRole.ASSISTANT.value,
+                content=response_text,
+                payload=payload_data,
+                agent_id=UUID(str(agent_id)) if agent_id else None,
+            )
+            db.add(assistant_message)
+            await db.flush()
+
+            # Record event in outbox (same transaction as message)
+            await OutboxRepository.record_event(
+                session=db,
+                aggregate_type="chat_message",
+                aggregate_id=assistant_message.id,
+                user_id=user_id,
+                project_id=project_id,
+                event_type="message_created",
+                payload={
+                    "message_id": str(assistant_message.id),
+                    "session_id": str(session_id),
+                    "role": MessageRole.ASSISTANT.value,
+                    "content": assistant_message.content,
+                    "agent_id": str(agent_id) if agent_id else None,
+                    "agent_name": agent_response.name if agent_response else "System",
+                    "timestamp": assistant_message.created_at.isoformat(),
+                    "context_used": exec_result.get("context_used", 0),
+                    "tokens_used": exec_result.get("tokens_used", 0),
+                    "execution_time_ms": exec_result.get("execution_time_ms", 0),
+                },
+            )
+
+            # Domain events (message_created) are published only through OutboxPublisher
+            # No direct stream_manager.broadcast_event for domain events
+
+            # Send SSE event: task completed (technical event, not domain event)
             await stream_manager.broadcast_event(
                 session_id=session_id,
                 event=StreamEvent(
-                    event_type=StreamEventType.DIRECT_AGENT_CALL,
+                    event_type=StreamEventType.TASK_COMPLETED,
                     payload={
-                        "agent_id": str(target_agent_id),
-                        "agent_name": agent_response.name if agent_response else "Unknown",
-                        "message": message_request.content,
+                        "agent_id": str(agent_id) if agent_id else "system",
+                        "agent_name": agent_response.name if agent_response else "System",
+                        "status": "success",
+                        "response_preview": exec_result.get("response", "")[:200],
+                        "execution_time_ms": exec_result.get("execution_time_ms", 0),
                     },
                     session_id=session_id,
                 ),
             )
-        else:
-            # Orchestrated mode
-            await stream_manager.broadcast_event(
-                session_id=session_id,
-                event=StreamEvent(
-                    event_type=StreamEventType.TASK_STARTED,
-                    payload={
-                        "routing_score": exec_result.get("routing_score", 0.0),
-                        "selected_agent_id": str(agent_id),
-                        "message": message_request.content,
-                    },
-                    session_id=session_id,
-                ),
+
+            logger.info(
+                f"Message processed successfully: session_id={session_id}, "
+                f"agent_id={agent_id}, execution_time_ms={exec_result.get('execution_time_ms')}, "
+                f"project_id={project_id}"
             )
-        
-        # Check for execution errors
-        if not exec_result.get("success"):
-            error_msg = exec_result.get("response", "Unknown error")
-            logger.error(f"Execution failed: {error_msg}")
-            
-            # Send error event
+
+            return MessageResponse(
+                id=assistant_message.id,
+                role=MessageRole.ASSISTANT,
+                content=assistant_message.content,
+                agent_id=assistant_message.agent_id,
+                timestamp=assistant_message.created_at,
+            )
+
+        except HTTPException:
+            raise
+        except ValueError as e:
+            logger.error(f"Invalid request: {e}")
             await stream_manager.broadcast_event(
                 session_id=session_id,
                 event=StreamEvent(
                     event_type=StreamEventType.ERROR,
                     payload={
-                        "agent_id": str(agent_id) if agent_id else "unknown",
-                        "error": error_msg,
-                        "error_type": "execution_error",
+                        "error_type": "validation_error",
+                        "error": str(e),
                     },
                     session_id=session_id,
                 ),
             )
-            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+        except Exception as e:
+            logger.error(f"Error processing message: {e}", exc_info=True)
+            await stream_manager.broadcast_event(
+                session_id=session_id,
+                event=StreamEvent(
+                    event_type=StreamEventType.ERROR,
+                    payload={
+                        "error_type": "internal",
+                        "error": str(e),
+                    },
+                    session_id=session_id,
+                ),
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Agent execution failed: {error_msg}",
+                detail=f"Internal error: {str(e)}",
             )
-        
-        # Save assistant message with structured data support
-        # Extract user-friendly response text and optional payload from agent response
-        response_text = exec_result.get("response", "")
-        payload_data = None
-        
-        # If response is a JSON string, extract text and store full structure as payload
-        if isinstance(response_text, str) and response_text.strip().startswith("{"):
-            try:
-                response_obj = json.loads(response_text)
-                
-                if isinstance(response_obj, dict):
-                    # Store full structured response as payload
-                    payload_data = response_obj
-                    
-                    # Extract user-friendly text from common fields (priority order)
-                    extracted_text = None
-                    # Priority 1: Explicit summary field (for structured LLM responses)
-                    if "summary" in response_obj and response_obj["summary"]:
-                        extracted_text = response_obj["summary"]
-                    # Priority 2: Description field
-                    elif "description" in response_obj and response_obj["description"]:
-                        extracted_text = response_obj["description"]
-                    # Priority 3: Title (with optional description)
-                    elif "title" in response_obj and response_obj["title"]:
-                        if "description" in response_obj and response_obj["description"]:
-                            extracted_text = f"{response_obj['title']}\n\n{response_obj['description']}"
-                        else:
-                            extracted_text = response_obj["title"]
-                    # Priority 4: Message field
-                    elif "message" in response_obj and response_obj["message"]:
-                        extracted_text = response_obj["message"]
-                    # Priority 5: Response field
-                    elif "response" in response_obj and response_obj["response"]:
-                        extracted_text = response_obj["response"]
-                    
-                    # If we found suitable text, use it; otherwise use compact JSON representation
-                    if extracted_text:
-                        response_text = extracted_text
-                    else:
-                        # Generate summary from available fields
-                        summary_parts = []
-                        for key in ["title", "architecture_decision", "components", "rationale"]:
-                            if key in response_obj and response_obj[key]:
-                                if isinstance(response_obj[key], dict) and "title" in response_obj[key]:
-                                    summary_parts.append(response_obj[key]["title"])
-                                elif isinstance(response_obj[key], str) and len(response_obj[key]) < 200:
-                                    summary_parts.append(response_obj[key])
-                        
-                        if summary_parts:
-                            response_text = "\n".join(summary_parts)
-                        else:
-                            # Last resort: create minimal summary
-                            response_text = f"Architecture decision prepared ({len(response_obj)} fields)"
-            except (json.JSONDecodeError, TypeError):
-                # Not valid JSON, use original response as-is
-                pass
-        
-        assistant_message = Message(
-            session_id=session_id,
-            role=MessageRole.ASSISTANT.value,
-            content=response_text,
-            payload=payload_data,
-            agent_id=UUID(str(agent_id)) if agent_id else None,
-        )
-        db.add(assistant_message)
-        await db.flush()
-        
-        # Record event in outbox (same transaction as message)
-        await OutboxRepository.record_event(
-            session=db,
-            aggregate_type="chat_message",
-            aggregate_id=assistant_message.id,
-            user_id=user_id,
-            project_id=project_id,
-            event_type="message_created",
-            payload={
-                "message_id": str(assistant_message.id),
-                "session_id": str(session_id),
-                "role": MessageRole.ASSISTANT.value,
-                "content": assistant_message.content,
-                "agent_id": str(agent_id) if agent_id else None,
-                "agent_name": agent_response.name if agent_response else "System",
-                "timestamp": assistant_message.created_at.isoformat(),
-                "context_used": exec_result.get("context_used", 0),
-                "tokens_used": exec_result.get("tokens_used", 0),
-                "execution_time_ms": exec_result.get("execution_time_ms", 0),
-            },
-        )
-        
-        # Domain events (message_created) are published only through OutboxPublisher
-        # No direct stream_manager.broadcast_event for domain events
-        
-        # Send SSE event: task completed (technical event, not domain event)
-        await stream_manager.broadcast_event(
-            session_id=session_id,
-            event=StreamEvent(
-                event_type=StreamEventType.TASK_COMPLETED,
-                payload={
-                    "agent_id": str(agent_id) if agent_id else "system",
-                    "agent_name": agent_response.name if agent_response else "System",
-                    "status": "success",
-                    "response_preview": exec_result.get("response", "")[:200],
-                    "execution_time_ms": exec_result.get("execution_time_ms", 0),
-                },
-                session_id=session_id,
-            ),
-        )
-        
-        logger.info(
-            f"Message processed successfully: session_id={session_id}, "
-            f"agent_id={agent_id}, execution_time_ms={exec_result.get('execution_time_ms')}, "
-            f"project_id={project_id}"
-        )
-        
-        return MessageResponse(
-            id=assistant_message.id,
-            role=MessageRole.ASSISTANT,
-            content=assistant_message.content,
-            agent_id=assistant_message.agent_id,
-            timestamp=assistant_message.created_at,
-        )
-        
-    except HTTPException:
-        raise
-    except ValueError as e:
-        logger.error(f"Invalid request: {e}")
-        await stream_manager.broadcast_event(
-            session_id=session_id,
-            event=StreamEvent(
-                event_type=StreamEventType.ERROR,
-                payload={
-                    "error_type": "validation_error",
-                    "error": str(e),
-                },
-                session_id=session_id,
-            ),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.error(f"Error processing message: {e}", exc_info=True)
-        await stream_manager.broadcast_event(
-            session_id=session_id,
-            event=StreamEvent(
-                event_type=StreamEventType.ERROR,
-                payload={
-                    "error_type": "internal",
-                    "error": str(e),
-                },
-                session_id=session_id,
-            ),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error: {str(e)}",
-        )
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
