@@ -4,7 +4,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-import openai
+from langfuse import observe
+from langfuse.openai import openai
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
@@ -60,6 +61,7 @@ class AgentContextStore:
         
         return embedding_model
     
+    @observe(as_type="embedding", name="EmbeddingInteraction")
     async def _create_embedding_for_interaction(
         self,
         content: str,
@@ -78,6 +80,7 @@ class AgentContextStore:
         )
         return response.data[0].embedding
     
+    @observe(as_type="embedding", name="EmbeddingSearch")
     async def _create_embedding_for_search(
         self,
         query: str,

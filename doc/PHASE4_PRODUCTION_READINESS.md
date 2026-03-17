@@ -121,6 +121,7 @@ docker-compose restart app
 
 # Langfuse (обязательно!)
 LANGFUSE_ENABLED=true
+LANGFUSE_TRACING_ENABLED=true  # Управление отправкой трасс (SDK)
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxx
 LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://api.langfuse.com
@@ -532,4 +533,3 @@ docker-compose logs app | grep -i error | head -20
 - Deployment: [`doc/PHASE4_DEPLOYMENT_GUIDE.md`](doc/PHASE4_DEPLOYMENT_GUIDE.md)
 - Integration: [`doc/PHASE4_INTEGRATION_VERIFICATION.md`](doc/PHASE4_INTEGRATION_VERIFICATION.md)
 - Changes: [`CHANGELOG.md`](CHANGELOG.md)
-

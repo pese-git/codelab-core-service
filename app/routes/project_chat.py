@@ -39,6 +39,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/my/projects/{project_id}/chat", tags=["project-chat"])
 
+def _sanitize_langfuse_attr(value: object) -> str:
+    """Langfuse attributes must be ASCII strings <= 200 chars."""
+    if value is None:
+        return ""
+    text = str(value)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    return text[:200]
+
 
 @router.post("/sessions/", status_code=status.HTTP_201_CREATED, response_model=ChatSessionResponse)
 async def create_project_session(
@@ -210,8 +218,16 @@ async def send_project_message(
     - Routes to orchestrated_execution() if no target_agent
     """
     user_id = get_current_user_id(request)
-    # Propagate session_id to all child observations
-    with propagate_attributes(user_id=user_id, session_id=session_id, metadata={"project_id": str(project_id), "project_name": project.name}):
+    # Propagate session_id to all child observations (Langfuse expects ASCII strings <= 200 chars)
+    metadata = {"project_id": _sanitize_langfuse_attr(project_id)}
+    project_name = _sanitize_langfuse_attr(project.name)
+    if project_name:
+        metadata["project_name"] = project_name
+    with propagate_attributes(
+        user_id=_sanitize_langfuse_attr(user_id),
+        session_id=_sanitize_langfuse_attr(session_id),
+        metadata=metadata,
+    ):
         logger.info(f"Sending message to session: session_id={session_id}, project_id={project_id}")
 
         # Verify session belongs to user and project

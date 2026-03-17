@@ -16,7 +16,7 @@ class LangfuseClient:
     def __init__(self) -> None:
         """Initialize Langfuse client based on settings."""
         self.client: Optional[Langfuse] = None
-        self.enabled = settings.langfuse_enabled
+        self.enabled = settings.langfuse_enabled and settings.langfuse_tracing_enabled
 
         if not self.enabled:
             logger.info("langfuse_disabled")
@@ -33,16 +33,18 @@ class LangfuseClient:
             return
 
         try:
+            base_url = settings.langfuse_base_url or settings.langfuse_host
             self.client = Langfuse(
                 public_key=settings.langfuse_public_key,
                 secret_key=settings.langfuse_secret_key,
-                host=settings.langfuse_host,
+                base_url=base_url,
+                tracing_enabled=self.enabled,
                 debug=settings.langfuse_debug,
             )
 
             logger.info(
                 "langfuse_client_initialized",
-                host=settings.langfuse_host,
+                base_url=base_url,
                 debug=settings.langfuse_debug,
             )
 

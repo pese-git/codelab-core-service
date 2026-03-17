@@ -830,6 +830,7 @@ user_id, workspace_id, agent_id = langfuse._extract_context_vars()
 # .env файл
 # === Langfuse ===
 LANGFUSE_ENABLED=true  # Включить трейсинг
+LANGFUSE_TRACING_ENABLED=true  # Управление отправкой трасс (SDK)
 LANGFUSE_PUBLIC_KEY=pk-...  # Из Langfuse dashboard
 LANGFUSE_SECRET_KEY=sk-...  # Из Langfuse dashboard
 LANGFUSE_BASE_URL=https://api.langfuse.com  # Default
@@ -952,4 +953,3 @@ A: Зависит от объема. Бесплатный план включа�
 2. Посмотрите логи: `docker-compose logs app | grep langfuse`
 3. Откройте issue на GitHub
 4. Свяжитесь с team через Slack
-

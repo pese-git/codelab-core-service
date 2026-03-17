@@ -66,6 +66,7 @@
 ```bash
 # Langfuse интеграция
 LANGFUSE_ENABLED=true
+LANGFUSE_TRACING_ENABLED=true  # Управление отправкой трасс (SDK)
 LANGFUSE_PUBLIC_KEY=pk-lf-ВАШ_PUBLIC_KEY_ЗДЕСЬ
 LANGFUSE_SECRET_KEY=sk-lf-ВАШ_SECRET_KEY_ЗДЕСЬ
 LANGFUSE_BASE_URL=https://api.langfuse.com
@@ -492,4 +493,3 @@ docker-compose up -d redis
 - [`doc/tool-execution-tracing.md`](doc/tool-execution-tracing.md) - Документация функций
 - [`CHANGELOG.md`](CHANGELOG.md) - Изменения Phase 4
 - [`doc/PHASE4_INTEGRATION_VERIFICATION.md`](doc/PHASE4_INTEGRATION_VERIFICATION.md) - Проверка интеграций
-

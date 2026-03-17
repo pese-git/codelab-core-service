@@ -121,8 +121,11 @@ class Settings(BaseSettings):
 
     # Langfuse (Observability)
     langfuse_enabled: bool = Field(default=True)
+    langfuse_tracing_enabled: bool = Field(default=True)
     langfuse_public_key: str | None = Field(default=None)
     langfuse_secret_key: str | None = Field(default=None)
+    # Prefer base_url; host is retained for backward compatibility.
+    langfuse_base_url: str | None = Field(default=None)
     langfuse_host: str = Field(default="http://localhost:3000")
     langfuse_debug: bool = Field(default=False)
 
