@@ -15,7 +15,6 @@ from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
-from app.services.langfuse_client import get_langfuse_client
 from app.vectorstore.agent_context_store import AgentContextStore
 
 from langfuse import observe

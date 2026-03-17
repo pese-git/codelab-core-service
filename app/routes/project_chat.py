@@ -4,7 +4,6 @@ import json
 import logging
 from uuid import UUID
 from langfuse import observe, propagate_attributes
-from app.services.langfuse_client import get_langfuse_client
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from qdrant_client import AsyncQdrantClient
