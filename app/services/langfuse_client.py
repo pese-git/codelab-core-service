@@ -1,7 +1,6 @@
 """Langfuse client initialization and management."""
 
 from typing import Optional
-from uuid import UUID
 
 from langfuse import Langfuse
 
@@ -53,66 +52,6 @@ class LangfuseClient:
                 error=str(e),
             )
             self.enabled = False
-
-    def observe_openai_client(self, openai_client) -> None:
-        """Wrap OpenAI client with Langfuse automatic tracing.
-
-        Args:
-            openai_client: AsyncOpenAI client instance to wrap
-        """
-        if not self.enabled or not self.client:
-            return
-
-        try:
-            # Try to import and apply Langfuse OpenAI integration if available
-            try:
-                from langfuse.openai import openai as langfuse_openai_module
-                # If the module exists, use it for wrapping
-                if hasattr(langfuse_openai_module, 'AsyncOpenAI'):
-                    logger.info("openai_client_ready_for_langfuse_tracing")
-            except ImportError:
-                # Fallback: OpenAI tracing will work via @observe decorators
-                logger.debug("langfuse_openai_integration_not_available_using_decorators")
-        except Exception as e:
-            logger.warning("langfuse_openai_wrapping_setup_warning", error=str(e))
-
-    def update_trace_metadata(
-        self,
-        user_id: UUID,
-        project_id: UUID,
-        tags: Optional[list[str]] = None,
-    ) -> None:
-        """Update current trace with metadata.
-
-        Args:
-            user_id: User identifier
-            project_id: Project identifier
-            tags: Optional list of tags
-        """
-        if not self.enabled or not self.client:
-            return
-
-        try:
-            all_tags = ["v0.2.0"] + (tags or [])
-
-            self.client.update_current_trace(
-                user_id=str(user_id),
-                session_id=str(project_id),
-                tags=all_tags,
-            )
-
-            logger.debug(
-                "trace_metadata_updated",
-                user_id=str(user_id),
-                project_id=str(project_id),
-                tags=all_tags,
-            )
-
-        except Exception as e:
-            logger.warning(
-                "trace_metadata_update_failed",
-                error=str(e),
-            )
 
     def flush(self) -> None:
         """Flush all pending traces to Langfuse server."""
