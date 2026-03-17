@@ -730,6 +730,7 @@ class UserWorkerSpace:
         task_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
         session_id: Optional[UUID] = None,
+        langfuse_prompt: Any | None = None,
     ) -> dict[str, Any]:
         """Execute task directly through a specific agent.
 
@@ -794,6 +795,7 @@ class UserWorkerSpace:
                 session_history=session_history,
                 task_id=task_id,
                 session_id=session_id,
+                langfuse_prompt=langfuse_prompt,
             )
             execution_time = (time.time() - start_time) * 1000  # ms
 

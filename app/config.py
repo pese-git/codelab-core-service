@@ -128,6 +128,14 @@ class Settings(BaseSettings):
     langfuse_base_url: str | None = Field(default=None)
     langfuse_host: str = Field(default="http://localhost:3000")
     langfuse_debug: bool = Field(default=False)
+    # Langfuse Prompt Management
+    langfuse_prompt_management_enabled: bool = Field(default=True)
+    langfuse_prompt_cache_ttl_seconds: int = Field(default=60)
+    langfuse_prompt_fetch_timeout_seconds: int = Field(default=5)
+    langfuse_prompt_max_retries: int = Field(default=2)
+    langfuse_prompt_label: str | None = Field(default="production")
+    langfuse_prompt_architect_plan_name: str = Field(default="architect-plan-create")
+    langfuse_prompt_orchestrator_plan_name: str = Field(default="orchestrator-plan-execute")
 
     # CORS
     cors_origins: list[str] = Field(

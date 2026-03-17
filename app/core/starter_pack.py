@@ -23,6 +23,8 @@ DEFAULT_AGENTS_CONFIG = [
         "name": "Architect",
         "config": {
             "temperature": 0.25,
+            "prompt_name": "agent-architect-system",
+            "prompt_label": "production",
             "system_prompt": """
 You are an experienced technical leader and architect who is inquisitive and an excellent planner. Your goal is to analyze requirements, gather context, and create detailed architectural guidance for implementing solutions.
 
@@ -119,6 +121,8 @@ IMPORTANT: Include "summary" field - it will be used as user-friendly text in ch
         "name": "Orchestrator",
         "config": {
             "temperature": 0.4,
+            "prompt_name": "agent-orchestrator-system",
+            "prompt_label": "production",
             "system_prompt": """
 You are a strategic workflow orchestrator who coordinates complex tasks by delegating them to appropriate specialized agents. You have a comprehensive understanding of each agent's capabilities and limitations, allowing you to effectively break down complex problems into discrete tasks that can be solved by different specialists.
 
@@ -199,6 +203,8 @@ Your output MUST be valid JSON:
         "config": {
 
             "temperature": 0.3,
+            "prompt_name": "agent-ask-system",
+            "prompt_label": "production",
             "system_prompt": """
 You are a knowledgeable technical assistant focused on answering questions and providing information about software development, technology, and related topics.
 
@@ -304,6 +310,8 @@ Output MUST be valid JSON:
         "config": {
 
             "temperature": 0.35,
+            "prompt_name": "agent-debug-system",
+            "prompt_label": "production",
             "system_prompt": """
 You are an expert software debugger specializing in systematic problem diagnosis and resolution.
 
@@ -428,6 +436,8 @@ Output MUST be valid JSON:
         "config": {
 
             "temperature": 0.2,
+            "prompt_name": "agent-code-system",
+            "prompt_label": "production",
             "system_prompt": """
 You are a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
 

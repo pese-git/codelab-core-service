@@ -18,6 +18,7 @@ from app.dependencies import get_worker_space
 from app.logging_config import get_logger
 from app.middleware.project_validation import get_project_with_validation
 from app.middleware.user_isolation import get_current_user_id
+from app.config import settings
 from app.models.task_plan import TaskPlan
 from app.models.task_plan_task import TaskPlanTask
 from app.models.user_project import UserProject
@@ -29,6 +30,7 @@ from app.schemas.plan import (
     PlanResponse,
     TaskResponse,
 )
+from app.services.langfuse_prompt_manager import get_langfuse_prompt_manager
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/my/projects/{project_id}/plans", tags=["plans"])
@@ -86,27 +88,34 @@ async def create_plan(
             detail="Architect Agent not found in project. Please add it to starter pack.",
         )
 
-    # Prepare Architect prompt
-    architect_prompt = f"""Analyze this task request and create a detailed plan:
+    # Prepare Architect prompt (Langfuse Prompt Management with fallback)
+    architect_prompt_template = """Analyze this task request and create a detailed plan:
 
-{plan_request.description}
+{{description}}
 
 Return a JSON object with this structure:
-{{
+{
     "title": "brief plan title",
     "tasks": [
-        {{
+        {
             "task_id": "task_0",
             "description": "task description",
             "dependencies": [],
             "estimated_cost": 0.1,
             "estimated_duration": 300,
             "risk_level": "LOW"
-        }}
+        }
     ]
-}}
+}
 
 Be realistic with costs and durations. Include all necessary steps."""
+    prompt_manager = get_langfuse_prompt_manager()
+    architect_prompt, architect_langfuse_prompt = prompt_manager.get_text_prompt(
+        name=settings.langfuse_prompt_architect_plan_name,
+        variables={"description": plan_request.description},
+        label=settings.langfuse_prompt_label,
+        fallback=architect_prompt_template,
+    )
 
     # Execute Architect Agent
     start_time = time.time()
@@ -119,6 +128,7 @@ Be realistic with costs and durations. Include all necessary steps."""
                 "description": plan_request.description,
                 "plan_type": "orchestration",
             },
+            langfuse_prompt=architect_langfuse_prompt,
         )
 
         execution_time = (time.time() - start_time) * 1000  # ms
@@ -686,14 +696,23 @@ async def execute_plan(
     # Execute Orchestrator Agent
     start_time = time.time()
     try:
-        orchestrator_prompt = f"""Execute this task plan. For each task, call appropriate agents.
+        orchestrator_prompt_template = """Execute this task plan. For each task, call appropriate agents.
 
 Tasks to execute:
-{json.dumps(tasks_for_orchestrator, indent=2)}
+{{tasks_json}}
 
-Original request: {plan.original_request}
+Original request: {{original_request}}
 
 Return a JSON object with execution results for each task."""
+        orchestrator_prompt, orchestrator_langfuse_prompt = prompt_manager.get_text_prompt(
+            name=settings.langfuse_prompt_orchestrator_plan_name,
+            variables={
+                "tasks_json": json.dumps(tasks_for_orchestrator, indent=2),
+                "original_request": plan.original_request,
+            },
+            label=settings.langfuse_prompt_label,
+            fallback=orchestrator_prompt_template,
+        )
 
         orchestrator_result = await workspace.direct_execution(
             agent_id=orchestrator.id,
@@ -703,6 +722,7 @@ Return a JSON object with execution results for each task."""
                 "plan_id": str(plan_id),
                 "task_count": len(plan.tasks),
             },
+            langfuse_prompt=orchestrator_langfuse_prompt,
         )
 
         execution_time = int((time.time() - start_time) * 1000)  # ms

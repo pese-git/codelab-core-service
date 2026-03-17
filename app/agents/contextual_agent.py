@@ -15,6 +15,7 @@ from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
+from app.services.langfuse_prompt_manager import get_langfuse_prompt_manager
 from app.vectorstore.agent_context_store import AgentContextStore
 
 from langfuse import observe
@@ -104,6 +105,7 @@ class ContextualAgent:
         temperature: float | None = None,
         max_tokens: int | None = None,
         tools: list | None = None,
+        langfuse_prompt: Any | None = None,
     ) -> Any:
         """Call LLM with optional tools.
 
@@ -132,6 +134,9 @@ class ContextualAgent:
             llm_kwargs["tools"] = tools
             llm_kwargs["tool_choice"] = "auto"
 
+        if langfuse_prompt is not None:
+            llm_kwargs["langfuse_prompt"] = langfuse_prompt
+
         return await self.openai_client.chat.completions.create(**llm_kwargs)
 
     async def initialize(self) -> None:
@@ -150,6 +155,7 @@ class ContextualAgent:
         session_history: list[dict[str, str]] | None = None,
         task_id: str | None = None,
         session_id: UUID | None = None,
+        langfuse_prompt: Any | None = None,
     ) -> dict[str, Any]:
         """Execute agent with context retrieval and optional tool support.
 
@@ -203,9 +209,28 @@ class ContextualAgent:
                 for i, result in enumerate(context_results, 1):
                     context_str += f"\n{i}. {result['content']}\n"
 
+            # Build system prompt (Langfuse Prompt Management if configured)
+            system_prompt = self.config.system_prompt
+            if self.config.prompt_name:
+                prompt_manager = get_langfuse_prompt_manager()
+                variables: dict[str, Any] = {"agent_name": self.agent_name}
+                role = self.config.metadata.get("role") if self.config.metadata else None
+                if role:
+                    variables["role"] = role
+                compiled, prompt_obj = prompt_manager.get_text_prompt(
+                    name=self.config.prompt_name,
+                    variables=variables,
+                    label=self.config.prompt_label or settings.langfuse_prompt_label,
+                    version=self.config.prompt_version,
+                    fallback=self.config.system_prompt,
+                )
+                system_prompt = compiled
+                if langfuse_prompt is None:
+                    langfuse_prompt = prompt_obj
+
             # Build messages
             messages = [
-                {"role": "system", "content": self.config.system_prompt + context_str}
+                {"role": "system", "content": system_prompt + context_str}
             ]
 
             # Add session history
@@ -275,6 +300,7 @@ class ContextualAgent:
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
                 tools=llm_kwargs.get("tools"),
+                langfuse_prompt=langfuse_prompt,
             )
 
             assistant_message = response.choices[0].message.content or ""
@@ -344,6 +370,7 @@ class ContextualAgent:
                     messages=messages,
                     temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens,
+                    langfuse_prompt=langfuse_prompt,
                 )
 
                 assistant_message = final_response.choices[0].message.content or ""

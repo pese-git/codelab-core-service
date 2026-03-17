@@ -20,6 +20,18 @@ class AgentConfig(BaseModel):
     """Agent configuration schema."""
 
     system_prompt: str = Field(..., min_length=1, description="System prompt for the agent")
+    prompt_name: str | None = Field(
+        default=None,
+        description="Langfuse Prompt Management name for the system prompt",
+    )
+    prompt_label: str | None = Field(
+        default=None,
+        description="Langfuse prompt label (e.g., production)",
+    )
+    prompt_version: int | None = Field(
+        default=None,
+        description="Langfuse prompt version (overrides label if set)",
+    )
     tools: list[str] = Field(default_factory=list, description="List of available tools")
     concurrency_limit: int = Field(default=3, ge=1, le=10, description="Max concurrent tasks")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Model temperature")
@@ -29,6 +41,9 @@ class AgentConfig(BaseModel):
     model_config = {"json_schema_extra": {
         "example": {
             "system_prompt": "You are an expert Python developer...",
+            "prompt_name": "agent-code-system",
+            "prompt_label": "production",
+            "prompt_version": None,
             "tools": ["code_executor", "file_reader"],
             "concurrency_limit": 3,
             "temperature": 0.7,
