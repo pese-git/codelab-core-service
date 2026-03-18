@@ -101,7 +101,7 @@
 
 - [x] 11.1 Обновить README с информацией о LLM провайдерах
 - [x] 11.2 Обновить `doc/rest-api.md` с новыми endpoints
-- [x] 11.3 Обновить `doc/architecture/api-specification.md` если требуется
+- [x] 11.3 Обновить `doc/api/api-specification.md` если требуется
 - [x] 11.4 Добавить docstrings на русском ко всем новым классам и методам
 - [x] 11.5 Обновить CHANGELOG с описанием новой функциональности
 

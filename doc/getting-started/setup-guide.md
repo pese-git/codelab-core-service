@@ -406,5 +406,5 @@ echo $HISTORY | jq '.messages[] | "\(.role): \(.content)"'
 - [REST API документация](./rest-api.md)
 - [SSE Event Streaming](./sse-event-streaming.md)
 - [Gradio Client документация](../scripts/GRADIO_CLIENT.md)
-- [Технические требования](./techincal-requrements.md)
+- [Технические требования](../guides/technical-requirements.md)
 - [Architecture Overview](./architecture/system-overview.md)

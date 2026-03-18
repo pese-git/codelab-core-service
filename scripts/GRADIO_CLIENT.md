@@ -251,8 +251,8 @@ DEFAULT_JWT = os.getenv("JWT_TOKEN", "")
 
 ## 📚 Дополнительные ресурсы
 
-- **REST API документация**: [`doc/rest-api.md`](../doc/rest-api.md)
-- **SSE Events документация**: [`doc/sse-event-streaming.md`](../doc/sse-event-streaming.md)
+- **REST API документация**: [`doc/rest-api.md`](../doc/api/rest-api.md)
+- **SSE Events документация**: [`doc/sse-event-streaming.md`](../doc/api/sse-event-streaming.md)
 - **Swagger UI**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
 
@@ -320,7 +320,7 @@ app.launch(
 
 Если у вас возникли вопросы или проблемы:
 
-1. Проверьте документацию: [`doc/rest-api.md`](../doc/rest-api.md)
+1. Проверьте документацию: [`doc/rest-api.md`](../doc/api/rest-api.md)
 2. Проверьте логи сервиса: `docker-compose logs -f`
 3. Создайте issue в репозитории
 

@@ -370,8 +370,8 @@ else:
 - ✅ [`README.md`](README.md) - актуален, описывает текущее состояние
 - ✅ [`doc/architecture/system-overview.md`](doc/architecture/system-overview.md) - соответствует реализации
 - ✅ [`doc/architecture/component-details.md`](doc/architecture/component-details.md) - детально описывает компоненты
-- ✅ [`doc/rest-api.md`](doc/rest-api.md) - соответствует реализованным endpoints
-- ✅ [`doc/sse-event-streaming.md`](doc/sse-event-streaming.md) - актуален
+- ✅ [`doc/rest-api.md`](../api/rest-api.md) - соответствует реализованным endpoints
+- ✅ [`doc/sse-event-streaming.md`](../api/sse-event-streaming.md) - актуален
 
 **Замечания:**
 - ⚠️ Документация упоминает Orchestrator как "запланированную функцию"

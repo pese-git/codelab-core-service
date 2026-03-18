@@ -277,7 +277,7 @@ if not normalized_path.startswith(normalized_root):
 ## Ссылки на затронутые документы
 
 - [`openspec/changes/implement-core-service/specs/user-worker-space/spec.md`](../../openspec/changes/implement-core-service/specs/user-worker-space/spec.md) - Основная спецификация
-- [`doc/rest-api.md`](./rest-api.md) - REST API документация
+- [`doc/rest-api.md`](../api/rest-api.md) - REST API документация
 - [`doc/WORKSPACE_ARCHITECTURE_REVIEW.md`](./WORKSPACE_ARCHITECTURE_REVIEW.md) - Отчет код-ревью
 - [`app/core/user_worker_space.py`](../../app/core/user_worker_space.py) - Реализация User Worker Space
 - [`app/middleware/user_isolation.py`](../../app/middleware/user_isolation.py) - User Isolation Middleware

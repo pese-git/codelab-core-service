@@ -130,7 +130,7 @@ logger.error(
 
 ### 6. Документация
 
-**Файл**: [`doc/llm-error-handling.md`](doc/llm-error-handling.md)
+**Файл**: [`doc/llm-error-handling.md`](../guides/llm-error-handling.md)
 
 Создана полная документация:
 - Описание всех типов ошибок
@@ -144,7 +144,7 @@ logger.error(
 1. ✅ [`app/schemas/error.py`](app/schemas/error.py) - расширена схема ошибок
 2. ✅ [`app/agents/contextual_agent.py`](app/agents/contextual_agent.py) - детальная обработка ошибок
 3. ✅ [`app/routes/chat.py`](app/routes/chat.py) - улучшенные ответы API
-4. ✅ [`doc/llm-error-handling.md`](doc/llm-error-handling.md) - новая документация
+4. ✅ [`doc/llm-error-handling.md`](../guides/llm-error-handling.md) - новая документация
 5. ✅ [`doc/INDEX.md`](doc/INDEX.md) - обновлен индекс документации
 
 ## Преимущества
@@ -247,9 +247,9 @@ eventSource.addEventListener('message', (event) => {
 
 ## Ссылки
 
-- [LLM Error Handling Documentation](doc/llm-error-handling.md)
-- [API Specification](doc/architecture/api-specification.md)
-- [SSE Event Streaming](doc/sse-event-streaming.md)
+- [LLM Error Handling Documentation](../guides/llm-error-handling.md)
+- [API Specification](../api/api-specification.md)
+- [SSE Event Streaming](../api/sse-event-streaming.md)
 
 ---
 

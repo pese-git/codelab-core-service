@@ -409,12 +409,12 @@ Chat Endpoint (@observe)
 
 ### Руководства
 
-- [📖 Руководство по настройке и запуску](doc/setup-guide.md) - Полная инструкция по установке, настройке и решению проблем
-- [🔌 Интеграция с LiteLLM](doc/litellm-integration.md) - Использование собственного LLM прокси вместо OpenAI API
-- [🔐 Управление LLM провайдерами](doc/litellm-providers-management.md) - Добавление и управление провайдерами через REST API (OpenAI, Claude, Azure, Cohere и др.)
+- [📖 Руководство по настройке и запуску](doc/getting-started/setup-guide.md) - Полная инструкция по установке, настройке и решению проблем
+- [🔌 Интеграция с LiteLLM](doc/integrations/litellm-integration.md) - Использование собственного LLM прокси вместо OpenAI API
+- [🔐 Управление LLM провайдерами](doc/integrations/litellm-providers-management.md) - Добавление и управление провайдерами через REST API (OpenAI, Claude, Azure, Cohere и др.)
 - [🎨 Gradio UI клиент](scripts/GRADIO_CLIENT.md) - Веб-интерфейс для тестирования API
-- [🔧 REST API спецификация](doc/rest-api.md) - Детальное описание всех endpoints
-- [📡 SSE Event Streaming](doc/sse-event-streaming.md) - Работа с событиями в реальном времени
+- [🔧 REST API спецификация](doc/api/rest-api.md) - Детальное описание всех endpoints
+- [📡 SSE Event Streaming](doc/api/sse-event-streaming.md) - Работа с событиями в реальном времени
 - [🧪 Тестирование](tests/README.md) - Запуск и написание тестов
 
 ## Структура проекта
