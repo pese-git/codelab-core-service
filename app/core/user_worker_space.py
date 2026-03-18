@@ -10,7 +10,7 @@ from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from langfuse import observe
+from langfuse import observe, propagate_attributes
 
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
@@ -26,6 +26,16 @@ from app.schemas.agent import AgentConfig
 from app.vectorstore.agent_context_store import AgentContextStore
 
 logger = get_logger(__name__)
+
+
+def _sanitize_langfuse_attr(value: object) -> str:
+    """Langfuse attributes must be ASCII strings <= 200 chars."""
+    if value is None:
+        return ""
+    text = str(value)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    return text[:200]
+
 
 class AgentCache:
     """Cache for agent instances and configurations."""
@@ -792,13 +802,19 @@ class UserWorkerSpace:
         start_time = time.time()
 
         try:
-            result = await agent.execute(
-                user_message=user_message,
-                session_history=session_history,
-                task_id=task_id,
-                session_id=session_id,
-                langfuse_prompt=langfuse_prompt,
-            )
+            with propagate_attributes(
+                metadata={
+                    "agent_id": _sanitize_langfuse_attr(agent_id),
+                    "agent_name": _sanitize_langfuse_attr(agent.agent_name),
+                }
+            ):
+                result = await agent.execute(
+                    user_message=user_message,
+                    session_history=session_history,
+                    task_id=task_id,
+                    session_id=session_id,
+                    langfuse_prompt=langfuse_prompt,
+                )
             execution_time = (time.time() - start_time) * 1000  # ms
 
             # Add output context if successful

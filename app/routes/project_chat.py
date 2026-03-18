@@ -218,11 +218,16 @@ async def send_project_message(
     - Routes to orchestrated_execution() if no target_agent
     """
     user_id = get_current_user_id(request)
+    user_email = getattr(request.state, "user_email", None)
+
     # Propagate session_id to all child observations (Langfuse expects ASCII strings <= 200 chars)
     metadata = {"project_id": _sanitize_langfuse_attr(project_id)}
     project_name = _sanitize_langfuse_attr(project.name)
     if project_name:
         metadata["project_name"] = project_name
+    user_name = _sanitize_langfuse_attr(user_email)
+    if user_name:
+        metadata["user_name"] = user_name
     with propagate_attributes(
         user_id=_sanitize_langfuse_attr(user_id),
         session_id=_sanitize_langfuse_attr(session_id),

@@ -62,6 +62,7 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
                 )
 
                 user_id_str = payload.get("sub")
+                user_email = payload.get("email")
                 if not user_id_str:
                     raise JWTError("Missing 'sub' claim in token")
 
@@ -103,6 +104,7 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
 
             # Inject user context into request state
             request.state.user_id = user_id
+            request.state.user_email = user_email
             request.state.user_prefix = f"user{user_id}"
             request.state.db_filter = {"user_id": user_id}
 
