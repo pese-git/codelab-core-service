@@ -292,6 +292,15 @@ class ContextualAgent:
                 llm_kwargs["tools"] = tools
                 # Allow model to decide whether to use tools
                 llm_kwargs["tool_choice"] = "auto"
+            else:
+                logger.warning(
+                    "no_tools_available_for_agent",
+                    agent_id=str(self.agent_id),
+                    agent_name=self.agent_name,
+                    has_tool_executor=self.tool_executor is not None,
+                    task_id=task_id,
+                    message="Agent cannot use tools - tool_executor not configured. Check if project has workspace_path set."
+                )
 
             # Use _call_llm_with_trace which handles tool calling
             response = await self._call_llm_with_trace(

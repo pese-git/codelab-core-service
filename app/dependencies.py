@@ -77,6 +77,14 @@ async def get_worker_space(
     project = project_result.scalar_one_or_none()
     if project:
         space.set_workspace_root(project.workspace_path)
+        if not project.workspace_path:
+            logger.warning(
+                "project_missing_workspace_path",
+                user_id=str(user_id),
+                project_id=str(project_id),
+                project_name=project.name,
+                message="Project workspace_path is not set. Tools will not be available to agents. Update project with workspace_path to enable tool usage."
+            )
 
     stream_manager = await get_stream_manager(redis)
     space.set_stream_manager(stream_manager)

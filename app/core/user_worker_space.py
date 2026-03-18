@@ -209,6 +209,12 @@ class UserWorkerSpace:
     def configure_executor(self) -> None:
         """Create or refresh ToolExecutor for current request scope."""
         if not self.workspace_root:
+            logger.warning(
+                "tool_executor_not_configured_missing_workspace_root",
+                user_id=str(self.user_id),
+                project_id=self.project_id,
+                message="ToolExecutor cannot be created - workspace_root is not set. Agents will not have access to tools (read_file, write_file, etc.). Set workspace_path in project configuration."
+            )
             self.executor = None
             return
 
