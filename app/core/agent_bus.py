@@ -3,6 +3,7 @@
 import asyncio
 from typing import Any, Callable
 from uuid import UUID
+from langfuse import observe
 
 from app.config import settings
 from app.logging_config import get_logger
@@ -88,6 +89,7 @@ class AgentBus:
 
         logger.info("agent_deregistered", agent_id=str(agent_id))
 
+    @observe(name="AgentBusSubmitTask")
     async def submit_task(
         self,
         agent_id: UUID,
@@ -143,6 +145,7 @@ class AgentBus:
             logger.info("worker_cancelled", agent_id=str(agent_id))
             raise
 
+    @observe(name="AgentBusProcessTask")
     async def _process_task(self, agent_id: UUID, task_item: TaskItem) -> None:
         """Process individual task."""
         try:

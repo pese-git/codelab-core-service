@@ -10,6 +10,7 @@ from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from langfuse import observe
 
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
@@ -722,6 +723,7 @@ class UserWorkerSpace:
 
     # ========== ЭТАП 2: Методы координации режимов выполнения (10.5) ==========
 
+    @observe(name="DirectExecution")
     async def direct_execution(
         self,
         agent_id: UUID,
@@ -841,6 +843,7 @@ class UserWorkerSpace:
             )
             raise
 
+    @observe(name="OrchestratedExecution")
     async def orchestrated_execution(
         self,
         user_message: str,
@@ -985,7 +988,7 @@ class UserWorkerSpace:
             "confidence": confidence,
             "execution_time_ms": execution_time,
         }
-
+    @observe(name="HandleMessage")
     async def handle_message(
         self,
         message_content: str,
