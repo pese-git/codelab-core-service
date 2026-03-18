@@ -1,515 +1,351 @@
-# Документация CodeLab Core Service
+# 📚 Полный индекс документации CodeLab Core Service
 
-## 📚 Полный индекс документации
-
-Добро пожаловать в документацию CodeLab Core Service - персональной мультиагентной AI платформы с полной изоляцией пользователей.
+Справочник всех документов в проекте, организованный по категориям.
 
 ---
 
-## 🎯 Быстрый доступ
+## 🚀 Getting Started (Начало работы)
 
-### Для новых пользователей
-1. 📖 [README](../README.md) - Начните здесь
-2. ⚡ [Quick Start](../QUICKSTART.md) - Быстрый запуск за 5 минут
-3. 🔧 [Setup Guide](./setup-guide.md) - Детальная установка
-
-### Для разработчиков
-1. 👨‍💻 [Developer Guide](./architecture/developer-guide.md) - Руководство разработчика
-2. 🏗️ [Architecture Overview](./architecture/system-overview.md) - Архитектура системы
-3. 📐 [Workspace Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md) - Доступ к workspace и инструменты
-4. 🧪 [Testing Guide](../tests/README.md) - Тестирование
-
-### Для DevOps
-1. 🚀 [Deployment Guide](./architecture/deployment-guide.md) - Развертывание
-2. 📊 [Infrastructure Setup](./infrastructure-setup.md) - Настройка инфраструктуры
-3. 🔍 [Monitoring](./architecture/deployment-guide.md#мониторинг) - Мониторинг
-
-### Для API пользователей
-1. 🌐 [API Specification](./architecture/api-specification.md) - REST API
-2. 📡 [SSE Events](./sse-event-streaming.md) - Real-time события
-3. 📋 [REST API Details](./rest-api.md) - Детали API
+| Документ | Описание | Целевая аудитория |
+|----------|---------|-------------------|
+| [Quick Start](./getting-started/quickstart.md) | Быстрый старт за 5 минут | Новичок |
+| [Setup Guide](./getting-started/setup-guide.md) | Детальная установка | Разработчик |
+| [Infrastructure Setup](./getting-started/infrastructure-setup.md) | Настройка инфраструктуры | DevOps |
 
 ---
 
-## 📂 Структура документации
+## 🏗️ Architecture (Архитектура)
 
-```
-doc/
-├── INDEX.md                          # 👈 Вы здесь
-│
-├── architecture/                     # 🏗️ Архитектурная документация
-│   ├── README.md                     # Обзор архитектурных документов
-│   ├── system-overview.md            # Обзор архитектуры системы
-│   ├── component-details.md          # Детали компонентов
-│   ├── api-specification.md          # Спецификация API
-│   ├── deployment-guide.md           # Руководство по развертыванию
-│   └── developer-guide.md            # Руководство разработчика
-│
-├── setup-guide.md                    # Руководство по установке
-├── infrastructure-setup.md           # Настройка инфраструктуры
-├── rest-api.md                       # REST API документация
-├── sse-event-streaming.md            # SSE события
-├── litellm-integration.md            # Интеграция с LiteLLM
-├── llm-error-handling.md             # Обработка ошибок LLM
-├── agent-context.md                  # Контекстное хранилище
-├── samples.md                        # Примеры использования
-├── techincal-requrements.md          # Технические требования
-└── bugfix-agent-config-validation.md # История исправлений
-```
+### Обзор и основы
+| Документ | Описание |
+|----------|---------|
+| [System Overview](./architecture/system-overview.md) | Полный обзор архитектуры системы с диаграммами |
+| [Component Details](./architecture/component-details.md) | Детальное описание всех компонентов |
+| [Architecture README](./architecture/README.md) | Обзор архитектурной документации |
+
+### Специализированные архитектуры
+| Документ | Описание |
+|----------|---------|
+| [Workspace Lifecycle](./architecture/workspace-lifecycle.md) | Жизненный цикл workspace |
+| [Event Log Outbox Architecture](./architecture/event-log-outbox-architecture.md) | Архитектура event logging |
+| [Diagrams](./architecture/diagrams.md) | Диаграммы системы |
 
 ---
 
-## 📖 Документы по категориям
+## 🔌 API (API документация)
 
-### 🎓 Обучающие материалы
+### REST API
+| Документ | Описание |
+|----------|---------|
+| [REST API](./api/rest-api.md) | Полная спецификация REST API |
+| [API Specification](./api/api-specification.md) | Детальная спецификация |
+| [API README](./api/README.md) | Обзор API документации |
 
-#### [README.md](../README.md)
-**Основная документация проекта**
-- Обзор возможностей
-- Быстрый старт (3 варианта)
-- Структура проекта
-- Примеры API
-- Мониторинг
-
-#### [QUICKSTART.md](../QUICKSTART.md)
-**Быстрый старт за 5 минут**
-- Автоматическая настройка
-- Минимальная конфигурация
-- Первый запрос
-
-#### [Setup Guide](./setup-guide.md)
-**Детальное руководство по установке**
-- Требования к системе
-- Пошаговая установка
-- Настройка окружения
-- Решение проблем
+### Real-time API
+| Документ | Описание |
+|----------|---------|
+| [SSE Event Streaming](./api/sse-event-streaming.md) | Server-Sent Events для real-time |
+| [Streaming Fetch API](./api/streaming-fetch-api.md) | Streaming API с fetch |
+| [Project Management Endpoints](./api/project-management-endpoints.md) | Endpoints управления проектами |
 
 ---
 
-### 🏗️ Архитектура
+## 📖 Guides (Руководства)
 
-#### [Workspace Access Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md)
-**Доступ к workspace в личной платформе**
-- Архитектурный поток (Client → Agent → Tool → Backend -> Client -> Backend)
-- Доступ к файлам через инструменты
-- Валидация на стороне клиента
-- Граничные условия безопасности
-- Tool signatures для работы с файлами
-- Code review реализации
-
-#### [Architecture Overview](./architecture/system-overview.md)
-**Обзор архитектуры системы**
-- Ключевые принципы
-- Высокоуровневая архитектура (Mermaid диаграммы)
-- Компоненты системы
-- Потоки данных
-- Схема базы данных
-- Масштабируемость
-- Безопасность
-- Мониторинг
-
-#### [Component Details](./architecture/component-details.md)
-**Детальное описание компонентов**
-- User Isolation Middleware
-- Agent Manager
-- Agent Bus
-- Contextual Agent
-- SSE Manager
-- Agent Context Store
-
-С диаграммами, примерами кода и объяснениями.
-
-#### [API Specification](./architecture/api-specification.md)
-**Полная спецификация REST API**
-- Аутентификация (JWT)
-- Все endpoints
-- Схемы данных
-- Коды ошибок
-- Rate limiting
-- Примеры (Python, JS, cURL)
-
-#### [Deployment Guide](./architecture/deployment-guide.md)
-**Руководство по развертыванию**
-- Локальная разработка
-- Docker Compose
-- Kubernetes (полная конфигурация)
-- Мониторинг (Prometheus, Grafana)
-- Резервное копирование
-- Troubleshooting
-
-#### [Developer Guide](./architecture/developer-guide.md)
-**Руководство для разработчиков**
-- Настройка окружения
-- Структура проекта
-- Стандарты кодирования
-- Тестирование
-- Отладка
-- Добавление функций
-- Best practices
+| Документ | Описание | Для кого |
+|----------|---------|----------|
+| [Developer Guide](./guides/developer-guide.md) | Руководство для разработчиков | Разработчик |
+| [Integration Guide](./guides/integration-guide.md) | Как интегрировать с системой | Разработчик |
+| [LLM Error Handling](./guides/llm-error-handling.md) | Обработка ошибок LLM | Разработчик |
+| [Tool Risk Assessment](./guides/tool-risk-assessment.md) | Оценка рисков инструментов | Архитектор |
+| [Technical Requirements](./guides/technical-requirements.md) | Технические требования | DevOps |
+| [Guides README](./guides/README.md) | Обзор руководств | - |
 
 ---
 
-### 🔧 Технические руководства
+## 🚀 Deployment (Развёртывание)
 
-#### [Infrastructure Setup](./infrastructure-setup.md)
-**Настройка инфраструктуры**
-- Обзор компонентов
-- Схема базы данных
-- Миграции
-- Docker Compose конфигурации
-- Health checks
-- Seed data
-- Troubleshooting
-
-#### [REST API](./rest-api.md)
-**REST API документация**
-- Endpoints описание
-- Request/Response примеры
-- Аутентификация
-- Обработка ошибок
-
-#### [SSE Event Streaming](./sse-event-streaming.md)
-**Server-Sent Events**
-- Типы событий
-- Подключение к SSE
-- Обработка событий
-- Примеры клиентов
-
-#### [LiteLLM Integration](./litellm-integration.md)
-**Интеграция с LiteLLM**
-- Настройка LiteLLM прокси
-- Конфигурация
-- Использование разных провайдеров
-- Примеры
-
-#### [Langfuse Integration Evaluation](./langfuse-integration-evaluation.md)
-**Оценка интеграции Langfuse для LLM observability**
-- Анализ текущего состояния observability
-- Обзор Langfuse и возможностей
-- Преимущества и недостатки интеграции
-- Архитектура интеграции
-- План внедрения (3 фазы)
-- Трудозатраты и стоимость
-- ROI анализ и рекомендации
-
-#### [LLM Error Handling](./llm-error-handling.md)
-**Обработка ошибок LLM провайдеров**
-- Типы ошибок (timeout, connection, rate_limit, authentication, bad_request)
-- Детальные сообщения об ошибках
-- SSE события для ошибок
-- Примеры обработки на клиенте
-- Рекомендации по мониторингу
-
-#### [Agent Context](./agent-context.md)
-**Контекстное хранилище агентов**
-- Архитектура RAG
-- Qdrant интеграция
-- Поиск контекста
-- Управление памятью
+| Документ | Описание | Для кого |
+|----------|---------|----------|
+| [Deployment Guide](./deployment/deployment-guide.md) | Полное руководство по развертыванию | DevOps |
+| [Production Checklist](./deployment/production-checklist.md) | Чеклист перед production | DevOps |
 
 ---
 
-### 🧪 Тестирование
+## 🔗 Integrations (Внешние интеграции)
 
-#### [Testing Guide](../tests/README.md)
-**Руководство по тестированию**
-- Структура тестов
-- Запуск тестов
-- Fixtures
-- Coverage
+### LiteLLM
+| Документ | Описание |
+|----------|---------|
+| [LiteLLM Integration](./integrations/litellm-integration.md) | Основная интеграция LiteLLM |
+| [LiteLLM Docker Integration](./integrations/litellm-docker-integration.md) | Docker интеграция |
+| [LiteLLM Providers Management](./integrations/litellm-providers-management.md) | Управление провайдерами |
 
-#### [Test Report](../tests/TEST_REPORT.md)
-**Отчеты о тестировании**
-- Результаты тестов
-- Coverage метрики
-- Известные проблемы
-
-#### [Agents API Tests](../tests/TEST_AGENTS_API.md)
-**Тесты API агентов**
-- Тестовые сценарии
-- Примеры запросов
-- Ожидаемые результаты
+### Other LLMs
+| Документ | Описание |
+|----------|---------|
+| [Langfuse v4 Integration](./integrations/langfuse-v4-integration-summary.md) | Интеграция с Langfuse v4 |
+| [LLM Providers API](./integrations/llm-providers-api.md) | API для управления LLM провайдерами |
+| [Integrations README](./integrations/README.md) | Обзор интеграций |
 
 ---
 
-### 🛠️ Утилиты и скрипты
+## ✨ Features (Функциональность)
 
-#### [Scripts README](../scripts/README.md)
-**Документация скриптов**
-- init_db.py - Инициализация БД
-- generate_test_jwt.py - Генерация JWT
-- gradio_ui.py - Тестовый UI
+### Agent System
+| Документ | Описание |
+|----------|---------|
+| [Agent Tools](./features/agent-tools.md) | Система инструментов для агентов |
+| [Agent Context](./features/agent-context.md) | Контекстное хранилище агентов |
+| [Agent Tools Workflow](./features/agent-tools-workflow.md) | Workflow использования инструментов |
 
-#### [Gradio Client](../scripts/GRADIO_CLIENT.md)
-**Gradio UI клиент**
-- Установка
-- Использование
-- Функции
+### Workspace & Sessions
+| Документ | Описание |
+|----------|---------|
+| [Workspace Architecture](./features/workspace-architecture.md) | Архитектура рабочего пространства |
+| [Project Initialization](./features/project-initialization.md) | Инициализация проектов |
+| [Session ID Propagation](./features/session-id-propagation.md) | Пропагация ID сессии |
 
----
-
-### 📋 Спецификации
-
-#### [Technical Requirements](./techincal-requrements.md)
-**Техническое задание v5.0**
-- Цели проекта
-- Архитектура системы
-- Функциональные требования
-- База данных
-- User Isolation
-- Мультиагентное взаимодействие
-- Qdrant RAG
-- Approval Manager
-- SSE Event Stream
-- Нефункциональные требования
-- Этапы разработки
-
-#### [Samples](./samples.md)
-**Примеры использования**
-- Примеры кода
-- Use cases
-- Интеграции
+### Technical Features
+| Документ | Описание |
+|----------|---------|
+| [Tool Execution Tracing](./features/tool-execution-tracing.md) | Отслеживание выполнения инструментов |
+| [Idempotency](./features/idempotency.md) | Идемпотентность операций |
+| [LLM Tools Integration](./features/llm-tools-integration.md) | Интеграция инструментов LLM |
+| [Features README](./features/README.md) | Обзор функциональности |
 
 ---
 
-### 📝 История и изменения
+## 📜 Changelogs (История изменений)
 
-#### [Workspace Architecture Changelog](./CHANGELOG_WORKSPACE_ARCHITECTURE.md)
-**История уточнений архитектуры workspace**
-- v0.2.0 - Уточнение механизма доступа к workspace
-- Обновления спецификации
-- Новые tool signatures
-- Документы по архитектуре
-
-#### [Infrastructure Complete](../INFRASTRUCTURE_COMPLETE.md)
-**Статус инфраструктуры**
-- Реализованные компоненты
-- Текущий статус
-- Следующие шаги
-
-#### [Bugfix: Agent Config Validation](./bugfix-agent-config-validation.md)
-**История исправлений**
-- Описание проблемы
-- Решение
-- Тесты
+| Документ | Описание |
+|----------|---------|
+| [CHANGELOG.md](./changelogs/CHANGELOG.md) | Главный changelog всех версий |
+| [CHANGELOG_V0.2.0.md](./changelogs/CHANGELOG_V0.2.0.md) | Changelog для v0.2.0 |
+| [CHANGELOG_WORKSPACE_ARCHITECTURE.md](./changelogs/CHANGELOG_WORKSPACE_ARCHITECTURE.md) | Изменения в workspace архитектуре |
+| [CHANGELOG_LLM_PROVIDERS_MANAGEMENT.md](./changelogs/CHANGELOG_LLM_PROVIDERS_MANAGEMENT.md) | Изменения в управлении провайдерами |
+| [CHANGELOG_SPECIFICATION_ACTUALIZATION.md](./changelogs/CHANGELOG_SPECIFICATION_ACTUALIZATION.md) | Обновления спецификации |
+| [CHANGELOG_TOOL_EXECUTION_TRACE_DESIGN.md](./changelogs/CHANGELOG_TOOL_EXECUTION_TRACE_DESIGN.md) | Design tool execution trace |
+| [CHANGELOG_WORKSPACE_ARCHITECTURE_CLARIFICATION.md](./changelogs/CHANGELOG_WORKSPACE_ARCHITECTURE_CLARIFICATION.md) | Clarification workspace |
 
 ---
 
-## 🎯 Сценарии использования
+## 📋 Implementation (Отчёты о реализации)
 
-### Сценарий 1: Первый запуск проекта
-
-```mermaid
-graph LR
-    A[README.md] --> B[QUICKSTART.md]
-    B --> C[Setup Guide]
-    C --> D[Первый API запрос]
-    D --> E[API Specification]
-```
-
-**Шаги**:
-1. Прочитать [README.md](../README.md)
-2. Следовать [QUICKSTART.md](../QUICKSTART.md)
-3. При проблемах - [Setup Guide](./setup-guide.md)
-4. Изучить [API Specification](./architecture/api-specification.md)
+| Документ | Описание |
+|----------|---------|
+| [Implementation Summary](./implementation/implementation-summary.md) | Сводка реализации |
+| [Tool Execution Trace Design](./implementation/tool-execution-trace-design.md) | Design trace инструментов |
+| [Client Tools Implementation](./implementation/client-tools-implementation.md) | Реализация client tools |
+| [Release Specification v0.2.0](./implementation/release-specification-v0.2.0.md) | Спецификация релиза v0.2.0 |
+| [Verification Orchestrator Implementation](./implementation/verification-orchestrator-implementation.md) | Верификация оркестратора |
 
 ---
 
-### Сценарий 2: Разработка новой функции
+## 📊 Reports (Технические отчёты)
 
-```mermaid
-graph LR
-    A[Developer Guide] --> B[Architecture Overview]
-    B --> C[Component Details]
-    C --> D[Написать код]
-    D --> E[Тесты]
-    E --> F[PR]
-```
+### Code & Architecture Analysis
+| Документ | Описание |
+|----------|---------|
+| [Code Analysis Report](./reports/code-analysis-report.md) | Анализ кода проекта |
+| [Specification Consistency Report](./reports/specification-consistency-report.md) | Согласованность спецификации |
+| [Database Analysis](./reports/database-analysis.md) | Анализ базы данных |
 
-**Шаги**:
-1. [Developer Guide](./architecture/developer-guide.md) - стандарты
-2. [Architecture Overview](./architecture/system-overview.md) - понимание системы
-3. [Component Details](./architecture/component-details.md) - детали компонента
-4. Написать код и тесты
-5. Создать PR
+### Implementation Reports
+| Документ | Описание |
+|----------|---------|
+| [Infrastructure Complete](./reports/infrastructure-complete.md) | Инфраструктура завершена |
+| [Session ID Propagation Report](./reports/session-id-propagation-report.md) | Отчёт о пропагации ID |
+| [Span Lifecycle Fix Report](./reports/span-lifecycle-fix-report.md) | Отчёт о span lifecycle |
+| [SQLAlchemy Lazy Loading Fix](./reports/sqlalchemy-lazy-loading-fix.md) | Отчёт о lazy loading |
 
----
+### Verification Reports
+| Документ | Описание |
+|----------|---------|
+| [Docker Logs Testing](./reports/docker-logs-testing.md) | Тестирование логов Docker |
+| [Tools Integration Verification](./reports/tools-integration-verification.md) | Верификация интеграции инструментов |
+| [Tools Verification Status](./reports/tools-verification-status.md) | Статус верификации инструментов |
+| [LLM Providers Verification Report](./reports/verification-report-llm-providers-management.md) | Верификация LLM провайдеров |
 
-### Сценарий 3: Развертывание в production
-
-```mermaid
-graph LR
-    A[Architecture Overview] --> B[Deployment Guide]
-    B --> C[Infrastructure Setup]
-    C --> D[Kubernetes]
-    D --> E[Monitoring]
-```
-
-**Шаги**:
-1. [Architecture Overview](./architecture/system-overview.md) - понимание архитектуры
-2. [Deployment Guide](./architecture/deployment-guide.md) - инструкции
-3. [Infrastructure Setup](./infrastructure-setup.md) - настройка
-4. Развертывание в Kubernetes
-5. Настройка мониторинга
+### Analysis & Audits
+| Документ | Описание |
+|----------|---------|
+| [OpenSpec Verification Report](./reports/openspec-verification-report.md) | Верификация OpenSpec |
+| [OpenSpec Update Requirements](./reports/openspec-update-requirements.md) | Требования обновления OpenSpec |
+| [Tool Execution Signal Fix](./reports/tool-execution-signal-fix.md) | Отчёт о signal fix |
+| [Specification Actualization Analysis](./reports/specification-actualization-analysis.md) | Анализ актуализации спец. |
 
 ---
 
-### Сценарий 4: Интеграция с API
+## 🐛 Bugfixes (Исправления ошибок)
 
-```mermaid
-graph LR
-    A[API Specification] --> B[REST API]
-    B --> C[SSE Events]
-    C --> D[Примеры]
-    D --> E[Интеграция]
-```
-
-**Шаги**:
-1. [API Specification](./architecture/api-specification.md) - полная спецификация
-2. [REST API](./rest-api.md) - детали endpoints
-3. [SSE Events](./sse-event-streaming.md) - real-time обновления
-4. [Samples](./samples.md) - примеры кода
-5. Реализация интеграции
+| Документ | Описание |
+|----------|---------|
+| [Detached Instance Error Fix](./bugfixes/detached-instance-error-fix.md) | Исправление detached instance |
+| [Duplicate Events Fix](./bugfixes/duplicate-events-fix.md) | Исправление дублирующихся событий |
+| [Message Events Fix](./bugfixes/message-events-fix.md) | Исправление message events |
+| [LiteLLM Request Fix](./bugfixes/litellm-request-fix.md) | Исправление LiteLLM запроса |
+| [PathValidator Fix](./bugfixes/pathvalidator-fix.md) | Исправление PathValidator |
+| [Bugfix Agent Config Validation](./bugfixes/bugfix-agent-config-validation.md) | Валидация конфига агента |
+| [Bugfixes README](./bugfixes/README.md) | Обзор исправлений |
 
 ---
 
-## 🔍 Поиск информации
+## 🔄 Migrations (Миграционные руководства)
 
-### По теме
-
-| Тема | Документы |
-|------|-----------|
-| **Установка** | [README](../README.md), [QUICKSTART](../QUICKSTART.md), [Setup Guide](./setup-guide.md) |
-| **Архитектура** | [System Overview](./architecture/system-overview.md), [Component Details](./architecture/component-details.md), [Workspace Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md) |
-| **API** | [API Specification](./architecture/api-specification.md), [REST API](./rest-api.md) |
-| **Развертывание** | [Deployment Guide](./architecture/deployment-guide.md), [Infrastructure Setup](./infrastructure-setup.md) |
-| **Разработка** | [Developer Guide](./architecture/developer-guide.md), [Testing Guide](../tests/README.md) |
-| **Real-time** | [SSE Events](./sse-event-streaming.md) |
-| **LLM** | [LiteLLM Integration](./litellm-integration.md), [LLM Error Handling](./llm-error-handling.md), [Agent Context](./agent-context.md) |
-| **Обработка ошибок** | [LLM Error Handling](./llm-error-handling.md) |
-| **Workspace Access** | [Workspace Architecture](./WORKSPACE_ARCHITECTURE_REVIEW.md), [Workspace Changelog](./CHANGELOG_WORKSPACE_ARCHITECTURE.md), [Team Announcement](./TEAM_ANNOUNCEMENT_WORKSPACE_ARCHITECTURE.md) |
-
-### По роли
-
-| Роль | Рекомендуемые документы |
-|------|-------------------------|
-| **Новый разработчик** | README → Developer Guide → Architecture Overview → Component Details |
-| **Frontend разработчик** | API Specification → REST API → SSE Events → Samples |
-| **Backend разработчик** | Developer Guide → Component Details → Testing Guide |
-| **DevOps/SRE** | Architecture Overview → Deployment Guide → Infrastructure Setup |
-| **Архитектор** | System Overview → Component Details → Technical Requirements |
-| **QA Engineer** | Testing Guide → Test Report → API Specification |
+| Документ | Описание |
+|----------|---------|
+| [SSE to Streaming Migration](./migrations/sse-to-streaming-migration.md) | Миграция SSE → Streaming |
+| [v0.2.0 Migration](./migrations/v0.2.0-migration.md) | Миграция на v0.2.0 |
+| [Workspace Architecture Clarification](./migrations/workspace-architecture-clarification.md) | Clarification архитектуры |
 
 ---
 
-## 📊 Диаграммы и визуализации
+## 💡 Samples (Примеры кода)
 
-Все архитектурные диаграммы используют **Mermaid** и находятся в:
-- [System Overview](./architecture/system-overview.md) - высокоуровневые диаграммы
-- [Component Details](./architecture/component-details.md) - детальные диаграммы компонентов
-- [Deployment Guide](./architecture/deployment-guide.md) - диаграммы развертывания
-
-### Типы диаграмм
-- 🏗️ Архитектурные (graph)
-- 🔄 Sequence диаграммы (sequenceDiagram)
-- 📊 ER диаграммы (erDiagram)
-- 🌊 Flowcharts (flowchart)
-- 📈 State диаграммы (stateDiagram)
+| Документ | Описание |
+|----------|---------|
+| [Samples](./samples/samples.md) | Основные примеры использования |
+| [Gradio UI Guide](./samples/gradio-ui-guide.md) | Примеры Gradio UI |
 
 ---
 
-## 🆘 Получение помощи
+## 📦 Archive (Архивированные документы)
 
-### Документация не отвечает на вопрос?
+### Deprecated Features
+| Документ | Описание | Статус |
+|----------|---------|--------|
+| [Langfuse OpenTelemetry Removal - Final Report](./archive/langfuse-opentelemetry-removal/final-report.md) | Финальный отчёт | ⚠️ Deprecated |
+| [Langfuse OpenTelemetry Removal - Report](./archive/langfuse-opentelemetry-removal/report.md) | Основной отчёт | ⚠️ Deprecated |
+| [Langfuse OpenTelemetry Removal - Verification](./archive/langfuse-opentelemetry-removal/verification.md) | Верификация | ⚠️ Deprecated |
+| [LiteLLM OpenRouter Integration Issue](./archive/litellm-openrouter-integration-issue.md) | OpenRouter интеграция | ⚠️ Deprecated |
 
-1. **Поиск в документации**: Используйте Ctrl+F в GitHub или IDE
-2. **GitHub Issues**: Создайте issue с тегом `documentation`
-3. **Slack**: #codelab-dev для вопросов разработки
-4. **Email**: techlead@company.com для архитектурных вопросов
+### Obsolete Analysis
+| Документ | Описание | Статус |
+|----------|---------|--------|
+| [Docker Logs Analysis - 2026-03-13](./archive/docker-logs-analysis/2026-03-13-analysis.md) | Анализ логов | 📦 Архив |
+| [Logs Analysis Initial Report](./archive/docker-logs-analysis/logs-analysis.md) | Первоначальный отчёт | 📦 Архив |
+| [Logs Fix Summary](./archive/docker-logs-analysis/logs-fix-summary.md) | Сводка исправлений | 📦 Архив |
 
-### Нашли ошибку в документации?
+### Phase 4 Documentation
+| Документ | Описание | Статус |
+|----------|---------|--------|
+| [Phase 4 Deployment Guide](./archive/phase4-deployment/phase4-deployment-guide.md) | Deployment guide | 📦 Архив |
+| [Phase 4 Integration Verification](./archive/phase4-deployment/phase4-integration-verification.md) | Верификация интеграции | 📦 Архив |
+| [Phase 4 Production Readiness](./archive/phase4-deployment/phase4-production-readiness.md) | Production readiness | 📦 Архив |
 
-1. Создайте issue на GitHub
-2. Или сразу PR с исправлением
-3. Следуйте [Developer Guide](./architecture/developer-guide.md) для стиля
-
----
-
-## 🔄 Обновление документации
-
-### Когда обновлять
-
-- ✅ Добавлены новые компоненты
-- ✅ Изменены API endpoints
-- ✅ Изменена архитектура
-- ✅ Добавлены зависимости
-- ✅ Изменен процесс развертывания
-
-### Как обновлять
-
-1. Найдите соответствующий документ
-2. Обновите содержимое
-3. Обновите диаграммы (если нужно)
-4. Проверьте ссылки
-5. Создайте PR
-
----
-
-## 📈 Версионирование
-
-**Текущая версия документации**: 0.1.0  
-**Дата**: 2026-02-13  
-**Статус**: Initial Release
-
-### История версий
-
-#### v0.1.0 (2026-02-13)
-- ✨ Начальная версия документации
-- 📋 System Overview с Mermaid диаграммами
-- 🔧 Component Details для всех компонентов
-- 🌐 API Specification с примерами
-- 🚀 Deployment Guide для Docker и Kubernetes
-- 👨‍💻 Developer Guide с best practices
-- 📚 Организация всей документации
+### Other Archived
+| Документ | Описание | Статус |
+|----------|---------|--------|
+| [Orchestrator Architecture Audit](./archive/orchestrator-architecture-audit.md) | Audit архитектуры | 📦 Архив |
+| [Orchestrator Model Design Analysis](./archive/orchestrator-model-design-analysis.md) | Design analysis | 📦 Архив |
+| [Orchestrator Unified Agent Implementation Plan](./archive/orchestrator-unified-agent-implementation-plan.md) | Implementation plan | 📦 Архив |
+| [Team Announcement Workspace Architecture](./archive/team-announcement-workspace-architecture.md) | Announcement | 📦 Архив |
+| [User Worker Space Architecture Analysis](./archive/user-worker-space-architecture-analysis.md) | Analysis | 📦 Архив |
+| [User Worker Space Implementation Plan](./archive/user-worker-space-implementation-plan.md) | Implementation plan | 📦 Архив |
+| [Workspace Responsibility Separation](./archive/workspace-responsibility-separation.md) | Design document | 📦 Архив |
+| [Documentation Audit 2026-02-18](./archive/documentation-audit.md) | Аудит документации | 📦 Архив |
+| [Archive README](./archive/README.md) | Индекс архива | 📦 Архив |
 
 ---
 
-## 🎓 Дополнительные ресурсы
+## 📊 Статистика
 
-### Внешние ресурсы
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [SQLAlchemy 2.0 Documentation](https://docs.sqlalchemy.org/en/20/)
-- [Pydantic Documentation](https://docs.pydantic.dev/)
-- [Qdrant Documentation](https://qdrant.tech/documentation/)
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-
-### Внутренние ресурсы
-
-- GitHub Repository: https://github.com/pese-git/codelab-core-service
+| Метрика | Значение |
+|---------|----------|
+| **Всего документов** | 101+ |
+| **Категорий** | 12 |
+| **Active документов** | ~90 |
+| **Archived документов** | ~11 |
+| **Статус** | Production Ready |
 
 ---
 
-## 📞 Контакты
+## 🎯 По целям
 
-### Команда
+### Я новичок, где начать?
+1. [Quick Start](./getting-started/quickstart.md) - 5 минут
+2. [System Overview](./architecture/system-overview.md) - поймите архитектуру
+3. [REST API](./api/rest-api.md) - начните использовать API
+4. [Samples](./samples/samples.md) - примеры кода
 
-- CodeLab Team
+### Я разработчик, как расширять?
+1. [Developer Guide](./guides/developer-guide.md)
+2. [Component Details](./architecture/component-details.md)
+3. [Integration Guide](./guides/integration-guide.md)
+4. [Tool Risk Assessment](./guides/tool-risk-assessment.md)
 
-### Каналы связи
+### Я DevOps, как развернуть?
+1. [Deployment Guide](./deployment/deployment-guide.md) - полный гайд
+2. [Infrastructure Setup](./getting-started/infrastructure-setup.md)
+3. [Production Checklist](./deployment/production-checklist.md)
+4. [System Architecture](./architecture/system-overview.md) - для понимания нагрузки
 
-- **Email**: support@codelab.example.com
-- **GitHub**: Issues и Discussions
+### Я интегрирую LLM
+1. [LiteLLM Integration](./integrations/litellm-integration.md)
+2. [Providers Management](./integrations/litellm-providers-management.md)
+3. [LLM Error Handling](./guides/llm-error-handling.md)
+4. [Langfuse Integration](./integrations/langfuse-v4-integration-summary.md) - для мониторинга
 
 ---
 
-## 📄 Лицензия
+## 🔍 Поиск по темам
 
-Документация распространяется под той же лицензией, что и код проекта.  
-См. [LICENSE](../LICENSE) для деталей.
+### Агенты и инструменты
+- [Agent Tools](./features/agent-tools.md)
+- [Agent Context](./features/agent-context.md)
+- [Tool Execution Tracing](./features/tool-execution-tracing.md)
+- [Tool Risk Assessment](./guides/tool-risk-assessment.md)
+
+### Real-time и события
+- [SSE Event Streaming](./api/sse-event-streaming.md)
+- [Event Log Outbox Architecture](./architecture/event-log-outbox-architecture.md)
+- [Duplicate Events Fix](./bugfixes/duplicate-events-fix.md)
+
+### LLM интеграции
+- [LiteLLM Integration](./integrations/litellm-integration.md)
+- [Langfuse Integration](./integrations/langfuse-v4-integration-summary.md)
+- [LLM Error Handling](./guides/llm-error-handling.md)
+- [LLM Providers API](./integrations/llm-providers-api.md)
+
+### Развертывание и операции
+- [Deployment Guide](./deployment/deployment-guide.md)
+- [Infrastructure Setup](./getting-started/infrastructure-setup.md)
+- [Production Checklist](./deployment/production-checklist.md)
+
+### Безопасность и валидация
+- [Tool Risk Assessment](./guides/tool-risk-assessment.md)
+- [PathValidator Fix](./bugfixes/pathvalidator-fix.md)
+- [Workspace Architecture](./features/workspace-architecture.md)
 
 ---
 
-**Последнее обновление**: 2026-02-13  
-**Мейнтейнер**: Tech Lead Team  
-**Статус**: ✅ Актуально
+## 📝 Документы по типам
+
+### Руководства (How-To)
+- [Quick Start](./getting-started/quickstart.md)
+- [Setup Guide](./getting-started/setup-guide.md)
+- [Deployment Guide](./deployment/deployment-guide.md)
+- [Developer Guide](./guides/developer-guide.md)
+- [Integration Guide](./guides/integration-guide.md)
+
+### Спецификации (Specifications)
+- [REST API](./api/rest-api.md)
+- [API Specification](./api/api-specification.md)
+- [System Architecture](./architecture/system-overview.md)
+- [Technical Requirements](./guides/technical-requirements.md)
+
+### Отчёты (Reports)
+- [Code Analysis Report](./reports/code-analysis-report.md)
+- [Infrastructure Complete](./reports/infrastructure-complete.md)
+- [Implementation Summary](./implementation/implementation-summary.md)
+
+### Changelog & History
+- [CHANGELOG.md](./changelogs/CHANGELOG.md)
+- [Migration Guides](./migrations/)
+
+---
+
+**Последнее обновление**: Март 2026  
+**Версия**: 0.2.0  
+**Статус**: Production Ready ✅
