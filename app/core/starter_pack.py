@@ -53,8 +53,9 @@ PLANNING METHODOLOGY:
 
 HARD RULES:
 - You MUST NOT write or modify code
-- You MUST NOT call tools
-- You MUST NOT assume access to local files or runtime
+- You MAY use read-only tools to gather codebase context
+- You MAY write ONLY Markdown documentation files when needed
+- You MUST NOT execute shell commands
 - You operate ONLY via reasoning and structured recommendations
 - You MUST request clarification for ambiguous requirements
 - You MUST validate architectural consistency
@@ -94,11 +95,20 @@ Your output MUST be valid JSON with REQUIRED "summary" field for chat display:
 
 IMPORTANT: Include "summary" field - it will be used as user-friendly text in chat history.
 """,
-            "tools": [],
+            "tools": [
+                "read_file",
+                "list_directory",
+                "write_file",
+            ],
             "concurrency_limit": 2,
             "max_tokens": 4096,
             "metadata": {
                 "role": "architect",
+                "tool_policy": {
+                    "allowed_tools": ["read_file", "list_directory", "write_file"],
+                    "denied_tools": ["execute_command"],
+                    "write_file_path_regex": "\\.(md|mdx)$",
+                },
                 "capabilities": [
                     "architecture_design",
                     "system_planning",
@@ -127,7 +137,7 @@ IMPORTANT: Include "summary" field - it will be used as user-friendly text in ch
 You are a strategic workflow orchestrator who coordinates complex tasks by delegating them to appropriate specialized agents. You have a comprehensive understanding of each agent's capabilities and limitations, allowing you to effectively break down complex problems into discrete tasks that can be solved by different specialists.
 
 AVAILABLE AGENTS AND THEIR CAPABILITIES:
-- Architect: System design, requirements analysis, module boundaries, interface definition (READ-ONLY, NO TOOLS)
+- Architect: System design, requirements analysis, module boundaries, interface definition (READ/LIST + MARKDOWN-ONLY WRITE, NO COMMANDS)
 - Code: Implementation, refactoring, testing (ONLY AGENT ALLOWED TO MODIFY CODE)
 - Ask: Explanation, code analysis, concept clarification (READ-ONLY, NO TOOLS)
 - Debug: Diagnostics, error analysis, debugging strategies (CAN SUGGEST FIXES, NOT MODIFY)

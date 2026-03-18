@@ -11,7 +11,12 @@ from qdrant_client import AsyncQdrantClient
 from sqlalchemy import select
 
 from app.config import settings
-from app.core.tools.definitions import AVAILABLE_TOOLS, ToolName
+from app.core.tools.definitions import AVAILABLE_TOOLS
+from app.core.tools.policy import (
+    build_tool_policy,
+    filter_tool_schemas_by_policy,
+    validate_tool_call,
+)
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
@@ -610,7 +615,7 @@ class ContextualAgent:
             )
             return []
 
-        tools = []
+        tools: list[dict[str, Any]] = []
         for tool_name, tool_def in AVAILABLE_TOOLS.items():
             # Convert tool definition to OpenAI function format
             tool_schema = {
@@ -627,13 +632,24 @@ class ContextualAgent:
             }
             tools.append(tool_schema)
 
+        # Enforce role-based tool policy (RooCode-like mode capabilities).
+        available_tool_names = {tool_def.name.value for tool_def in AVAILABLE_TOOLS.values()}
+        policy = build_tool_policy(self.config, available_tool_names)
+        filtered_tools = filter_tool_schemas_by_policy(tools, policy)
+
+        role = self.config.metadata.get("role") if self.config.metadata else None
         logger.debug(
-            "available_tools_retrieved",
+            "available_tools_filtered_by_policy",
             agent_id=str(self.agent_id),
-            tools_count=len(tools),
+            agent_name=self.agent_name,
+            role=role,
+            tools_count=len(filtered_tools),
+            policy_allowed=sorted(list(policy.allowed_tools)),
+            policy_denied=sorted(list(policy.denied_tools)),
+            write_file_path_regex=policy.write_file_path_regex,
         )
 
-        return tools
+        return filtered_tools
 
     async def _execute_tools(
         self,
@@ -674,6 +690,29 @@ class ContextualAgent:
                 # arguments is already a string, parse it
                 tool_params = json.loads(args_str) if isinstance(args_str, str) else args_str
 
+                # Enforce policy at execution time as defense in depth.
+                available_tool_names = {tool_def.name.value for tool_def in AVAILABLE_TOOLS.values()}
+                policy = build_tool_policy(self.config, available_tool_names)
+                is_allowed, policy_error = validate_tool_call(
+                    tool_name=tool_name,
+                    tool_params=tool_params,
+                    policy=policy,
+                )
+                if not is_allowed:
+                    logger.warning(
+                        "tool_call_blocked_by_policy",
+                        agent_id=str(self.agent_id),
+                        agent_name=self.agent_name,
+                        tool_call_id=tool_call_id,
+                        tool_name=tool_name,
+                        error=policy_error,
+                    )
+                    results[tool_call_id] = {
+                        "error": policy_error,
+                        "status": "failed",
+                    }
+                    continue
+
                 logger.info(
                     "executing_tool_from_llm",
                     agent_id=str(self.agent_id),
@@ -688,6 +727,18 @@ class ContextualAgent:
                     tool_params=tool_params,
                     session_id=session_id,
                 )
+                if response is None:
+                    logger.error(
+                        "tool_executor_returned_none",
+                        agent_id=str(self.agent_id),
+                        tool_call_id=tool_call_id,
+                        tool_name=tool_name,
+                    )
+                    results[tool_call_id] = {
+                        "error": f"Tool executor returned no response for '{tool_name}'",
+                        "status": "failed",
+                    }
+                    continue
 
                 results[tool_call_id] = {
                     "tool_execution_id": response.tool_id,
@@ -741,6 +792,11 @@ class ContextualAgent:
 
         results = {}
         start_time = time.time()
+        # Keep already failed/invalid responses so LLM can receive explicit error context.
+        for call_id, info in tool_execution_ids.items():
+            if info.get("status") == "failed" or "error" in info:
+                results[call_id] = info
+
         pending_tools = {
             call_id: info
             for call_id, info in tool_execution_ids.items()
