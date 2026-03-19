@@ -23,12 +23,20 @@ from app.schemas.agent import AgentConfig
 from app.services.langfuse_prompt_manager import get_langfuse_prompt_manager
 from app.vectorstore.agent_context_store import AgentContextStore
 
-from langfuse import observe
+from langfuse import get_client, observe
 
 if TYPE_CHECKING:
     from app.core.tools.executor import ToolExecutor
 
 logger = get_logger(__name__)
+
+
+def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
+    """Safely attach sanitized IO payload to current Langfuse span."""
+    try:
+        get_client().update_current_span(input=input_data, output=output_data)
+    except Exception:
+        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 class ContextualAgent:
     """Agent with context retrieval capabilities and tool support."""
@@ -153,7 +161,7 @@ class ContextualAgent:
             agent_name=self.agent_name,
         )
 
-    @observe(name="Executor")
+    @observe(name="Executor", capture_input=False, capture_output=False)
     async def execute(
         self,
         user_message: str,
@@ -180,6 +188,17 @@ class ContextualAgent:
             model_name = "unknown"
 
         try:
+            _update_langfuse_span(
+                input_data={
+                    "entrypoint": "contextual_agent_execute",
+                    "agent_id": str(self.agent_id),
+                    "agent_name": self.agent_name,
+                    "session_id": str(session_id) if session_id else None,
+                    "task_id": task_id,
+                    "message_length": len(user_message or ""),
+                    "history_size": len(session_history or []),
+                }
+            )
             # Debug: Log executor status
             provider_id = None
             provider_type = None
@@ -419,6 +438,15 @@ class ContextualAgent:
                 context_used=len(context_results),
                 tools_used=len(tool_calls) if tool_calls else 0,
             )
+            _update_langfuse_span(
+                output_data={
+                    "status": "success",
+                    "agent_id": str(self.agent_id),
+                    "context_used": len(context_results),
+                    "tools_used": len(tool_calls) if tool_calls else 0,
+                    "tokens_used": total_tokens,
+                }
+            )
 
             return {
                 "success": True,
@@ -446,6 +474,9 @@ class ContextualAgent:
                 interaction_type="chat",
                 task_id=task_id,
                 success=False,
+            )
+            _update_langfuse_span(
+                output_data={"status": "error", "error_type": "timeout", "agent_id": str(self.agent_id)}
             )
 
             return {
@@ -475,6 +506,9 @@ class ContextualAgent:
                 task_id=task_id,
                 success=False,
             )
+            _update_langfuse_span(
+                output_data={"status": "error", "error_type": "connection", "agent_id": str(self.agent_id)}
+            )
 
             return {
                 "success": False,
@@ -502,6 +536,9 @@ class ContextualAgent:
                 interaction_type="chat",
                 task_id=task_id,
                 success=False,
+            )
+            _update_langfuse_span(
+                output_data={"status": "error", "error_type": "rate_limit", "agent_id": str(self.agent_id)}
             )
 
             return {
@@ -531,6 +568,9 @@ class ContextualAgent:
                 task_id=task_id,
                 success=False,
             )
+            _update_langfuse_span(
+                output_data={"status": "error", "error_type": "authentication", "agent_id": str(self.agent_id)}
+            )
 
             return {
                 "success": False,
@@ -559,6 +599,9 @@ class ContextualAgent:
                 task_id=task_id,
                 success=False,
             )
+            _update_langfuse_span(
+                output_data={"status": "error", "error_type": "bad_request", "agent_id": str(self.agent_id)}
+            )
 
             return {
                 "success": False,
@@ -585,6 +628,9 @@ class ContextualAgent:
                 interaction_type="chat",
                 task_id=task_id,
                 success=False,
+            )
+            _update_langfuse_span(
+                output_data={"status": "error", "error_type": "unknown", "agent_id": str(self.agent_id)}
             )
 
             return {

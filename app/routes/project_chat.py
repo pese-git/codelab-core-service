@@ -3,7 +3,7 @@
 import json
 import logging
 from uuid import UUID
-from langfuse import observe, propagate_attributes
+from langfuse import get_client, observe, propagate_attributes
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from qdrant_client import AsyncQdrantClient
@@ -46,6 +46,15 @@ def _sanitize_langfuse_attr(value: object) -> str:
     text = str(value)
     text = text.encode("ascii", "ignore").decode("ascii")
     return text[:200]
+
+
+def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
+    """Safely attach sanitized IO payload to current Langfuse span."""
+    try:
+        get_client().update_current_span(input=input_data, output=output_data)
+    except Exception:
+        # Never break request flow due to observability issues.
+        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 
 @router.post("/sessions/", status_code=status.HTTP_201_CREATED, response_model=ChatSessionResponse)
@@ -199,7 +208,7 @@ async def get_project_messages(
 
 
 @router.post("/{session_id}/message/", response_model=MessageResponse)
-@observe(name="ChatMessage")
+@observe(name="ChatMessage", capture_input=False, capture_output=False)
 async def send_project_message(
     project_id: UUID,
     session_id: UUID,
@@ -233,6 +242,15 @@ async def send_project_message(
         session_id=_sanitize_langfuse_attr(session_id),
         metadata=metadata,
     ):
+        _update_langfuse_span(
+            input_data={
+                "entrypoint": "send_project_message",
+                "project_id": str(project_id),
+                "session_id": str(session_id),
+                "has_target_agent": bool(message_request.target_agent),
+                "message_length": len(message_request.content or ""),
+            }
+        )
         logger.info(f"Sending message to session: session_id={session_id}, project_id={project_id}")
 
         # Verify session belongs to user and project
@@ -505,6 +523,15 @@ async def send_project_message(
                 f"agent_id={agent_id}, execution_time_ms={exec_result.get('execution_time_ms')}, "
                 f"project_id={project_id}"
             )
+            _update_langfuse_span(
+                output_data={
+                    "status": "success",
+                    "agent_id": str(agent_id) if agent_id else None,
+                    "context_used": exec_result.get("context_used", 0),
+                    "tokens_used": exec_result.get("tokens_used", 0),
+                    "execution_time_ms": exec_result.get("execution_time_ms", 0),
+                }
+            )
 
             return MessageResponse(
                 id=assistant_message.id,
@@ -515,8 +542,12 @@ async def send_project_message(
             )
 
         except HTTPException:
+            _update_langfuse_span(output_data={"status": "http_error"})
             raise
         except ValueError as e:
+            _update_langfuse_span(
+                output_data={"status": "validation_error", "error_type": type(e).__name__}
+            )
             logger.error(f"Invalid request: {e}")
             await stream_manager.broadcast_event(
                 session_id=session_id,
@@ -534,6 +565,9 @@ async def send_project_message(
                 detail=str(e),
             )
         except Exception as e:
+            _update_langfuse_span(
+                output_data={"status": "internal_error", "error_type": type(e).__name__}
+            )
             logger.error(f"Error processing message: {e}", exc_info=True)
             await stream_manager.broadcast_event(
                 session_id=session_id,

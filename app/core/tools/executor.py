@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from uuid import UUID, uuid4
 
-from langfuse import observe
+from langfuse import get_client, observe
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tools.definitions import ToolName, AVAILABLE_TOOLS
@@ -22,6 +22,39 @@ from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 
 logger = get_logger(__name__)
+
+
+def _safe_tool_input(tool_name: str, tool_params: dict, session_id: Optional[UUID]) -> dict:
+    """Build sanitized input payload for Langfuse tool span."""
+    payload: dict = {
+        "tool_name": tool_name,
+        "session_id": str(session_id) if session_id else None,
+        "param_keys": sorted(list(tool_params.keys())),
+    }
+    if "path" in tool_params:
+        payload["path"] = str(tool_params.get("path", ""))[:300]
+    if "recursive" in tool_params:
+        payload["recursive"] = bool(tool_params.get("recursive"))
+    if "mode" in tool_params:
+        payload["mode"] = str(tool_params.get("mode", ""))
+    if "pattern" in tool_params:
+        payload["pattern"] = str(tool_params.get("pattern", ""))[:120]
+    if "command" in tool_params:
+        payload["command"] = str(tool_params.get("command", ""))[:80]
+    if "args" in tool_params and isinstance(tool_params.get("args"), list):
+        payload["args_count"] = len(tool_params.get("args", []))
+    if "content" in tool_params:
+        content = tool_params.get("content")
+        payload["content_length"] = len(content) if isinstance(content, str) else 0
+    return payload
+
+
+def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
+    """Safely attach sanitized IO payload to current Langfuse span."""
+    try:
+        get_client().update_current_span(input=input_data, output=output_data)
+    except Exception:
+        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 
 class ToolExecutor:
@@ -70,7 +103,7 @@ class ToolExecutor:
 
         self.logger = logger
 
-    @observe(as_type="tool", name="ExecuteTool")
+    @observe(as_type="tool", name="ExecuteTool", capture_input=False, capture_output=False)
     async def execute_tool(
         self,
         tool_name: str,
@@ -93,11 +126,139 @@ class ToolExecutor:
         created_at = datetime.utcnow().isoformat()
 
         execution: ToolExecution | None = None
-        
-        execution_result = None
-        execution_error = None
+        _update_langfuse_span(input_data=_safe_tool_input(tool_name, tool_params, session_id))
 
-    @observe(as_type="tool", name="ValidateTool")
+        # Validate tool name
+        available_tools = {tool.value for tool in ToolName}
+        if tool_name not in available_tools:
+            error = f"Unknown tool: {tool_name}"
+            _update_langfuse_span(
+                output_data={"status": "failed", "error_type": "unknown_tool", "tool_id": str(tool_id)}
+            )
+            return ToolExecutionResponse(
+                tool_id=str(tool_id),
+                tool_name=tool_name,
+                status="failed",
+                requires_approval=False,
+                error=error,
+                created_at=created_at,
+                completed_at=datetime.utcnow().isoformat(),
+            )
+
+        # Validate tool params
+        is_valid, validation_error = await self._validate_tool_params(tool_name, tool_params)
+        if not is_valid:
+            _update_langfuse_span(
+                output_data={
+                    "status": "failed",
+                    "error_type": "validation_error",
+                    "tool_id": str(tool_id),
+                }
+            )
+            return ToolExecutionResponse(
+                tool_id=str(tool_id),
+                tool_name=tool_name,
+                status="failed",
+                requires_approval=False,
+                error=validation_error,
+                created_at=created_at,
+                completed_at=datetime.utcnow().isoformat(),
+            )
+
+        # Assess risk and create execution record
+        risk_level = self.risk_assessor.assess_tool_risk(tool_name, tool_params)
+        timeout_seconds = self.risk_assessor.get_timeout_for_risk_level(risk_level)
+        requires_approval = self.risk_assessor.requires_approval(risk_level)
+
+        execution = await self._create_tool_execution(
+            tool_id=tool_id,
+            tool_name=tool_name,
+            tool_params=tool_params,
+            risk_level=risk_level.value,
+            session_id=session_id,
+        )
+
+        approval_id: UUID | None = None
+
+        # Approval workflow for MEDIUM/HIGH risk
+        if requires_approval:
+            approval = await self.approval_manager.request_tool_execution_approval(
+                tool_name=tool_name,
+                tool_params=tool_params,
+                risk_level=risk_level.value,
+                timeout_seconds=timeout_seconds,
+                session_id=session_id,
+            )
+            approval_id = approval.id
+            execution.approval_id = approval_id
+            await self.db.flush()
+
+            approved, reason = await self.approval_manager.wait_for_tool_approval(
+                approval_id=approval_id,
+                timeout_seconds=timeout_seconds,
+            )
+            if not approved:
+                execution.status = "rejected"
+                execution.error = reason or "Approval rejected"
+                execution.completed_at = datetime.utcnow()
+                await self.db.flush()
+                _update_langfuse_span(
+                    output_data={
+                        "status": "rejected",
+                        "tool_id": str(tool_id),
+                        "risk_level": risk_level.value,
+                        "requires_approval": True,
+                        "approval_id": str(approval_id),
+                    }
+                )
+                return ToolExecutionResponse(
+                    tool_id=str(tool_id),
+                    tool_name=tool_name,
+                    status="rejected",
+                    approval_id=approval_id,
+                    requires_approval=True,
+                    error=execution.error,
+                    created_at=execution.created_at.isoformat(),
+                    completed_at=execution.completed_at.isoformat() if execution.completed_at else None,
+                )
+
+        # Approved: dispatch execution signal to client and return async status
+        execution.status = "approved"
+        await self.db.flush()
+        await self._send_tool_execution_request(
+            tool_id=str(tool_id),
+            tool_name=tool_name,
+            tool_params=tool_params,
+            session_id=session_id,
+            execution_id=tool_id,
+        )
+        await self.approval_manager.send_tool_execution_signal(
+            tool_id=str(tool_id),
+            tool_name=tool_name,
+            tool_params=tool_params,
+            session_id=session_id,
+        )
+
+        _update_langfuse_span(
+            output_data={
+                "status": "approved",
+                "tool_id": str(tool_id),
+                "risk_level": risk_level.value,
+                "requires_approval": requires_approval,
+                "approval_id": str(approval_id) if approval_id else None,
+            }
+        )
+        return ToolExecutionResponse(
+            tool_id=str(tool_id),
+            tool_name=tool_name,
+            status="approved",
+            approval_id=approval_id,
+            requires_approval=requires_approval,
+            created_at=execution.created_at.isoformat(),
+            completed_at=None,
+        )
+
+    @observe(as_type="tool", name="ValidateTool", capture_input=False, capture_output=False)
     async def _validate_tool_params(
         self,
         tool_name: str,

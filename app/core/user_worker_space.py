@@ -10,7 +10,7 @@ from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from langfuse import observe, propagate_attributes
+from langfuse import get_client, observe, propagate_attributes
 
 from app.agents.contextual_agent import ContextualAgent
 from app.agents.manager import AgentManager
@@ -35,6 +35,14 @@ def _sanitize_langfuse_attr(value: object) -> str:
     text = str(value)
     text = text.encode("ascii", "ignore").decode("ascii")
     return text[:200]
+
+
+def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
+    """Safely attach sanitized IO payload to current Langfuse span."""
+    try:
+        get_client().update_current_span(input=input_data, output=output_data)
+    except Exception:
+        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 
 class AgentCache:
@@ -739,7 +747,7 @@ class UserWorkerSpace:
 
     # ========== ЭТАП 2: Методы координации режимов выполнения (10.5) ==========
 
-    @observe(name="DirectExecution")
+    @observe(name="DirectExecution", capture_input=False, capture_output=False)
     async def direct_execution(
         self,
         agent_id: UUID,
@@ -785,6 +793,16 @@ class UserWorkerSpace:
         """
         if not self.initialized:
             await self.initialize()
+        _update_langfuse_span(
+            input_data={
+                "entrypoint": "direct_execution",
+                "agent_id": str(agent_id),
+                "session_id": str(session_id) if session_id else None,
+                "task_id": task_id,
+                "message_length": len(user_message or ""),
+                "history_size": len(session_history or []),
+            }
+        )
 
         # Get agent
         agent = await self.get_agent(agent_id)
@@ -843,6 +861,16 @@ class UserWorkerSpace:
                 success=result.get("success"),
                 execution_time_ms=execution_time,
             )
+            _update_langfuse_span(
+                output_data={
+                    "status": "success" if result.get("success") else "failed",
+                    "agent_id": str(agent_id),
+                    "tokens_used": result.get("tokens_used", 0),
+                    "tools_used": result.get("tools_used", 0),
+                    "context_used": result.get("context_used", 0),
+                    "execution_time_ms": execution_time,
+                }
+            )
 
             return {
                 "success": result.get("success", False),
@@ -856,6 +884,14 @@ class UserWorkerSpace:
             }
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
+            _update_langfuse_span(
+                output_data={
+                    "status": "error",
+                    "agent_id": str(agent_id),
+                    "execution_time_ms": execution_time,
+                    "error_type": type(e).__name__,
+                }
+            )
 
             logger.error(
                 "direct_execution_error",
@@ -865,7 +901,7 @@ class UserWorkerSpace:
             )
             raise
 
-    @observe(name="OrchestratedExecution")
+    @observe(name="OrchestratedExecution", capture_input=False, capture_output=False)
     async def orchestrated_execution(
         self,
         user_message: str,
@@ -909,6 +945,15 @@ class UserWorkerSpace:
         """
         if not self.initialized:
             await self.initialize()
+        _update_langfuse_span(
+            input_data={
+                "entrypoint": "orchestrated_execution",
+                "session_id": str(session_id) if session_id else None,
+                "task_id": task_id,
+                "message_length": len(user_message or ""),
+                "history_size": len(session_history or []),
+            }
+        )
 
         from app.core.orchestrator_router import OrchestratorRouter
         from app.core.stream_manager import get_stream_manager
@@ -1001,6 +1046,16 @@ class UserWorkerSpace:
             selected_agent_id=str(selected_agent_id),
             routing_score=routing_score,
         )
+        _update_langfuse_span(
+            output_data={
+                "status": "success",
+                "selected_agent_id": str(selected_agent_id),
+                "selected_agent_name": agent_name,
+                "routing_score": routing_score,
+                "confidence": confidence,
+                "execution_time_ms": execution_time,
+            }
+        )
 
         return {
             **result,
@@ -1010,7 +1065,7 @@ class UserWorkerSpace:
             "confidence": confidence,
             "execution_time_ms": execution_time,
         }
-    @observe(name="HandleMessage")
+    @observe(name="HandleMessage", capture_input=False, capture_output=False)
     async def handle_message(
         self,
         message_content: str,
@@ -1044,6 +1099,18 @@ class UserWorkerSpace:
             raise ValueError("message_content cannot be empty")
 
         execution_mode = "direct" if target_agent_id else "orchestrated"
+        _update_langfuse_span(
+            input_data={
+                "entrypoint": "handle_message",
+                "execution_mode": execution_mode,
+                "has_target_agent": target_agent_id is not None,
+                "target_agent_id": str(target_agent_id) if target_agent_id else None,
+                "session_id": str(session_id) if session_id else None,
+                "task_id": task_id,
+                "message_length": len(message_content or ""),
+                "history_size": len(session_history or []),
+            }
+        )
 
         try:
             if target_agent_id:
@@ -1075,9 +1142,26 @@ class UserWorkerSpace:
                     session_id=session_id,
                 )
 
+            _update_langfuse_span(
+                output_data={
+                    "status": "success",
+                    "execution_mode": execution_mode,
+                    "agent_id": result.get("agent_id") or result.get("selected_agent_id"),
+                    "tokens_used": result.get("tokens_used", 0),
+                    "context_used": result.get("context_used", 0),
+                    "execution_time_ms": result.get("execution_time_ms", 0),
+                }
+            )
             return result
 
         except Exception as e:
+            _update_langfuse_span(
+                output_data={
+                    "status": "error",
+                    "execution_mode": execution_mode,
+                    "error_type": type(e).__name__,
+                }
+            )
             logger.error(
                 "handle_message_failed",
                 error=str(e),
