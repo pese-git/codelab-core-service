@@ -179,8 +179,6 @@ class ToolExecutor:
         )
 
         approval_id: UUID | None = None
-
-        # Approval workflow for MEDIUM/HIGH risk
         if requires_approval:
             approval = await self.approval_manager.request_tool_execution_approval(
                 tool_name=tool_name,

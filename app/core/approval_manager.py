@@ -873,7 +873,6 @@ class ApprovalManager:
 
             # Mask sensitive parameters before storing
             masked_params = self._mask_tool_parameters(tool_name, tool_params)
-
             # Create approval request
             approval = ApprovalRequest(
                 user_id=self.user_id,
@@ -899,7 +898,7 @@ class ApprovalManager:
                 risk_level=risk_level,
             )
 
-            # Send SSE notification
+            # Send SSE notification for tool approval request.
             if self.stream_manager:
                 await self._send_tool_approval_notification(
                     approval=approval,
@@ -1078,7 +1077,7 @@ class ApprovalManager:
             }
 
             event = StreamEvent(
-                event_type=StreamEventType.APPROVAL_REQUIRED,
+                event_type=StreamEventType.TOOL_APPROVAL_REQUEST,
                 payload=payload,
                 session_id=session_id,
             )
