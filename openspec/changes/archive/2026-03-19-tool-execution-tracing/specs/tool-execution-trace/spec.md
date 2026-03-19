@@ -8,68 +8,62 @@
 
 ## MODIFIED Requirements
 
-### Requirement: tool_execution span
-Обновленное требование для создания tool execution spans с поддержкой Langfuse integration.
+### Requirement: tool_execution span через Langfuse SDK
+Обновленное требование для создания tool execution spans с поддержкой Langfuse integration через `@observe` декоратор.
 
 **What changed**: 
-- Добавлена поддержка Langfuse spans в дополнение к OpenTelemetry spans
-- Tool execution теперь отправляется в Langfuse для аналитики и quality feedback
-- Поддержка nested spans связанных с parent LLM call
+- Использование Langfuse SDK `@observe` декоратора вместо кастомного LangfuseIntegration класса
+- Tool execution трейсится и в Langfuse (через SDK) и в OpenTelemetry (параллельно)
+- Nested spans через вложенные `@observe` декораторы
 
 **Updated Requirement**:
-Tool execution spans ДОЛЖНЫ создаваться через LangfuseIntegration для захватывания в Langfuse с поддержкой nested spans для child операций (валидация, risk assessment, одобрение, выполнение).
+Tool execution spans ДОЛЖНЫ создаваться через Langfuse SDK (`@observe` декоратор) с поддержкой обновления payload через `_update_langfuse_span()` для ключевых метрик.
 
 #### Scenario: tool_execution span в Langfuse
 - **WHEN** вызывается `ToolExecutor.execute_tool(tool_name="api_call", params={...})`
-- **THEN** создается Langfuse span с именем `tool_api_call` через `LangfuseIntegration.create_tool_execution_span()`
-- **AND** span содержит атрибуты: `tool_name`, `input_params`, `user_id`, `workspace_id`, `agent_id`
-- **AND** span отправляется в Langfuse асинхронно
+- **THEN** декоратор `@observe(as_type="tool", name="ExecuteTool")` автоматически создает span в Langfuse
+- **AND** span содержит input: `_safe_tool_input()` с tool_name, session_id, param_keys
+- **AND** span содержит output: status, tool_id, risk_level, approval_id (если есть)
+- **AND** span отправляется в Langfuse асинхронно через SDK
 
 #### Scenario: Nested tool_validation span
 - **WHEN** ToolExecutor вызывает `_validate_tool_params()`
-- **THEN** создается nested child span через LangfuseIntegration с именем `tool_api_call_validation`
-- **AND** parent_span_id = root tool execution span
+- **THEN** декоратор `@observe` на методе автоматически создает child span
+- **AND** parent span = root ExecuteTool span
 - **AND** span завершается с success или error в зависимости от валидации
 
-#### Scenario: Nested tool_risk_assessment span
+#### Scenario: Risk assessment данные в root span
 - **WHEN** ToolExecutor вызывает `risk_assessor.assess_tool_risk()`
-- **THEN** создается nested child span `tool_api_call_risk_assessment`
-- **AND** span содержит output: `{"risk_level": "HIGH", "risk_score": 0.85}`
+- **THEN** результат (risk_level) добавляется в output_data root span'а через `_update_langfuse_span()`
+- **AND** risk_level видна в output root ExecuteTool span'а
 
-#### Scenario: Nested tool_approval span
+#### Scenario: Approval workflow данные в root span
 - **WHEN** требуется одобрение (HIGH/MEDIUM risk)
-- **THEN** создается nested child span `tool_api_call_approval`
-- **AND** span содержит: `approval_id`, `approval_status` (approved/rejected)
+- **THEN** approval_id и статус (approved/rejected) добавляются в output root span'а
+- **AND** эти данные видны в root ExecuteTool span'а
 
-#### Scenario: Nested tool_execution_run span
-- **WHEN** инструмент отправляется на клиент для выполнения
-- **THEN** создается nested child span `tool_api_call_execution`
-- **AND** span содержит input параметры и output результат
+#### Scenario: Финальный результат в root span
+- **WHEN** инструмент выполняется или отклоняется
+- **THEN** финальный статус (approved/rejected/failed) добавляется в output через `_update_langfuse_span()`
+- **AND** tool_id всегда включается в output для tracking
 
 #### Scenario: Linked trace hierarchy
 - **WHEN** tool execution происходит в контексте LLM call
-- **THEN** tool execution span автоматически связывается с parent LLM call span
-- **AND** в Langfuse UI видна иерархия: llm_call → tool_execution → [nested spans]
+- **THEN** Langfuse SDK автоматически отслеживает иерархию через context
+- **AND** в Langfuse UI видна иерархия: llm_call → ExecuteTool → ValidateTool (если был вызван)
 
 #### Scenario: Graceful degradation при Langfuse unavailable
-- **WHEN** Langfuse недоступен или отключен
-- **THEN** OpenTelemetry spans продолжают создаваться нормально
-- **AND** Langfuse spans пропускаются (no-op)
-- **AND** ошибки трейсинга не влияют на tool execution
+- **WHEN** Langfuse отключен (LANGFUSE_ENABLED=false) или недоступен
+- **THEN** `@observe` декоратор пропускает создание spans (no-op)
+- **AND** OpenTelemetry spans продолжают создаваться нормально (независимая система)
+- **AND** `_update_langfuse_span()` ловит исключения и логирует на DEBUG
+- **AND** tool execution продолжается без влияния
 
 #### Scenario: Error handling в tool execution spans
-- **WHEN** tool execution завершается с ошибкой
-- **THEN** span завершается с error status и contains:
-  ```json
-  {
-    "error": {
-      "type": "TimeoutError",
-      "message": "Tool execution timeout after 30s"
-    },
-    "success": false
-  }
-  ```
-- **AND** exception не propagate, агент может обработать ошибку
+- **WHEN** tool execution завершается с ошибкой (validation, timeout, rejection)
+- **THEN** error_type добавляется в output через `_update_langfuse_span(output_data={..., "error_type": "validation_error"})`
+- **AND** span завершается нормально (Langfuse SDK логирует выход из @observe)
+- **AND** exception не propagate в ToolExecutor
 
 ### Requirement: Context propagation в OpenTelemetry spans (No Change)
 Requirement остается без изменений. OpenTelemetry spans продолжают работать как ранее с context propagation через structlog.
