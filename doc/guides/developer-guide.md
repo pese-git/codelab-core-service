@@ -947,6 +947,185 @@ make clean-all        # Полная очистка
 
 ## Дополнительные ресурсы
 
+---
+
+## Tool Execution Tracing для разработчиков
+
+### Обзор
+
+Tool Execution Tracing - это встроенная система, которая автоматически логирует все выполнения инструментов в Langfuse. Разработчикам не требуется добавлять дополнительный код - трассировка работает "из коробки" благодаря `@observe` декораторам.
+
+### Как работает
+
+```python
+from langfuse import observe
+
+@observe(as_type="tool", name="ExecuteTool", capture_input=False, capture_output=False)
+async def execute_tool(
+    self,
+    tool_name: str,
+    tool_params: dict,
+    session_id: Optional[UUID] = None
+) -> ToolExecutionResponse:
+    """Декоратор автоматически создает Langfuse span."""
+    
+    # Обновить входные данные (санитизованные)
+    from app.core.tools.executor import _update_langfuse_span, _safe_tool_input
+    _update_langfuse_span(input_data=_safe_tool_input(tool_name, tool_params, session_id))
+    
+    # ... выполнение инструмента ...
+    
+    # Обновить выходные данные
+    _update_langfuse_span(output_data={"status": "success", "result": "..."})
+```
+
+### Добавление трассировки к новому инструменту
+
+1. **Инструмент автоматически трассируется** - просто используйте `ToolExecutor.execute_tool()`
+
+2. **Добавить кастомный контекст** (если нужно):
+
+```python
+from app.core.tools.executor import _update_langfuse_span
+
+payload = {
+    "status": "processing",
+    "custom_field": "custom_value"
+}
+_update_langfuse_span(output_data=payload)
+```
+
+3. **Убедиться в санитизации** чувствительных данных:
+
+```python
+def _safe_tool_input(tool_name: str, tool_params: dict, session_id: Optional[UUID]) -> dict:
+    """Модифицировать для добавления санитизации."""
+    payload = {
+        "tool_name": tool_name,
+        "param_keys": sorted(list(tool_params.keys()))
+    }
+    
+    # Исключить чувствительные поля
+    if "secret" in tool_params:
+        payload["secret"] = "***REDACTED***"
+    
+    return payload
+```
+
+### Best Practices
+
+1. **Всегда передавайте session_id** для корреляции трассировок с chat sessions
+
+```python
+result = await executor.execute_tool(
+    tool_name="read_file",
+    tool_params={"path": "/tmp/data.txt"},
+    session_id=chat_session_id  # ← Важно для трассировки
+)
+```
+
+2. **Не логируйте чувствительные данные** напрямую в Langfuse
+
+```python
+# ❌ Неправильно - чувствительные данные видны
+_update_langfuse_span(output_data={"api_key": request.api_key})
+
+# ✅ Правильно - данные санитизированы
+_update_langfuse_span(output_data={"api_key_length": len(request.api_key)})
+```
+
+3. **Обработайте ошибки gracefully** - трассировка не должна блокировать выполнение
+
+```python
+try:
+    _update_langfuse_span(output_data={"status": "success"})
+except Exception:
+    # Ошибка логируется автоматически, выполнение продолжается
+    logger.debug("tracing_failed", exc_info=True)
+```
+
+### Отладка трассировки
+
+1. **Включить verbose logging**:
+
+```bash
+export LANGFUSE_DEBUG=true
+python -m pytest tests/ -s  # Увидите логи трассировки
+```
+
+2. **Проверить, включена ли трассировка**:
+
+```python
+from app.services.langfuse_client import get_langfuse_client
+
+client = get_langfuse_client()
+print(f"Tracing enabled: {client.enabled}")
+print(f"Client: {client.client}")
+```
+
+3. **Проверить структуру spans в тестах**:
+
+```python
+@pytest.mark.asyncio
+async def test_tool_execution_tracing():
+    executor = ToolExecutor(...)
+    result = await executor.execute_tool(
+        tool_name="read_file",
+        tool_params={"path": "/tmp/test.txt"},
+        session_id=uuid.uuid4()
+    )
+    
+    # Verificar que span fue creado
+    assert result.status == "success"
+    
+    # Verificar logs de tracing
+    # (en Langfuse dashboard o en logs si LANGFUSE_DEBUG=true)
+```
+
+### Конфигурация для разработки
+
+**.env.example** (для локальной разработки):
+
+```bash
+# Langfuse Settings
+LANGFUSE_ENABLED=true
+LANGFUSE_TRACING_ENABLED=true
+LANGFUSE_PUBLIC_KEY=test_public_key
+LANGFUSE_SECRET_KEY=test_secret_key
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+LANGFUSE_DEBUG=true  # Verbose logging для разработки
+```
+
+### Мониторинг производительности
+
+Трассировка имеет минимальный overhead (< 5ms):
+
+```bash
+# Проверить метрики в логах
+grep "execution_time_ms" logs/app.log
+
+# Profiling (если нужно):
+python -m cProfile -o profile.prof -m pytest tests/test_agent_tool_integration.py
+python -m pstats profile.prof
+```
+
+### Часто встречающиеся проблемы
+
+| Проблема | Решение |
+|----------|---------|
+| Spans не видны в Langfuse | Проверьте LANGFUSE_ENABLED и учетные данные |
+| Чувствительные данные в трассировке | Модифицируйте _safe_tool_input() для санитизации |
+| Высокий overhead | Проверьте, не блокируется ли сетевой вызов (должен быть асинхронным) |
+| Нет контекста (user_id, project_id) | Убедитесь, что JWT валиден и содержит нужные claims |
+
+### Документация
+
+- [Tool Execution Tracing User Guide](./tool-execution-tracing.md)
+- [API Specification - Tracing Data](../api/api-specification.md#-tool-execution-tracing---структура-данных)
+- [Langfuse SDK Documentation](https://docs.langfuse.com/)
+
+---
+
 ### Документация
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy 2.0 Documentation](https://docs.sqlalchemy.org/en/20/)

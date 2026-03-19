@@ -533,6 +533,211 @@ enum:
 
 ---
 
+## 📊 Tool Execution Tracing - Структура данных
+
+### Обзор
+
+Tool Execution Tracing автоматически захватывает все выполнения инструментов через `@observe` декораторы Langfuse SDK. Данные структурированы иерархически с root span и вложенными spans для различных этапов выполнения.
+
+### Tool Execution Span (Root)
+
+**Тип**: `tool`  
+**Имя**: `ExecuteTool`  
+**Автоматическое создание**: Через `@observe` декоратор на `ToolExecutor.execute_tool()`
+
+#### Input Payload
+
+```json
+{
+  "tool_name": "read_file",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "param_keys": ["path", "mode"],
+  "path": "/workspace/data.txt",
+  "content_length": null,
+  "user_id": "user-123",
+  "project_id": "project-456"
+}
+```
+
+**Поля**:
+- `tool_name` (string): Имя исполняемого инструмента
+- `session_id` (UUID|null): ID сессии чата (если есть)
+- `param_keys` (array[string]): Список ключей параметров инструмента
+- `path` (string, optional): Путь (усечено до 300 символов)
+- `content_length` (int, optional): Длина содержимого файла (без самого содержимого)
+- `user_id` (UUID): Из JWT токена
+- `project_id` (UUID): Из JWT токена
+
+#### Output Payload
+
+```json
+{
+  "status": "success",
+  "tool_id": "abc123",
+  "result": "File contents...",
+  "execution_time_ms": 125,
+  "risk_level": "medium",
+  "risk_score": 4.5,
+  "approval_required": true,
+  "approval_status": "approved",
+  "validation_passed": true
+}
+```
+
+**Поля**:
+- `status` (string): `success`, `failed`, `rejected`, `error`
+- `tool_id` (UUID): Уникальный ID выполнения инструмента
+- `result` (string): Результат выполнения (санитизованный)
+- `execution_time_ms` (int): Время выполнения в миллисекундах
+- `risk_level` (string): `low`, `medium`, `high`, `critical`
+- `risk_score` (float): Числовая оценка риска (0.0-10.0)
+- `approval_required` (bool): Требовалось ли одобрение
+- `approval_status` (string): `pending`, `approved`, `rejected`
+- `validation_passed` (bool): Результат валидации параметров
+
+### Вложенные Spans (Child Spans)
+
+#### ValidateTool Span
+
+**Тип**: `tool`  
+**Имя**: `ValidateTool`  
+**Родитель**: `ExecuteTool`
+
+```json
+{
+  "input": {
+    "tool_name": "read_file",
+    "param_keys": ["path"]
+  },
+  "output": {
+    "validation_status": "passed",
+    "errors": []
+  }
+}
+```
+
+#### Validation Errors Example
+
+Если валидация не пройдена:
+
+```json
+{
+  "output": {
+    "validation_status": "failed",
+    "errors": [
+      {
+        "field": "path",
+        "error": "Path outside workspace",
+        "details": "Path: /etc/passwd (outside: /workspace)"
+      }
+    ]
+  }
+}
+```
+
+### Context Propagation (Метаданные Span)
+
+Каждый span автоматически получает метаданные контекста:
+
+```json
+{
+  "metadata": {
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "project_id": "550e8400-e29b-41d4-a716-446655440001",
+    "session_id": "550e8400-e29b-41d4-a716-446655440002",
+    "timestamp": "2026-03-19T15:30:00Z",
+    "request_id": "req-123456"
+  }
+}
+```
+
+### Пример полной трассировки (в Langfuse)
+
+```
+ExecuteTool (root span, 125ms)
+├── Input:
+│   ├── tool_name: "read_file"
+│   ├── param_keys: ["path"]
+│   ├── path: "/workspace/data.txt"
+│   └── session_id: "session-123"
+│
+├── Output:
+│   ├── status: "success"
+│   ├── tool_id: "tool-456"
+│   ├── result: "File contents"
+│   ├── execution_time_ms: 125
+│   ├── risk_level: "low"
+│   └── validation_passed: true
+│
+├── Metadata:
+│   ├── user_id: "user-123"
+│   ├── project_id: "project-456"
+│   ├── session_id: "session-123"
+│   └── timestamp: "2026-03-19T15:30:00Z"
+│
+└── Child Spans:
+    └── ValidateTool (5ms)
+        ├── Input: {tool_name: "read_file", param_keys: ["path"]}
+        └── Output: {validation_status: "passed", errors: []}
+```
+
+### Санитизация данных
+
+**Исключены из трассировки**:
+- Полное содержимое файлов (`content` поле)
+- Полные команды оболочки (`command` поле)
+- API ключи и токены
+- Пароли и учетные данные
+
+**Включены в трассировку**:
+- Имена параметров (`param_keys`)
+- Пути файлов (урезаны до 300 символов)
+- Паттерны поиска (урезаны до 120 символов)
+- Размеры данных (длины содержимого)
+- Статусы и результаты
+
+### Обработка ошибок в трассировке
+
+При ошибке выполнения:
+
+```json
+{
+  "output": {
+    "status": "error",
+    "error_type": "file_not_found",
+    "error_message": "File does not exist",
+    "execution_time_ms": 5
+  }
+}
+```
+
+**Типы ошибок**:
+- `validation_failed`: Параметры не прошли валидацию
+- `unknown_tool`: Неизвестный инструмент
+- `approval_rejected`: Одобрение отклонено
+- `execution_error`: Ошибка при выполнении инструмента
+- `timeout`: Превышено время ожидания
+
+### Просмотр данных
+
+Данные трассировки доступны через:
+
+1. **Langfuse Dashboard** (https://cloud.langfuse.com/)
+   - Визуальное отображение spans
+   - Иерархия операций
+   - Поиск по параметрам
+
+2. **API (Langfuse REST API)**
+   - Программный доступ к traces
+   - Фильтрация и агрегация
+   - Аналитика и метрики
+
+3. **Логи приложения**
+   - `DEBUG` уровень при `LANGFUSE_DEBUG=true`
+   - Информация о ошибках обновления spans
+
+---
+
 ## 🔗 Полная документация
 
 Для полной документации с примерами cURL и Python смотрите [`doc/rest-api.md`](../rest-api.md).
@@ -540,6 +745,7 @@ enum:
 ## 📚 Связанные документы
 
 - [REST API полная документация](../rest-api.md)
+- [Tool Execution Tracing User Guide](../guides/tool-execution-tracing.md)
 - [Setup Guide](../setup-guide.md)
 - [System Overview](./system-overview.md)
 - [Developer Guide](./developer-guide.md)
