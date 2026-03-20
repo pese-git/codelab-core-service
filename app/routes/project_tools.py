@@ -293,7 +293,6 @@ async def submit_tool_execution_result(
     
     with propagate_attributes(
         user_id=_sanitize_langfuse_attr(user_id),
-        project_id=_sanitize_langfuse_attr(project_id),
         metadata=metadata,
     ):
         _update_langfuse_span(input_data={
