@@ -116,7 +116,8 @@ class ToolExecutor:
             ToolExecutionResponse with status and result
         """
         tool_id = uuid4()
-        created_at = datetime.utcnow().isoformat()
+        # Use current timestamp for validation errors (no DB record created for validation failures)
+        request_timestamp = datetime.utcnow()
 
         execution: ToolExecution | None = None
         _update_langfuse_span(input_data=_safe_tool_input(tool_name, tool_params, session_id))
@@ -134,7 +135,7 @@ class ToolExecutor:
                 status="failed",
                 requires_approval=False,
                 error=error,
-                created_at=created_at,
+                created_at=request_timestamp.isoformat(),
                 completed_at=datetime.utcnow().isoformat(),
             )
 
@@ -154,7 +155,7 @@ class ToolExecutor:
                 status="failed",
                 requires_approval=False,
                 error=validation_error,
-                created_at=created_at,
+                created_at=request_timestamp.isoformat(),
                 completed_at=datetime.utcnow().isoformat(),
             )
 
@@ -170,6 +171,21 @@ class ToolExecutor:
             risk_level=risk_level.value,
             session_id=session_id,
         )
+        # Commit the execution record so it's visible to other sessions
+        try:
+            await self.db.commit()
+            # Refresh the object to keep it attached to the current session
+            await self.db.refresh(execution)
+        except Exception as e:
+            self.logger.error(
+                "failed_to_commit_tool_execution",
+                tool_id=str(tool_id),
+                tool_name=tool_name,
+                error=str(e),
+                exc_info=True,
+            )
+            await self.db.rollback()
+            raise
 
         approval_id: UUID | None = None
         if requires_approval:
@@ -192,7 +208,19 @@ class ToolExecutor:
                 execution.status = "rejected"
                 execution.error = reason or "Approval rejected"
                 execution.completed_at = datetime.utcnow()
-                await self.db.flush()
+                try:
+                    await self.db.flush()
+                    await self.db.commit()
+                except Exception as e:
+                    self.logger.error(
+                        "failed_to_commit_rejected_execution",
+                        tool_id=str(tool_id),
+                        tool_name=tool_name,
+                        error=str(e),
+                        exc_info=True,
+                    )
+                    await self.db.rollback()
+                    raise
                 _update_langfuse_span(
                     output_data={
                         "status": "rejected",
@@ -215,7 +243,19 @@ class ToolExecutor:
 
         # Approved: dispatch execution signal to client and return async status
         execution.status = "approved"
-        await self.db.flush()
+        try:
+            await self.db.flush()
+            await self.db.commit()
+        except Exception as e:
+            self.logger.error(
+                "failed_to_commit_approved_execution",
+                tool_id=str(tool_id),
+                tool_name=tool_name,
+                error=str(e),
+                exc_info=True,
+            )
+            await self.db.rollback()
+            raise
         await self._send_tool_execution_request(
             tool_id=str(tool_id),
             tool_name=tool_name,

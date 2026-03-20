@@ -1,9 +1,43 @@
 """Pydantic schemas for Tool execution requests and responses"""
 
-from pydantic import BaseModel, Field
+from __future__ import annotations
+
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any, Literal, Union
 from uuid import UUID
 from datetime import datetime
+
+
+def parse_tool_response(
+    tool_name: str, 
+    result_dict: Optional[dict]
+) -> Optional[Union[ToolReadFileResponse, ToolWriteFileResponse, ToolExecuteCommandResponse, ToolListDirectoryResponse]]:
+    """Convert raw result dict to proper ToolResponse type based on tool_name.
+    
+    Args:
+        tool_name: Name of the tool
+        result_dict: Raw result dict from client
+        
+    Returns:
+        Validated ToolResponse object, or None if validation fails
+    """
+    if not result_dict:
+        return None
+    
+    try:
+        if tool_name == "read_file":
+            return ToolReadFileResponse(**result_dict)
+        elif tool_name == "write_file":
+            return ToolWriteFileResponse(**result_dict)
+        elif tool_name == "execute_command":
+            return ToolExecuteCommandResponse(**result_dict)
+        elif tool_name == "list_directory":
+            return ToolListDirectoryResponse(**result_dict)
+    except Exception:
+        # If validation fails, return None (lenient validation)
+        pass
+    
+    return None
 
 
 # ============================================================================
@@ -156,6 +190,35 @@ class ToolExecutionResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     created_at: str = Field(..., description="Creation timestamp (ISO 8601)")
     completed_at: Optional[str] = Field(None, description="Completion timestamp (ISO 8601)")
+    
+    @field_validator('result', mode='before')
+    @classmethod
+    def parse_result(cls, v: Any, info) -> Optional[ToolResponse]:
+        """Convert raw dict from DB to proper ToolResponse type based on tool_name.
+        
+        Args:
+            v: Raw value (could be dict from DB or already a ToolResponse object)
+            info: Field info with context
+            
+        Returns:
+            Validated ToolResponse object, or None if it's not a dict or validation fails
+        """
+        # If already a model instance or None, pass through
+        if v is None or isinstance(v, (ToolReadFileResponse, ToolWriteFileResponse, 
+                                       ToolExecuteCommandResponse, ToolListDirectoryResponse)):
+            return v
+        
+        # If not a dict, can't parse
+        if not isinstance(v, dict):
+            return None
+        
+        # Get tool_name from other field data
+        tool_name = info.data.get('tool_name')
+        if not tool_name:
+            return None
+        
+        # Try to parse and validate
+        return parse_tool_response(tool_name, v)
 
     class Config:
         json_schema_extra = {
@@ -189,6 +252,9 @@ class ToolExecutionResultRequest(BaseModel):
     )
     completed_at: Optional[datetime] = Field(
         None, description="Completion timestamp (ISO 8601)"
+    )
+    session_id: Optional[UUID] = Field(  # ← Добавить
+        None, description="Chat session ID for tracing"
     )
 
 
