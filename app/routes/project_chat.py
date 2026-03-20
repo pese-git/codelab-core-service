@@ -34,27 +34,12 @@ from app.schemas.chat import (
 )
 from app.schemas.error import LLMProviderError
 from app.schemas.event import StreamEvent, StreamEventType
+from app.services.langfuse_client import _sanitize_langfuse_attr, _update_langfuse_span
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/my/projects/{project_id}/chat", tags=["project-chat"])
 
-def _sanitize_langfuse_attr(value: object) -> str:
-    """Langfuse attributes must be ASCII strings <= 200 chars."""
-    if value is None:
-        return ""
-    text = str(value)
-    text = text.encode("ascii", "ignore").decode("ascii")
-    return text[:200]
-
-
-def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
-    """Safely attach sanitized IO payload to current Langfuse span."""
-    try:
-        get_client().update_current_span(input=input_data, output=output_data)
-    except Exception:
-        # Never break request flow due to observability issues.
-        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 
 @router.post("/sessions/", status_code=status.HTTP_201_CREATED, response_model=ChatSessionResponse)

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from uuid import UUID, uuid4
 
-from langfuse import get_client, observe
+from langfuse import observe
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tools.definitions import ToolName, AVAILABLE_TOOLS
@@ -20,6 +20,7 @@ from app.schemas.tool import ToolExecutionResponse
 from app.schemas.event import StreamEventType
 from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
+from app.services.langfuse_client import _update_langfuse_span
 
 logger = get_logger(__name__)
 
@@ -47,14 +48,6 @@ def _safe_tool_input(tool_name: str, tool_params: dict, session_id: Optional[UUI
         content = tool_params.get("content")
         payload["content_length"] = len(content) if isinstance(content, str) else 0
     return payload
-
-
-def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
-    """Safely attach sanitized IO payload to current Langfuse span."""
-    try:
-        get_client().update_current_span(input=input_data, output=output_data)
-    except Exception:
-        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 
 class ToolExecutor:

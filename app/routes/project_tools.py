@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from langfuse import observe, propagate_attributes
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,7 @@ from app.schemas.tool import (
     ToolExecutionResponse,
     ToolExecutionResultRequest,
 )
+from app.services.langfuse_client import _sanitize_langfuse_attr, _update_langfuse_span
 
 logger = get_logger(__name__)
 
@@ -271,6 +273,7 @@ async def list_tool_executions(
     "/{project_id}/tools/{tool_id}/result",
     response_model=ToolExecutionResponse,
 )
+@observe(as_type="tool", name="SubmitToolResult", capture_input=False, capture_output=False)
 async def submit_tool_execution_result(
     project_id: UUID,
     tool_id: UUID,
@@ -280,60 +283,86 @@ async def submit_tool_execution_result(
     project: UserProject = Depends(get_project_with_validation),
 ) -> ToolExecutionResponse:
     """Submit tool execution result from client."""
-    result = await db.execute(
-        select(ToolExecution).where(
-            ToolExecution.id == tool_id,
-            ToolExecution.user_id == user_id,
-            ToolExecution.project_id == project_id,
+    metadata = {
+        "entrypoint": "submit_tool_execution_result",
+        "project_id": str(project_id),
+        "tool_id": str(tool_id),
+    }
+    if project.name:
+        metadata["project_name"] = project.name
+    
+    with propagate_attributes(
+        user_id=_sanitize_langfuse_attr(user_id),
+        project_id=_sanitize_langfuse_attr(project_id),
+        metadata=metadata,
+    ):
+        _update_langfuse_span(input_data={
+            "tool_id": str(tool_id),
+            "project_id": str(project_id),
+            "status": result_request.status,
+        })
+        
+        result = await db.execute(
+            select(ToolExecution).where(
+                ToolExecution.id == tool_id,
+                ToolExecution.user_id == user_id,
+                ToolExecution.project_id == project_id,
+            )
         )
-    )
-    execution = result.scalar_one_or_none()
-    if not execution:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tool execution not found",
+        execution = result.scalar_one_or_none()
+        if not execution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tool execution not found",
+            )
+
+        execution.status = result_request.status
+        execution.result = result_request.result
+        execution.error = result_request.error
+        execution.completed_at = result_request.completed_at or datetime.utcnow()
+        await db.flush()
+
+        # Record outbox event for tool result
+        await OutboxRepository.record_event(
+            session=db,
+            aggregate_type="tool_execution",
+            aggregate_id=execution.id,
+            user_id=user_id,
+            project_id=project_id,
+            event_type=(
+                StreamEventType.TOOL_RESULT.value
+                if result_request.status == "completed"
+                else StreamEventType.TOOL_ERROR.value
+            ),
+            payload={
+                "tool_id": str(execution.id),
+                "tool_name": execution.tool_name,
+                "status": execution.status,
+                "result": execution.result,
+                "error": execution.error,
+                "session_id": str(execution.session_id) if execution.session_id else None,
+                "timestamp": execution.completed_at.isoformat(),
+            },
         )
 
-    execution.status = result_request.status
-    execution.result = result_request.result
-    execution.error = result_request.error
-    execution.completed_at = result_request.completed_at or datetime.utcnow()
-    await db.flush()
-
-    # Record outbox event for tool result
-    await OutboxRepository.record_event(
-        session=db,
-        aggregate_type="tool_execution",
-        aggregate_id=execution.id,
-        user_id=user_id,
-        project_id=project_id,
-        event_type=(
-            StreamEventType.TOOL_RESULT.value
-            if result_request.status == "completed"
-            else StreamEventType.TOOL_ERROR.value
-        ),
-        payload={
+        _update_langfuse_span(output_data={
+            "status": execution.status,
             "tool_id": str(execution.id),
             "tool_name": execution.tool_name,
-            "status": execution.status,
-            "result": execution.result,
-            "error": execution.error,
             "session_id": str(execution.session_id) if execution.session_id else None,
-            "timestamp": execution.completed_at.isoformat(),
-        },
-    )
+        })
 
-    return ToolExecutionResponse(
-        tool_id=str(execution.id),
-        tool_name=execution.tool_name,
-        status=execution.status,
-        approval_id=execution.approval_id,
-        requires_approval=execution.approval_id is not None,
-        result=execution.result,
-        error=execution.error,
-        created_at=execution.created_at.isoformat(),
-        completed_at=execution.completed_at.isoformat() if execution.completed_at else None,
-    )
+        return ToolExecutionResponse(
+            tool_id=str(execution.id),
+            tool_name=execution.tool_name,
+            status=execution.status,
+            approval_id=execution.approval_id,
+            requires_approval=execution.approval_id is not None,
+            result=execution.result,
+            error=execution.error,
+            created_at=execution.created_at.isoformat(),
+            completed_at=execution.completed_at.isoformat() if execution.completed_at else None,
+        )
 
 
 @router.get("/{project_id}/tools/available")

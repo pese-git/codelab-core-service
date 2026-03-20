@@ -23,26 +23,10 @@ from app.core.tools.executor import ToolExecutor
 from app.logging_config import get_logger
 from app.models.user_project import UserProject
 from app.schemas.agent import AgentConfig
+from app.services.langfuse_client import _sanitize_langfuse_attr, _update_langfuse_span
 from app.vectorstore.agent_context_store import AgentContextStore
 
 logger = get_logger(__name__)
-
-
-def _sanitize_langfuse_attr(value: object) -> str:
-    """Langfuse attributes must be ASCII strings <= 200 chars."""
-    if value is None:
-        return ""
-    text = str(value)
-    text = text.encode("ascii", "ignore").decode("ascii")
-    return text[:200]
-
-
-def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
-    """Safely attach sanitized IO payload to current Langfuse span."""
-    try:
-        get_client().update_current_span(input=input_data, output=output_data)
-    except Exception:
-        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 
 class AgentCache:

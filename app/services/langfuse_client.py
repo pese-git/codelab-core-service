@@ -1,8 +1,9 @@
 """Langfuse client initialization and management."""
 
 from typing import Optional
+from uuid import UUID
 
-from langfuse import Langfuse
+from langfuse import Langfuse, get_client
 
 from app.config import settings
 from app.logging_config import get_logger
@@ -80,3 +81,20 @@ def get_langfuse_client() -> LangfuseClient:
         _langfuse_client = LangfuseClient()
 
     return _langfuse_client
+
+
+def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
+    """Safely attach sanitized IO payload to current Langfuse span."""
+    try:
+        get_client().update_current_span(input=input_data, output=output_data)
+    except Exception:
+        logger.debug("langfuse_span_update_skipped", exc_info=True)
+
+
+def _sanitize_langfuse_attr(value: object) -> str:
+    """Langfuse attributes must be ASCII strings <= 200 chars."""
+    if value is None:
+        return ""
+    text = str(value)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    return text[:200]

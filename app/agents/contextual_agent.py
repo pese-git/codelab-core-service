@@ -21,6 +21,7 @@ from app.logging_config import get_logger
 from app.models.tool_execution import ToolExecution
 from app.schemas.agent import AgentConfig
 from app.services.langfuse_prompt_manager import get_langfuse_prompt_manager
+from app.services.langfuse_client import _update_langfuse_span
 from app.vectorstore.agent_context_store import AgentContextStore
 
 from langfuse import get_client, observe
@@ -30,13 +31,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-
-def _update_langfuse_span(*, input_data: dict | None = None, output_data: dict | None = None) -> None:
-    """Safely attach sanitized IO payload to current Langfuse span."""
-    try:
-        get_client().update_current_span(input=input_data, output=output_data)
-    except Exception:
-        logger.debug("langfuse_span_update_skipped", exc_info=True)
 
 class ContextualAgent:
     """Agent with context retrieval capabilities and tool support."""
