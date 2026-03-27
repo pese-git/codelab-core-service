@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.logging_config import get_logger
 from app.schemas.error import ErrorResponse
+from app.services.jwks_client import get_jwks_client
 
 logger = get_logger(__name__)
 
@@ -49,16 +50,25 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
 
             token = auth_header.split(" ")[1]
 
-            # Decode JWT token
+            # Validate JWT token with RS256 using JWKS
+            user_id_str = None
             try:
-                payload = jwt.decode(
+                # Get JWKS client and validate token
+                jwks_client = await get_jwks_client()
+                payload = await jwks_client.validate_token(
                     token,
-                    settings.jwt_secret_key,
-                    algorithms=[settings.jwt_algorithm],
+                    issuer=settings.jwt_issuer,
+                    audience=settings.jwt_audience,
                 )
+
                 user_id_str = payload.get("sub")
                 if not user_id_str:
                     raise JWTError("Missing 'sub' claim in token")
+
+                # Validate token type
+                token_type = payload.get("type", "access")
+                if token_type not in ("access", "refresh"):
+                    raise JWTError(f"Invalid token type: {token_type}")
 
                 # Convert to UUID
                 user_id = UUID(user_id_str)

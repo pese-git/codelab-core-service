@@ -54,9 +54,17 @@ class Settings(BaseSettings):
 
     # JWT Authentication
     jwt_secret_key: str = Field(default="your-secret-key-change-in-production")
-    jwt_algorithm: str = Field(default="HS256")
+    jwt_algorithm: str = Field(default="RS256")
     jwt_access_token_expire_minutes: int = Field(default=30)
     jwt_refresh_token_expire_days: int = Field(default=7)
+    
+    # JWT RS256 Configuration
+    jwt_issuer: str = Field(default="https://auth.codelab.local")
+    jwt_audience: str = Field(default="codelab-api")
+    auth_service_jwks_url: str = Field(
+        default="http://codelab-auth-service:8003/.well-known/jwks.json"
+    )
+    jwks_cache_ttl: int = Field(default=3600)  # 1 hour
 
     # LiteLLM
     litellm_url: str = Field(default="http://localhost:4000")
