@@ -232,6 +232,54 @@ docker-compose down
 docker-compose down -v
 ```
 
+## Authentication
+
+Core Service валидирует JWT токены от auth-service используя **RS256** асимметричную криптографию.
+
+### JWT RS256 Validation
+
+- **JWKS Client**: Получает публичные ключи от auth-service через JWKS endpoint
+- **Кеширование**: JWKS кешируется с TTL 3600 сек (1 час)
+- **Валидация**: Проверяет подпись, issuer, audience, expiration
+- **User Context**: Извлекает user_id из claim `sub`
+
+### Конфигурация
+
+```env
+JWT_ALGORITHM=RS256
+JWT_ISSUER=https://auth.codelab.local
+JWT_AUDIENCE=codelab-api
+AUTH_SERVICE_JWKS_URL=http://codelab-auth-service:8003/.well-known/jwks.json
+JWKS_CACHE_TTL=3600
+```
+
+### Использование
+
+```bash
+# Получить токен от auth-service
+TOKEN=$(curl -s -X POST 'http://localhost:8003/oauth/token' \
+  -d 'grant_type=password&client_id=codelab-flutter-app&username=user&password=pass' \
+  | jq -r '.access_token')
+
+# Использовать в core-service
+curl -X GET 'http://localhost:8000/my/projects/' \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Компоненты
+
+- **JWKS Client**: [`app/services/jwks_client.py`](app/services/jwks_client.py) - получение и кеширование публичных ключей
+- **Middleware**: [`app/middleware/user_isolation.py`](app/middleware/user_isolation.py) - валидация токенов для `/my/*` endpoints
+- **Config**: [`app/config.py`](app/config.py) - конфигурация JWT параметров
+
+### Документация
+
+- 🔐 [JWT Validation](openspec/specs/jwt-validation/spec.md) - спецификация валидации
+- 🛡️ [Authentication Middleware](openspec/specs/authentication-middleware/spec.md) - middleware архитектура
+- 🔗 [Integration with Auth Service](openspec/specs/integration-with-auth-service/spec.md) - интеграция
+- 📊 [Authentication Flow Diagrams](openspec/specs/authentication-flow-diagrams.md) - диаграммы потоков
+- 📝 [Integration Summary](JWT_RS256_INTEGRATION_SUMMARY.md) - краткое резюме интеграции
+
 ## Документация
 
 ### API документация
