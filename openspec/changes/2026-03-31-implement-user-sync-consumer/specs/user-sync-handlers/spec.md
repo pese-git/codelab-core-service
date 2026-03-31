@@ -151,36 +151,6 @@ async def handle_user_deleted(event: dict) -> None:
     """
 ```
 
-### Handler: handle_token_revoked()
-
-```python
-async def handle_token_revoked(event: dict) -> None:
-    """
-    Обработать token.revoked событие
-    
-    Это в основном для логирования.
-    Token уже в blacklist в auth-service и Redis.
-    Core-service middleware уже проверит blacklist.
-    
-    Args:
-        event (dict): Event with structure:
-        {
-            "event_type": "token.revoked",
-            "aggregate_id": "token_jti",
-            "data": {
-                "token_jti": "UUID",
-                "user_id": "UUID",
-                "reason": "user_logout|user_deleted|admin_revoke",
-                "revoked_at": "ISO8601"
-            }
-        }
-    
-    Side Effects:
-        - Log token revocation
-        - Optional: notify user if suspicious
-    """
-```
-
 ---
 
 ## 📊 Примеры использования
@@ -389,9 +359,9 @@ async def test_full_user_lifecycle():
 
 ## 📋 Acceptance Criteria
 
-- ✅ handle_user_created() синхронизирует profile
-- ✅ handle_user_updated() обновляет данные
-- ✅ handle_user_deleted() удаляет all related data
+- ✅ `handle_user_created()` синхронизирует profile
+- ✅ `handle_user_updated()` обновляет данные
+- ✅ `handle_user_deleted()` удаляет all related data (cascade)
 - ✅ Все handlers идемпотентны
 - ✅ Cascade delete respects FK constraints
 - ✅ Transactional (ACID)
