@@ -83,12 +83,40 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await outbox_publisher.start()
     logger.info("outbox_publisher_started")
     
+    # Initialize EventConsumer for user synchronization from auth-service
+    try:
+        import asyncio
+        from app.services.event_consumer import init_event_consumer
+        from app.services.user_event_handlers import UserEventHandlers
+        
+        event_consumer = await init_event_consumer(redis)
+        event_consumer.register_handler("user.created", UserEventHandlers.handle_user_created)
+        event_consumer.register_handler("user.deleted", UserEventHandlers.handle_user_deleted)
+        event_consumer.register_handler("user.token_revoked", UserEventHandlers.handle_token_revoked)
+        
+        consumer_task = asyncio.create_task(event_consumer.start())
+        app.state.event_consumer = event_consumer
+        app.state.consumer_task = consumer_task
+        logger.info("event_consumer_initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize event consumer: {e}")
+    
     logger.info("application_started")
     
     yield
     
     # Shutdown
     logger.info("application_shutting_down")
+    
+    # Stop EventConsumer
+    if hasattr(app.state, "event_consumer"):
+        try:
+            await app.state.event_consumer.stop()
+            if hasattr(app.state, "consumer_task"):
+                app.state.consumer_task.cancel()
+            logger.info("event_consumer_stopped")
+        except Exception as e:
+            logger.warning(f"Error stopping event consumer: {e}")
     
     # Graceful shutdown of Langfuse (flush remaining traces)
     langfuse_client.flush()
