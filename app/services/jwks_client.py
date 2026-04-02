@@ -2,6 +2,8 @@
 
 import asyncio
 import time
+import base64
+import json
 from typing import Any, Optional
 
 import httpx
@@ -164,6 +166,54 @@ class JWKSClient:
 
         return self._jwks_cache
 
+    def _jwk_to_pem(self, jwk: dict[str, Any]) -> str:
+        """
+        Конвертировать JWK (JSON Web Key) в PEM формат.
+
+        Args:
+            jwk: JWK словарь
+
+        Returns:
+            PEM-formatted публичный ключ
+
+        Raises:
+            Exception: Если не удалось конвертировать
+        """
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        # Получить компоненты RSA ключа из JWK
+        # добавляем padding если необходимо для base64.urlsafe_b64decode
+        def decode_int(value: str) -> int:
+            # Add padding if necessary
+            padding = 4 - len(value) % 4
+            if padding != 4:
+                value += "=" * padding
+            decoded = base64.urlsafe_b64decode(value)
+            return int.from_bytes(decoded, "big")
+
+        try:
+            e = decode_int(jwk.get("e", "AQAB"))  # Exponent
+            n = decode_int(jwk.get("n", ""))  # Modulus
+
+            # Создать RSA публичный ключ
+            public_numbers = rsa.RSAPublicNumbers(e, n)
+            public_key = public_numbers.public_key(default_backend())
+
+            # Сериализовать в PEM формат
+            public_key_pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+
+            if isinstance(public_key_pem, bytes):
+                return public_key_pem.decode("utf-8")
+            return public_key_pem
+
+        except (KeyError, ValueError, Exception) as e:
+            raise ValueError(f"Failed to convert JWK to PEM: {str(e)}") from e
+
     async def get_public_key(self, kid: str) -> str:
         """
         Получить публичный ключ по Key ID из JWKS.
@@ -178,10 +228,6 @@ class JWKSClient:
             JWTError: Если ключ с указанным kid не найден
         """
         try:
-            from cryptography.hazmat.primitives import serialization
-            from cryptography.hazmat.backends import default_backend
-            from jose.backends.rsa_backend import RSAKey
-
             jwks = await self.get_jwks()
             keys = jwks.get("keys", [])
 
@@ -193,12 +239,8 @@ class JWKSClient:
                         kid=kid,
                     )
                     try:
-                        # Конвертировать JWK в RSA ключ используя jose
-                        rsa_key = RSAKey(key)
-                        # Получить публичный ключ в PEM формате
-                        public_key_pem = rsa_key.public_key.public_key_pem()
-                        if isinstance(public_key_pem, bytes):
-                            return public_key_pem.decode("utf-8")
+                        # Конвертировать JWK в PEM
+                        public_key_pem = self._jwk_to_pem(key)
                         return public_key_pem
                     except Exception as e:
                         logger.error(

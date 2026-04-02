@@ -65,6 +65,9 @@ class Settings(BaseSettings):
         default="http://codelab-auth-service:8003/.well-known/jwks.json"
     )
     jwks_cache_ttl: int = Field(default=3600)  # 1 hour
+    
+    # Token Blacklist
+    use_token_blacklist: bool = Field(default=False)
 
     # LiteLLM
     litellm_url: str = Field(default="http://localhost:4000")
