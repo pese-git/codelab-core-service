@@ -7,6 +7,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.config import settings
 from app.logging_config import get_logger
@@ -73,6 +74,10 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
 
                 # Convert to UUID
                 user_id = UUID(user_id_str)
+                
+                # Extract JTI for blacklist check
+                token_jti = payload.get("jti")
+                token_exp = payload.get("exp")
 
             except JWTError as e:
                 logger.warning(
@@ -102,11 +107,57 @@ class UserIsolationMiddleware(BaseHTTPMiddleware):
                     ).model_dump(mode='json'),
                 )
 
+            # Check if token is blacklisted (revoked)
+            if token_jti and settings.use_token_blacklist:
+                try:
+                    # Dynamically import to avoid circular imports
+                    from app.services.token_blacklist_service import (
+                        get_token_blacklist_service
+                    )
+                    
+                    blacklist_service = await get_token_blacklist_service()
+                    is_revoked = await blacklist_service.is_token_revoked(token_jti)
+                    
+                    if is_revoked:
+                        logger.warning(
+                            "revoked_token_used",
+                            user_id=str(user_id),
+                            token_jti=token_jti,
+                            path=request.url.path,
+                            method=request.method,
+                        )
+                        return JSONResponse(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            content=ErrorResponse(
+                                detail="Token has been revoked",
+                                error_code="REVOKED_TOKEN",
+                            ).model_dump(mode='json'),
+                        )
+
+                except RedisConnectionError:
+                    # Graceful degradation: log error and continue
+                    # Token is still valid by JWT signature and exp claim
+                    logger.warning(
+                        "redis_unavailable_for_blacklist_check",
+                        user_id=str(user_id),
+                        token_jti=token_jti,
+                    )
+                    # Don't fail the request - rely on JWT exp claim
+
+                except RuntimeError:
+                    # Blacklist service not initialized - log and continue
+                    logger.warning(
+                        "token_blacklist_service_not_initialized",
+                        user_id=str(user_id),
+                    )
+
             # Inject user context into request state
             request.state.user_id = user_id
             request.state.user_email = user_email
             request.state.user_prefix = f"user{user_id}"
             request.state.db_filter = {"user_id": user_id}
+            request.state.token_jti = token_jti
+            request.state.token_exp = token_exp
 
             logger.info(
                 "user_authenticated",
