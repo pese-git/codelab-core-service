@@ -80,7 +80,7 @@ class TestIdempotencyAndReliability:
         ✅ Admin can trigger reprocess via API endpoint
         
         Reprocess endpoint:
-        ✅ Endpoint: POST /my/projects/{project_id}/events/{event_id}/reprocess
+        ✅ Endpoint: POST /api/v1/core/my/projects/{project_id}/events/{event_id}/reprocess
         ✅ Verifies user has project access
         ✅ Loads failed event from event_outbox
         ✅ Resets status to 'pending'
@@ -267,7 +267,7 @@ class TestIdempotencyGroup6Summary:
            - Skips duplicates safely
 
         ✅ Task 6.3: Reprocess path for failed events
-           - POST /my/projects/{project_id}/events/{event_id}/reprocess
+           - POST /api/v1/core/my/projects/{project_id}/events/{event_id}/reprocess
            - Resets status to pending
            - Resets retry_count to 0
            - OutboxPublisher retries on next poll

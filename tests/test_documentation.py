@@ -113,7 +113,7 @@ class TestDocumentation:
         ```markdown
         # Analytics API Endpoints
 
-        ## GET /my/projects/{project_id}/events
+        ## GET /api/v1/core/my/projects/{project_id}/events
         List all events for a project with filtering and pagination.
 
         Query Parameters:
@@ -133,7 +133,7 @@ class TestDocumentation:
         }
         ```
 
-        ## GET /my/projects/{project_id}/analytics/sessions/{session_id}/events
+        ## GET /api/v1/core/my/projects/{project_id}/analytics/sessions/{session_id}/events
         Get events specific to a chat session.
 
         Query Parameters:
@@ -152,7 +152,7 @@ class TestDocumentation:
         }
         ```
 
-        ## GET /my/projects/{project_id}/analytics
+        ## GET /api/v1/core/my/projects/{project_id}/analytics
         Get aggregated metrics for a project.
 
         Response:
@@ -237,7 +237,7 @@ class TestDocumentation:
         - Updates status to "published"
 
         T=5000ms: Event visible in analytics
-        - GET /my/projects/{project_id}/analytics
+        - GET /api/v1/core/my/projects/{project_id}/analytics
         - Shows event in events_by_type, latency_stats, etc.
         - Real-time query of event_outbox table
 
@@ -301,9 +301,9 @@ class TestDocumentation:
         - No direct broadcast_event() for domain events anymore
 
         #### Analytics API
-        - GET /my/projects/{project_id}/events (with filtering, pagination)
-        - GET /my/projects/{project_id}/analytics/sessions/{session_id}/events
-        - GET /my/projects/{project_id}/analytics (aggregated metrics)
+        - GET /api/v1/core/my/projects/{project_id}/events (with filtering, pagination)
+        - GET /api/v1/core/my/projects/{project_id}/analytics/sessions/{session_id}/events
+        - GET /api/v1/core/my/projects/{project_id}/analytics (aggregated metrics)
 
         #### Consumer Contract
         - event_id field in all published events (= event_outbox.id)
@@ -473,9 +473,9 @@ class TestImplementationComplete:
         - Tests verify architecture
 
         Group 5: Analytics API (6/6) ✅
-        - GET /my/projects/{project_id}/events endpoint
-        - GET /my/projects/{project_id}/analytics/sessions/{session_id}/events
-        - GET /my/projects/{project_id}/analytics endpoint
+        - GET /api/v1/core/my/projects/{project_id}/events endpoint
+        - GET /api/v1/core/my/projects/{project_id}/analytics/sessions/{session_id}/events
+        - GET /api/v1/core/my/projects/{project_id}/analytics endpoint
         - User/project isolation enforced
         - Pagination with limit and offset
         - Tests for filtering, isolation, correctness

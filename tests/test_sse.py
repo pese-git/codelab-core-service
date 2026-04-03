@@ -353,7 +353,7 @@ class TestSSEEndpoint:
         """Test SSE endpoint requires authentication."""
         session_id = uuid4()
         project_id = str(test_project.id)
-        response = await client.get(f"/my/projects/{project_id}/chat/{session_id}/events/")
+        response = await client.get(f"/api/v1/core/my/projects/{project_id}/chat/{session_id}/events/")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -364,7 +364,7 @@ class TestSSEEndpoint:
         session_id = uuid4()
         project_id = str(test_project.id)
         response = await client.get(
-            f"/my/projects/{project_id}/chat/{session_id}/events/", headers=auth_headers
+            f"/api/v1/core/my/projects/{project_id}/chat/{session_id}/events/", headers=auth_headers
         )
         assert response.status_code == 404
 
@@ -383,7 +383,7 @@ class TestSSEEndpoint:
         # This is a basic test to verify endpoint exists and accepts request
         project_id = str(test_project.id)
         response = await client.get(
-            f"/my/projects/{project_id}/chat/{session.id}/events/",
+            f"/api/v1/core/my/projects/{project_id}/chat/{session.id}/events/",
             headers=auth_headers,
         )
 

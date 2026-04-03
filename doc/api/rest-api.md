@@ -98,7 +98,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Создание проекта
 
-**POST** `/my/projects/`
+**POST** `/api/v1/core/my/projects/`
 
 Создает новый проект с default Starter Pack агентами (CodeAssistant, DataAnalyst, DocumentWriter).
 
@@ -126,7 +126,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Список проектов
 
-**GET** `/my/projects/`
+**GET** `/api/v1/core/my/projects/`
 
 Получить все проекты текущего пользователя.
 
@@ -151,7 +151,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Получить проект
 
-**GET** `/my/projects/{project_id}`
+**GET** `/api/v1/core/my/projects/{project_id}`
 
 Получить детали конкретного проекта.
 
@@ -175,7 +175,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Обновить проект
 
-**PUT** `/my/projects/{project_id}`
+**PUT** `/api/v1/core/my/projects/{project_id}`
 
 Обновить информацию о проекте.
 
@@ -203,7 +203,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Удалить проект
 
-**DELETE** `/my/projects/{project_id}`
+**DELETE** `/api/v1/core/my/projects/{project_id}`
 
 Удалить проект со всеми его агентами и сессиями.
 
@@ -217,7 +217,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Создать агента
 
-**POST** `/my/projects/{project_id}/agents/`
+**POST** `/api/v1/core/my/projects/{project_id}/agents/`
 
 Создать нового агента в проекте.
 
@@ -265,7 +265,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Список агентов
 
-**GET** `/my/projects/{project_id}/agents/`
+**GET** `/api/v1/core/my/projects/{project_id}/agents/`
 
 Получить всех агентов проекта.
 
@@ -296,7 +296,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Получить агента
 
-**GET** `/my/projects/{project_id}/agents/{agent_id}`
+**GET** `/api/v1/core/my/projects/{project_id}/agents/{agent_id}`
 
 Получить детали конкретного агента.
 
@@ -327,7 +327,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Обновить агента
 
-**PUT** `/my/projects/{project_id}/agents/{agent_id}`
+**PUT** `/api/v1/core/my/projects/{project_id}/agents/{agent_id}`
 
 Обновить конфигурацию агента.
 
@@ -365,7 +365,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Удалить агента
 
-**DELETE** `/my/projects/{project_id}/agents/{agent_id}`
+**DELETE** `/api/v1/core/my/projects/{project_id}/agents/{agent_id}`
 
 Удалить агента из проекта.
 
@@ -379,7 +379,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Создать сессию чата
 
-**POST** `/my/projects/{project_id}/chat/sessions/`
+**POST** `/api/v1/core/my/projects/{project_id}/chat/sessions/`
 
 Создать новую чат-сессию в проекте.
 
@@ -401,7 +401,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Список сессий
 
-**GET** `/my/projects/{project_id}/chat/sessions/`
+**GET** `/api/v1/core/my/projects/{project_id}/chat/sessions/`
 
 Получить все сессии проекта.
 
@@ -428,7 +428,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Получить сообщения сессии
 
-**GET** `/my/projects/{project_id}/chat/sessions/{session_id}/messages/`
+**GET** `/api/v1/core/my/projects/{project_id}/chat/sessions/{session_id}/messages/`
 
 Получить историю сообщений в сессии.
 
@@ -460,7 +460,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Отправить сообщение
 
-**POST** `/my/projects/{project_id}/chat/{session_id}/message/`
+**POST** `/api/v1/core/my/projects/{project_id}/chat/{session_id}/message/`
 
 💎 **ГЛАВНЫЙ ENDPOINT** для взаимодействия с агентами.
 
@@ -515,7 +515,7 @@ python scripts/generate_test_jwt.py --user-id <UUID> --expire 3600
 
 ### Получить события (SSE Stream)
 
-**GET** `/my/projects/{project_id}/chat/{session_id}/events/`
+**GET** `/api/v1/core/my/projects/{project_id}/chat/{session_id}/events/`
 
 Получить поток событий сессии в формате Server-Sent Events (NDJSON).
 
@@ -540,7 +540,7 @@ data: {"type": "agent_status_changed", "agent_id": "coder", "status": "ready", "
 
 ### Удалить сессию
 
-**DELETE** `/my/projects/{project_id}/chat/sessions/{session_id}`
+**DELETE** `/api/v1/core/my/projects/{project_id}/chat/sessions/{session_id}`
 
 Удалить сессию со всеми сообщениями.
 
@@ -552,7 +552,7 @@ data: {"type": "agent_status_changed", "agent_id": "coder", "status": "ready", "
 
 ### Получить события проекта
 
-**GET** `/my/projects/{project_id}/events`
+**GET** `/api/v1/core/my/projects/{project_id}/events`
 
 Получить список событий проекта с поддержкой фильтрации и пагинации.
 
@@ -592,7 +592,7 @@ data: {"type": "agent_status_changed", "agent_id": "coder", "status": "ready", "
 
 ### Получить события сессии
 
-**GET** `/my/projects/{project_id}/analytics/sessions/{session_id}/events`
+**GET** `/api/v1/core/my/projects/{project_id}/analytics/sessions/{session_id}/events`
 
 Получить все события для конкретной сессии чата.
 
@@ -636,7 +636,7 @@ data: {"type": "agent_status_changed", "agent_id": "coder", "status": "ready", "
 
 ### Получить аналитику проекта
 
-**GET** `/my/projects/{project_id}/analytics`
+**GET** `/api/v1/core/my/projects/{project_id}/analytics`
 
 Получить агрегированные метрики события проекта.
 
@@ -735,7 +735,7 @@ data: {"type": "agent_status_changed", "agent_id": "coder", "status": "ready", "
 
 ```bash
 # 1. Создать проект
-curl -X POST "http://localhost:8000/my/projects/" \
+curl -X POST "http://localhost:8000/api/v1/core/my/projects/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -747,7 +747,7 @@ curl -X POST "http://localhost:8000/my/projects/" \
 PROJECT_ID="550e8400-e29b-41d4-a716-446655440000"
 
 # 2. Создать сессию чата
-curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/sessions/" \
+curl -X POST "http://localhost:8000/api/v1/core/my/projects/$PROJECT_ID/chat/sessions/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' | jq .
@@ -755,7 +755,7 @@ curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/sessions/" \
 SESSION_ID="550e8400-e29b-41d4-a716-446655440001"
 
 # 3. Отправить сообщение (прямой вызов агента)
-curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/$SESSION_ID/message/" \
+curl -X POST "http://localhost:8000/api/v1/core/my/projects/$PROJECT_ID/chat/$SESSION_ID/message/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -764,12 +764,12 @@ curl -X POST "http://localhost:8000/my/projects/$PROJECT_ID/chat/$SESSION_ID/mes
   }' | jq .
 
 # 4. Получить историю
-curl -X GET "http://localhost:8000/my/projects/$PROJECT_ID/chat/sessions/$SESSION_ID/messages/" \
+curl -X GET "http://localhost:8000/api/v1/core/my/projects/$PROJECT_ID/chat/sessions/$SESSION_ID/messages/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" | jq .
 
 # 5. Подписаться на события (в отдельном терминале)
-curl -X GET "http://localhost:8000/my/projects/$PROJECT_ID/chat/$SESSION_ID/events/" \
+curl -X GET "http://localhost:8000/api/v1/core/my/projects/$PROJECT_ID/chat/$SESSION_ID/events/" \
   -H "Authorization: Bearer $TOKEN" \
   -N  # отключить буферизацию для SSE
 ```

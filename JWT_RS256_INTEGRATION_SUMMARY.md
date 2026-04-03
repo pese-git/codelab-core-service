@@ -197,7 +197,7 @@ TOKEN=$(curl -X POST http://codelab-auth-service:8003/api/v1/auth/login \
   | jq -r '.access_token')
 
 # 3. Использовать токен в core-service
-curl -X GET http://localhost:8000/my/projects \
+curl -X GET http://localhost:8000/api/v1/core/my/projects \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json"
 ```

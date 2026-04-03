@@ -84,7 +84,7 @@ EOF
 
 ```bash
 # Отправить токен в защищённый endpoint core-service
-curl -X GET http://localhost:8000/my/projects \
+curl -X GET http://localhost:8000/api/v1/core/my/projects \
   -H "Authorization: Bearer ${JWT_TOKEN}" \
   -H "Content-Type: application/json"
 
@@ -135,7 +135,7 @@ curl -X GET http://localhost:8000/my/projects \
 
 **Тест 1: Истекший токен**
 ```bash
-curl -X GET http://localhost:8000/my/projects \
+curl -X GET http://localhost:8000/api/v1/core/my/projects \
   -H "Authorization: Bearer expired_token" \
   -H "Content-Type: application/json"
 # Ожидается: 401 UNAUTHORIZED
@@ -144,7 +144,7 @@ curl -X GET http://localhost:8000/my/projects \
 **Тест 2: Неверная подпись**
 ```bash
 # Закодировать токен с неверной подписью
-curl -X GET http://localhost:8000/my/projects \
+curl -X GET http://localhost:8000/api/v1/core/my/projects \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0In0.invalid_signature" \
   -H "Content-Type: application/json"
 # Ожидается: 401 UNAUTHORIZED
@@ -152,14 +152,14 @@ curl -X GET http://localhost:8000/my/projects \
 
 **Тест 3: Отсутствие токена**
 ```bash
-curl -X GET http://localhost:8000/my/projects \
+curl -X GET http://localhost:8000/api/v1/core/my/projects \
   -H "Content-Type: application/json"
 # Ожидается: 401 UNAUTHORIZED - Missing or invalid Authorization header
 ```
 
 **Тест 4: Неверный формат токена**
 ```bash
-curl -X GET http://localhost:8000/my/projects \
+curl -X GET http://localhost:8000/api/v1/core/my/projects \
   -H "Authorization: NotBearer token" \
   -H "Content-Type: application/json"
 # Ожидается: 401 UNAUTHORIZED

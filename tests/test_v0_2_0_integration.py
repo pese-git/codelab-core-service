@@ -46,7 +46,7 @@ class TestV020PerProjectAgents:
         }
         
         response = await client.post(
-            f"/my/projects/{project_id}/agents/",
+            f"/api/v1/core/my/projects/{project_id}/agents/",
             json=agent_data,
             headers=auth_headers
         )
@@ -72,7 +72,7 @@ class TestV020PerProjectAgents:
         project_id = str(test_project.id)
         
         response = await client.get(
-            f"/my/projects/{project_id}/agents/",
+            f"/api/v1/core/my/projects/{project_id}/agents/",
             headers=auth_headers
         )
         
@@ -98,7 +98,7 @@ class TestV020PerProjectAgents:
         agent_id = str(test_agent.id)
         
         response = await client.get(
-            f"/my/projects/{project_id}/agents/{agent_id}",
+            f"/api/v1/core/my/projects/{project_id}/agents/{agent_id}",
             headers=auth_headers
         )
         
@@ -118,7 +118,7 @@ class TestV020PerProjectAgents:
     ) -> None:
         """Тест: GET /my/projects/"""
         response = await client.get(
-            "/my/projects/",
+            "/api/v1/core/my/projects/",
             headers=auth_headers
         )
         
@@ -142,7 +142,7 @@ class TestV020PerProjectAgents:
         project_id = str(test_project.id)
         
         response = await client.get(
-            f"/my/projects/{project_id}",
+            f"/api/v1/core/my/projects/{project_id}",
             headers=auth_headers
         )
         
@@ -160,7 +160,7 @@ class TestV020PerProjectAgents:
         project_id = str(test_project.id)
         
         response = await client.get(
-            f"/my/projects/{project_id}/agents/"
+            f"/api/v1/core/my/projects/{project_id}/agents/"
         )
         
         assert response.status_code in [401, 403]

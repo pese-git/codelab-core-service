@@ -14,7 +14,7 @@ INTEGRATION_TEST_SCENARIO = """
 
 ```bash
 # 1. Создать агент с поддержкой tools
-curl -X POST http://localhost:8000/my/projects/{project_id}/agents \\
+curl -X POST http://localhost:8000/api/v1/core/my/projects/{project_id}/agents \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer {token}" \\
   -d '{
@@ -28,7 +28,7 @@ curl -X POST http://localhost:8000/my/projects/{project_id}/agents \\
   }'
 
 # 2. Отправить сообщение с запросом к файлу
-curl -X POST http://localhost:8000/my/projects/{project_id}/chat/messages \\
+curl -X POST http://localhost:8000/api/v1/core/my/projects/{project_id}/chat/messages \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer {token}" \\
   -d '{

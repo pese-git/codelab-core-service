@@ -65,7 +65,7 @@ async def execute_tool(
         HTTPException: 400 if validation fails, 500 if execution error
         
     Example:
-        POST /my/projects/{project_id}/tools/execute
+        POST /api/v1/core/my/projects/{project_id}/tools/execute
         {
             "tool_name": "read_file",
             "tool_params": {"path": "src/main.py"},

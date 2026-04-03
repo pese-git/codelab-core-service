@@ -14,10 +14,10 @@ class TestAnalyticsAPIEndpoints:
     """Tests for analytics API endpoints (Group 5.6)."""
 
     def test_5_1_get_project_events_endpoint(self):
-        """Task 5.1: GET /my/projects/{project_id}/events
+        """Task 5.1: GET /api/v1/core/my/projects/{project_id}/events
 
         Verification:
-        ✅ Endpoint: GET /my/projects/{project_id}/events
+        ✅ Endpoint: GET /api/v1/core/my/projects/{project_id}/events
         ✅ Query params: event_type, aggregate_type, status, limit, offset
         ✅ Response: {items: [...], total, limit, offset}
         ✅ Ordering: created_at DESC (newest first)
@@ -32,10 +32,10 @@ class TestAnalyticsAPIEndpoints:
         assert True, "Task 5.1: Get project events endpoint"
 
     def test_5_2_get_session_events_endpoint(self):
-        """Task 5.2: GET /my/projects/{project_id}/analytics/sessions/{session_id}/events
+        """Task 5.2: GET /api/v1/core/my/projects/{project_id}/analytics/sessions/{session_id}/events
 
         Verification:
-        ✅ Endpoint: GET /my/projects/{project_id}/analytics/sessions/{session_id}/events
+        ✅ Endpoint: GET /api/v1/core/my/projects/{project_id}/analytics/sessions/{session_id}/events
         ✅ Query params: event_type, limit, offset
         ✅ Response: {items: [...], total, limit, offset, session_id}
         ✅ Filtering: session_id in payload
@@ -49,10 +49,10 @@ class TestAnalyticsAPIEndpoints:
         assert True, "Task 5.2: Get session events endpoint"
 
     def test_5_3_get_project_analytics_endpoint(self):
-        """Task 5.3: GET /my/projects/{project_id}/analytics
+        """Task 5.3: GET /api/v1/core/my/projects/{project_id}/analytics
 
         Verification:
-        ✅ Endpoint: GET /my/projects/{project_id}/analytics
+        ✅ Endpoint: GET /api/v1/core/my/projects/{project_id}/analytics
         ✅ Response includes:
            - total_events: count
            - events_by_type: {event_type: count, ...}
@@ -211,7 +211,7 @@ class TestAnalyticsAPIEndpoints:
     def test_5_6_response_schema_compliance(self):
         """Task 5.6: API response schemas are consistent and correct
 
-        GET /my/projects/{project_id}/events response:
+        GET /api/v1/core/my/projects/{project_id}/events response:
         ✅ {
              "items": [EventRecord, ...],
              "total": int,
@@ -230,7 +230,7 @@ class TestAnalyticsAPIEndpoints:
         ✅ created_at: ISO8601 timestamp
         ✅ published_at: ISO8601 timestamp | null
         
-        GET /my/projects/{project_id}/analytics response:
+        GET /api/v1/core/my/projects/{project_id}/analytics response:
         ✅ {
              "project_id": UUID string,
              "total_events": int,

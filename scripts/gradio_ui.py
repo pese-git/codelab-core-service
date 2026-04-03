@@ -51,7 +51,7 @@ class PersonalAIClient:
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/my/projects/{self.project_id}/agents/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/agents/",
                 headers=self.headers,
                 json={
                     "name": name,
@@ -74,7 +74,7 @@ class PersonalAIClient:
         
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/my/projects/{self.project_id}/agents/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/agents/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -92,7 +92,7 @@ class PersonalAIClient:
         
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                f"{self.base_url}/my/projects/{self.project_id}/agents/{agent_id}/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/agents/{agent_id}/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -106,7 +106,7 @@ class PersonalAIClient:
         
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/my/projects/{self.project_id}/chat/sessions/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/chat/sessions/",
                 headers=self.headers,
                 json={},
                 timeout=30.0
@@ -121,7 +121,7 @@ class PersonalAIClient:
         
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/my/projects/{self.project_id}/chat/sessions/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/chat/sessions/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -147,7 +147,7 @@ class PersonalAIClient:
             
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/my/projects/{self.project_id}/chat/{session_id}/message/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/chat/{session_id}/message/",
                 headers=self.headers,
                 json=payload,
                 timeout=30.0
@@ -162,7 +162,7 @@ class PersonalAIClient:
         
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/my/projects/{self.project_id}/chat/sessions/{session_id}/messages/",
+                f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/chat/sessions/{session_id}/messages/",
                 headers=self.headers,
                 timeout=30.0
             )
@@ -182,7 +182,7 @@ class PersonalAIClient:
             async with httpx.AsyncClient() as client:
                 async with client.stream(
                     "GET",
-                    f"{self.base_url}/my/projects/{self.project_id}/chat/{session_id}/events/",
+                    f"{self.base_url}/api/v1/core/my/projects/{self.project_id}/chat/{session_id}/events/",
                     headers=self.headers,
                     timeout=None,
                 ) as response:
@@ -615,12 +615,12 @@ def create_gradio_app():
             Все операции с чатом теперь работают в рамках проектов!
             
             ⚠️ **Требуется Project ID** для работы с chat endpoints:
-            - `GET /my/projects/{{project_id}}/chat/sessions/`
-            - `POST /my/projects/{{project_id}}/chat/sessions/`
-            - `GET /my/projects/{{project_id}}/chat/sessions/{{session_id}}/messages/`
-            - `POST /my/projects/{{project_id}}/chat/{{session_id}}/message/`
-            - `DELETE /my/projects/{{project_id}}/chat/sessions/{{session_id}}`
-            - `GET /my/projects/{{project_id}}/chat/{{session_id}}/events/`
+            - `GET /api/v1/core/my/projects/{{project_id}}/chat/sessions/`
+            - `POST /api/v1/core/my/projects/{{project_id}}/chat/sessions/`
+            - `GET /api/v1/core/my/projects/{{project_id}}/chat/sessions/{{session_id}}/messages/`
+            - `POST /api/v1/core/my/projects/{{project_id}}/chat/{{session_id}}/message/`
+            - `DELETE /api/v1/core/my/projects/{{project_id}}/chat/sessions/{{session_id}}`
+            - `GET /api/v1/core/my/projects/{{project_id}}/chat/{{session_id}}/events/`
             
             ### 📝 Старые endpoints (DEPRECATED)
             

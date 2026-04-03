@@ -5,26 +5,26 @@
 ### Requirement: Project management endpoints
 Система ДОЛЖНА предоставлять REST API endpoints для управления проектами.
 
-#### Scenario: POST /my/projects/ - создание проекта с Default Starter Pack
-- **WHEN** пользователь отправляет POST `/my/projects/` с name и workspace_path
+#### Scenario: POST /api/v1/core/my/projects/ - создание проекта с Default Starter Pack
+- **WHEN** пользователь отправляет POST `/api/v1/core/my/projects/` с name и workspace_path
 - **THEN** система создает проект и автоматически создает 4 default агентов
 - **AND** возвращает 201 Created с project_id и списком агентов
 - **AND** User Worker Space инициализирован и готов к использованию
 
-#### Scenario: GET /my/projects/ - список проектов
-- **WHEN** пользователь отправляет GET `/my/projects/`
+#### Scenario: GET /api/v1/core/my/projects/ - список проектов
+- **WHEN** пользователь отправляет GET `/api/v1/core/my/projects/`
 - **THEN** система возвращает 200 OK с массивом всех проектов пользователя
 
-#### Scenario: GET /my/projects/{project_id}/ - получение проекта
-- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/`
+#### Scenario: GET /api/v1/core/my/projects/{project_id}/ - получение проекта
+- **WHEN** пользователь отправляет GET `/api/v1/core/my/projects/{project_id}/`
 - **THEN** система возвращает 200 OK с деталями проекта и списком агентов
 
-#### Scenario: PUT /my/projects/{project_id}/ - обновление проекта
-- **WHEN** пользователь отправляет PUT `/my/projects/{project_id}/` с обновленными данными
+#### Scenario: PUT /api/v1/core/my/projects/{project_id}/ - обновление проекта
+- **WHEN** пользователь отправляет PUT `/api/v1/core/my/projects/{project_id}/` с обновленными данными
 - **THEN** система обновляет проект и возвращает 200 OK
 
-#### Scenario: DELETE /my/projects/{project_id}/ - удаление проекта
-- **WHEN** пользователь отправляет DELETE `/my/projects/{project_id}/`
+#### Scenario: DELETE /api/v1/core/my/projects/{project_id}/ - удаление проекта
+- **WHEN** пользователь отправляет DELETE `/api/v1/core/my/projects/{project_id}/`
 - **THEN** система удаляет проект и очищает backend ресурсы (User Worker Space)
 - **AND** файлы в User Workspace НЕ удаляются
 - **AND** возвращает 204 No Content
@@ -74,30 +74,30 @@
 ### Requirement: Chat endpoints
 Система ДОЛЖНА предоставлять endpoints для управления чатами и сообщениями.
 
-#### Scenario: POST /my/projects/{project_id}/chat/sessions/ - создание сессии
-- **WHEN** пользователь отправляет POST `/my/projects/{project_id}/chat/sessions/`
+#### Scenario: POST /api/v1/core/my/projects/{project_id}/chat/sessions/ - создание сессии
+- **WHEN** пользователь отправляет POST `/api/v1/core/my/projects/{project_id}/chat/sessions/`
 - **THEN** система создает новую сессию в контексте проекта
 - **AND** возвращает 201 Created с session_id
 
-#### Scenario: GET /my/projects/{project_id}/chat/sessions/ - список сессий
-- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/sessions/`
+#### Scenario: GET /api/v1/core/my/projects/{project_id}/chat/sessions/ - список сессий
+- **WHEN** пользователь отправляет GET `/api/v1/core/my/projects/{project_id}/chat/sessions/`
 - **THEN** система возвращает 200 OK с массивом сессий проекта
 
-#### Scenario: GET /my/projects/{project_id}/chat/sessions/{session_id} - получение сессии
-- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/sessions/{session_id}`
+#### Scenario: GET /api/v1/core/my/projects/{project_id}/chat/sessions/{session_id} - получение сессии
+- **WHEN** пользователь отправляет GET `/api/v1/core/my/projects/{project_id}/chat/sessions/{session_id}`
 - **THEN** система возвращает 200 OK с деталями сессии
 
-#### Scenario: DELETE /my/projects/{project_id}/chat/sessions/{session_id} - удаление сессии
-- **WHEN** пользователь отправляет DELETE `/my/projects/{project_id}/chat/sessions/{session_id}`
+#### Scenario: DELETE /api/v1/core/my/projects/{project_id}/chat/sessions/{session_id} - удаление сессии
+- **WHEN** пользователь отправляет DELETE `/api/v1/core/my/projects/{project_id}/chat/sessions/{session_id}`
 - **THEN** система удаляет сессию и возвращает 204 No Content
 
-#### Scenario: POST /my/projects/{project_id}/chat/{session_id}/message/ - отправка сообщения
-- **WHEN** пользователь отправляет POST `/my/projects/{project_id}/chat/{session_id}/message/` с content
+#### Scenario: POST /api/v1/core/my/projects/{project_id}/chat/{session_id}/message/ - отправка сообщения
+- **WHEN** пользователь отправляет POST `/api/v1/core/my/projects/{project_id}/chat/{session_id}/message/` с content
 - **THEN** система обрабатывает сообщение в контексте Worker Space проекта
 - **AND** возвращает 202 Accepted
 
-#### Scenario: GET /my/projects/{project_id}/chat/{session_id}/messages/ - история сообщений
-- **WHEN** пользователь отправляет GET `/my/projects/{project_id}/chat/{session_id}/messages/`
+#### Scenario: GET /api/v1/core/my/projects/{project_id}/chat/{session_id}/messages/ - история сообщений
+- **WHEN** пользователь отправляет GET `/api/v1/core/my/projects/{project_id}/chat/{session_id}/messages/`
 - **THEN** система возвращает 200 OK с сообщениями сессии проекта
 
 #### Scenario: GET /my/projects/{project_id}/chat/{session_id}/events/ - SSE stream

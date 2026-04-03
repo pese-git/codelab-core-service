@@ -11,7 +11,7 @@
 **Команда:**
 ```bash
 curl -X 'POST' \
-  'http://localhost:8003/api/v1/oauth/token' \
+  'http://localhost:8003/api/v1/auth/oauth/token' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'grant_type=password&client_id=codelab-flutter-app&username=user1&password=User.1111&refresh_token=&scope='
@@ -73,7 +73,7 @@ curl -X 'POST' \
 **Команда:**
 ```bash
 curl -X 'GET' \
-  'http://localhost:8000/my/projects/' \
+  'http://localhost:8000/api/v1/core/my/projects/' \
   -H 'accept: application/json' \
   -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjIwMjQtMDEta2V5LTEiLCJ0eXAiOiJKV1QifQ...'
 ```
