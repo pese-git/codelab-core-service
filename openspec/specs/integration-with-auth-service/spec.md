@@ -88,8 +88,8 @@ Core Service интегрируется с Auth Service для валидаци�
 # .env (auth-service)
 
 # JWT Configuration
-JWT_ISSUER=https://auth.codelab.local
-JWT_AUDIENCE=codelab-api
+CORE_SERVICE_JWT_ISSUER=https://auth.codelab.local
+CORE_SERVICE_JWT_AUDIENCE=codelab-api
 ACCESS_TOKEN_LIFETIME=900       # 15 минут
 REFRESH_TOKEN_LIFETIME=2592000  # 30 дней
 
@@ -122,10 +122,10 @@ CURRENT_KEY_ID=2024-01-key-1
 # .env (core-service)
 
 # JWT RS256 Configuration
-JWT_ISSUER=https://auth.codelab.local
-JWT_AUDIENCE=codelab-api
-AUTH_SERVICE_JWKS_URL=http://codelab-auth-service:8003/.well-known/jwks.json
-JWKS_CACHE_TTL=3600  # 1 час
+CORE_SERVICE_JWT_ISSUER=https://auth.codelab.local
+CORE_SERVICE_JWT_AUDIENCE=codelab-api
+CORE_SERVICE_AUTH_SERVICE_JWKS_URL=http://codelab-auth-service:8003/.well-known/jwks.json
+CORE_SERVICE_JWKS_CACHE_TTL=3600  # 1 час
 
 # Optional: для локальной разработки
 AUTH_SERVICE_JWKS_URL_DEV=http://localhost:8003/.well-known/jwks.json
@@ -328,8 +328,8 @@ services:
     ports:
       - "8003:8003"
     environment:
-      - JWT_ISSUER=https://auth.codelab.local
-      - JWT_AUDIENCE=codelab-api
+      - CORE_SERVICE_JWT_ISSUER=https://auth.codelab.local
+      - CORE_SERVICE_JWT_AUDIENCE=codelab-api
       - ACCESS_TOKEN_LIFETIME=900
       - REFRESH_TOKEN_LIFETIME=2592000
       - DATABASE_URL=postgresql://user:password@db:5432/codelab_auth
@@ -347,12 +347,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - JWT_ISSUER=https://auth.codelab.local
-      - JWT_AUDIENCE=codelab-api
-      - AUTH_SERVICE_JWKS_URL=http://codelab-auth-service:8003/.well-known/jwks.json
-      - JWKS_CACHE_TTL=3600
-      - DATABASE_URL=postgresql://user:password@db:5432/codelab_core
-      - REDIS_URL=redis://redis:6379/1
+      - CORE_SERVICE_JWT_ISSUER=https://auth.codelab.local
+      - CORE_SERVICE_JWT_AUDIENCE=codelab-api
+      - CORE_SERVICE_AUTH_SERVICE_JWKS_URL=http://codelab-auth-service:8003/.well-known/jwks.json
+      - CORE_SERVICE_JWKS_CACHE_TTL=3600
+      - CORE_SERVICE_DATABASE_URL=postgresql://user:password@db:5432/codelab_core
+      - CORE_SERVICE_REDIS_URL=redis://redis:6379/1
     depends_on:
       - db
       - redis
@@ -373,7 +373,7 @@ services:
     environment:
       # JWT
       - JWT_ISSUER=https://auth.codelab.io
-      - JWT_AUDIENCE=codelab-api
+      - CORE_SERVICE_JWT_AUDIENCE=codelab-api
       - ACCESS_TOKEN_LIFETIME=900
       - REFRESH_TOKEN_LIFETIME=2592000
       
@@ -393,9 +393,9 @@ services:
     environment:
       # JWT
       - JWT_ISSUER=https://auth.codelab.io
-      - JWT_AUDIENCE=codelab-api
+      - CORE_SERVICE_JWT_AUDIENCE=codelab-api
       - AUTH_SERVICE_JWKS_URL=https://auth.codelab.io/.well-known/jwks.json
-      - JWKS_CACHE_TTL=3600
+      - CORE_SERVICE_JWKS_CACHE_TTL=3600
       
       # Database
       - DATABASE_URL=postgresql://user:pass@db-prod:5432/codelab_core
@@ -664,10 +664,10 @@ $ curl http://codelab-auth-service:8003/.well-known/jwks.json
 3. Стоп, если есть опечатка в URL
 
 # Auth Service
-JWT_ISSUER=https://auth.codelab.local
+CORE_SERVICE_JWT_ISSUER=https://auth.codelab.local
 
 # Core Service (должно быть ТО ЖЕ)
-JWT_ISSUER=https://auth.codelab.local
+CORE_SERVICE_JWT_ISSUER=https://auth.codelab.local
 ```
 
 ### JWT валидация падает на audience
@@ -680,7 +680,7 @@ JWT_ISSUER=https://auth.codelab.local
 2. JWT_AUDIENCE в core-service (должны быть одинаковыми)
 
 # Обе должны быть одинаковыми:
-JWT_AUDIENCE=codelab-api
+CORE_SERVICE_JWT_AUDIENCE=codelab-api
 ```
 
 ### JWKS кэш не обновляется

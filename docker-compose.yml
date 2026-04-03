@@ -415,21 +415,21 @@ services:
     container_name: codelab-core-service
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "${CORE_SERVICE_APP_PORT:-8000}:8000"
     volumes:
       - .:/app
     environment:
-      DATABASE_URL: ${APP_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/codelab}
-      REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
-      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
-      OTLP_EXPORTER_URL: ${OTLP_EXPORTER_URL:-http://jaeger:4318}
-      LITELLM_URL: ${LITELLM_URL:-http://litellm:4000}
-      LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-true}
-      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse-web:3000}
-      LANGFUSE_PUBLIC_KEY: ${APP_LANGFUSE_PUBLIC_KEY:-pk_defaultkey}
-      LANGFUSE_SECRET_KEY: ${APP_LANGFUSE_SECRET_KEY:-sk_defaultsecret}
-      PYTHONUNBUFFERED: 1
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORE_SERVICE_DATABASE_URL: ${CORE_SERVICE_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/codelab}
+      CORE_SERVICE_REDIS_URL: ${CORE_SERVICE_REDIS_URL:-redis://redis:6379/0}
+      CORE_SERVICE_QDRANT_URL: ${CORE_SERVICE_QDRANT_URL:-http://qdrant:6333}
+      CORE_SERVICE_OTLP_EXPORTER_URL: ${CORE_SERVICE_OTLP_EXPORTER_URL:-http://jaeger:4318}
+      CORE_SERVICE_LITELLM_URL: ${CORE_SERVICE_LITELLM_URL:-http://litellm:4000}
+      CORE_SERVICE_LANGFUSE_ENABLED: ${CORE_SERVICE_LANGFUSE_ENABLED:-true}
+      CORE_SERVICE_LANGFUSE_HOST: ${CORE_SERVICE_LANGFUSE_HOST:-http://langfuse-web:3000}
+      CORE_SERVICE_LANGFUSE_PUBLIC_KEY: ${CORE_SERVICE_LANGFUSE_PUBLIC_KEY:-pk_defaultkey}
+      CORE_SERVICE_LANGFUSE_SECRET_KEY: ${CORE_SERVICE_LANGFUSE_SECRET_KEY:-sk_defaultsecret}
+      CORE_SERVICE_PYTHONUNBUFFERED: 1
+      CORE_SERVICE_LOG_LEVEL: ${CORE_SERVICE_LOG_LEVEL:-INFO}
     env_file:
       - .env
     depends_on:

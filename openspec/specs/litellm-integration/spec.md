@@ -53,7 +53,7 @@ LiteLLMClient ДОЛЖЕН использовать master key из конфиг
 
 #### Scenario: Конфигурация LiteLLM при инициализации
 - **WHEN** LiteLLMClient инициализируется
-- **THEN** система читает LITELLM_URL и LITELLM_MASTER_KEY из config, использует defaults если не установлены: LITELLM_URL="http://litellm:4000", LITELLM_MASTER_KEY="super-secret-key-change-in-production"
+- **THEN** система читает CORE_SERVICE_LITELLM_URL и CORE_SERVICE_LITELLM_MASTER_KEY из config, использует defaults если не установлены: CORE_SERVICE_LITELLM_URL="http://litellm:4000", CORE_SERVICE_LITELLM_MASTER_KEY="super-secret-key-change-in-production"
 
 ### Requirement: Генерация уникального имени модели для изоляции пользователей
 LiteLLMClient ДОЛЖЕН генерировать уникальное имя модели, которое встраивает user_id и provider_type для изоляции и идентификации.

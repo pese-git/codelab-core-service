@@ -22,9 +22,9 @@ import threading
 
 
 # Конфигурация
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-DEFAULT_JWT = os.getenv("JWT_TOKEN", "")
-GRADIO_PORT = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
+API_BASE_URL = os.getenv("CORE_SERVICE_API_BASE_URL", "http://localhost:8000")
+DEFAULT_JWT = os.getenv("CORE_SERVICE_JWT_TOKEN", "")
+GRADIO_PORT = int(os.getenv("CORE_SERVICE_GRADIO_SERVER_PORT", "7860"))
 
 
 class PersonalAIClient:

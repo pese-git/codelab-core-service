@@ -88,10 +88,10 @@ class LiteLLMProviderManager:
         master_key: str = None,
     ):
         self.litellm_url = litellm_url or os.getenv(
-            "LITELLM_URL", "http://localhost:4000"
+            "CORE_SERVICE_LITELLM_URL", "http://localhost:4000"
         )
         self.master_key = master_key or os.getenv(
-            "LITELLM_MASTER_KEY", "super-secret-key-change-in-production"
+            "CORE_SERVICE_LITELLM_MASTER_KEY", "super-secret-key-change-in-production"
         )
         self.headers = {
             "Authorization": f"Bearer {self.master_key}",
@@ -246,7 +246,7 @@ class LiteLLMProviderManager:
 
         for model_name, model_config in config["model_list"].items():
             api_key_env = model_config.get("api_key_env")
-            api_key = os.getenv(api_key_env)
+            api_key = os.getenv(f"CORE_SERVICE_{api_key_env}")
 
             if not api_key:
                 console.print(

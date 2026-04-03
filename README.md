@@ -47,8 +47,11 @@ cd codelab-core-service
 # Автоматическая настройка всего проекта
 make setup
 
-# Отредактируйте .env и установите OPENAI_API_KEY
+# Отредактируйте .env и установите обязательные переменные для Core Service
 nano .env
+# Установите:
+# CORE_SERVICE_LITELLM_MASTER_KEY=your-secret-key
+# CORE_SERVICE_LANGFUSE_ENABLED=true (если используется Langfuse)
 
 # Перезапустите сервисы
 make restart
